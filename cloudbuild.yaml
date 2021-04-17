@@ -1,0 +1,29 @@
+timeout: 600s
+steps:
+  # docker build
+  - name: gcr.io/cloud-builders/docker
+    args:
+      [
+        'build',
+        '-t',
+        'gcr.io/kisanhub-uat/test-hub:$COMMIT_SHA',
+        '-t',
+        'gcr.io/kisanhub-uat/test-hub:latest',
+        '--cache-from',
+        'gcr.io/kisanhub-uat/test-hub:latest',
+        '-f',
+        'Dockerfile',
+        '.',
+      ]
+
+  # Push new Docker Image
+  - name: gcr.io/cloud-builders/docker
+    args: ['push', 'gcr.io/kisanhub-uat/test-hub']
+
+#  # deploy
+#  - name: gcr.io/cloud-builders/kubectl
+#    id: Deploy test hub
+#    env:
+#    - 'CLOUDSDK_COMPUTE_ZONE=europe-west2-a'
+#    - 'CLOUDSDK_CONTAINER_CLUSTER=europe-qa'
+#    args: ['rollout', 'restart', '-n', 'qa', 'deployment/test-hub']

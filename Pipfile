@@ -1,0 +1,29 @@
+[[source]]
+name = "pypi"
+url = "https://pypi.org/simple"
+verify_ssl = true
+
+[dev-packages]
+pytest = "*"
+pytest-mock = "*"
+
+[packages]
+google-cloud-storage = "*"
+python-jose = "*"
+six = "*"
+google-cloud-logging = "*"
+sqlalchemy = "*"
+mysqlclient = "*"
+google-cloud-container = "*"
+kubernetes = "*"
+uvicorn = {extras = ["standard"], version = "*"}
+ujson = "*"
+fastapi = "*"
+fastapi-utils = "*"
+alembic = "*"
+ipython = "*"
+pytest-mock = "*"
+celery = {extras = ["redis"], version = "*"}
+
+[requires]
+python_version = "3.8"

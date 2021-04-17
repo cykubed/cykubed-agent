@@ -1,0 +1,34 @@
+#
+# Cypress runner job template
+# SHA will be replaced by the COMMIT_SHA
+#
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cypress-runner
+spec:
+  parallelism: 1
+  template:
+    metadata:
+      labels:
+        job: cypress-runner
+    spec:
+      hostIPC: true
+      hostAliases:
+        - ip: 192.168.49.1
+          hostnames:
+            - host.minikube.internal
+      containers:
+      - name: testrunner
+        image: gcr.io/kisanhub-uat/cypress-runner:1.3
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            cpu: 1000m
+            memory: 1G
+        envFrom:
+          - configMapRef:
+              name: cypress-runner-config
+      restartPolicy: Never
+
+
