@@ -20,7 +20,7 @@ def get_db() -> Iterator[Session]:
 @lru_cache()
 def _get_fastapi_sessionmaker() -> FastAPISessionMaker:
     """ This function could be replaced with a global variable if preferred """
-    return FastAPISessionMaker(settings.TESTHUB_DATABASE_URL)
+    return FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)
 
 
 class SpecFile(Base):

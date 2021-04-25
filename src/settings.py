@@ -6,7 +6,7 @@ class AppSettings(BaseSettings):
     TEST_RUN_TIMEOUT: int = 30 * 60
     SPEC_FILE_TIMEOUT: int = 5 * 60
     REDIS_HOST: str = 'localhost'
-    TESTHUB_DATABASE_URL: str = 'sqlite:///:memory:'
+    CYPRESSHUB_DATABASE_URL: str = 'sqlite:///:memory:'
     BITBUCKET_APP_PASSWORD: str = 'dummy'
     ARTIFACTS_URL = 'https://storage.googleapis.com/kisanhub-cypress-artifacts'
     BUILD_TIMEOUT: int = 900
