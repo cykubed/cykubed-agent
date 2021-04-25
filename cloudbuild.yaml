@@ -6,11 +6,9 @@ steps:
       [
         'build',
         '-t',
-        'gcr.io/kisanhub-uat/test-hub:$COMMIT_SHA',
+        'gcr.io/kisanhub-uat/cypresshub:$COMMIT_SHA',
         '-t',
-        'gcr.io/kisanhub-uat/test-hub:latest',
-        '--cache-from',
-        'gcr.io/kisanhub-uat/test-hub:latest',
+        'gcr.io/kisanhub-uat/cypresshub:latest',
         '-f',
         'Dockerfile',
         '.',
@@ -18,7 +16,7 @@ steps:
 
   # Push new Docker Image
   - name: gcr.io/cloud-builders/docker
-    args: ['push', 'gcr.io/kisanhub-uat/test-hub']
+    args: ['push', 'gcr.io/kisanhub-uat/cypresshub']
 
 #  # deploy
 #  - name: gcr.io/cloud-builders/kubectl
@@ -26,4 +24,4 @@ steps:
 #    env:
 #    - 'CLOUDSDK_COMPUTE_ZONE=europe-west2-a'
 #    - 'CLOUDSDK_CONTAINER_CLUSTER=europe-qa'
-#    args: ['rollout', 'restart', '-n', 'qa', 'deployment/test-hub']
+#    args: ['rollout', 'restart', '-n', 'qa', 'deployment/cypresshub']
