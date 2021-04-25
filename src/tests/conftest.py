@@ -1,4 +1,5 @@
 import pytest
+from fastapi_auth0 import Auth0User
 from sqlalchemy.orm import Session
 
 from db_engine import TestingSessionLocal, test_engine
@@ -13,6 +14,10 @@ def override_get_db():
     finally:
         if db:
             db.close()
+
+
+def override_get_user():
+    yield Auth0User(sub=1)
 
 
 # use this in standalone CRUD tests

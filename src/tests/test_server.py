@@ -1,16 +1,25 @@
 from datetime import datetime
+from unittest import mock
 
 import pytest
 from pytest_mock import MockerFixture
 from sqlalchemy.orm import Session
-from starlette.background import BackgroundTasks
 from starlette.testclient import TestClient
 
-from conftest import override_get_db
-from main import app
+from conftest import override_get_db, override_get_user
+from main import app, auth
 from models import TestRun, SpecFile, get_db
 
 app.dependency_overrides[get_db] = override_get_db
+
+
+class TestCommonAPIParams:
+    db: Session = override_get_db()
+    user = mock.Mock()
+
+
+app.dependency_overrides[auth.get_user] = override_get_user
+
 # defaults to in-memory sqlite
 client = TestClient(app)
 

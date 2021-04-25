@@ -1,8 +1,9 @@
 import logging
 from typing import List, Any, AnyStr, Dict
+from unittest import mock
 
-from fastapi import Depends, FastAPI, HTTPException
-from fastapi_auth0 import Auth0
+from fastapi import Depends, FastAPI, HTTPException, Security
+from fastapi_auth0 import Auth0, Auth0User
 from fastapi_utils.session import FastAPISessionMaker
 from fastapi_utils.tasks import repeat_every
 from sqlalchemy.orm import Session
@@ -20,7 +21,7 @@ from worker import app as celeryapp
 
 sessionmaker = FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)
 auth = Auth0(domain='khauth.eu.auth0.com', api_audience='https://testhub-api.kisanhub.com')
-app = FastAPI()
+app = FastAPI(dependencies=[Depends(auth.implicit_scheme)])
 
 JSONObject = Dict[AnyStr, Any]
 
@@ -33,9 +34,9 @@ def health_check(db: Session = Depends(get_db)):
     return {'message': 'OK'}
 
 
-@app.get('/api/testruns', response_model=List[schemas.TestRun], dependencies=[Depends(auth.implicit_scheme)])
-def get_testruns(page: int = 1, page_size: int = 50, db: Session = Depends(get_db),
-                 dependencies=[Depends(auth.implicit_scheme)]):
+@app.get('/api/testruns', response_model=List[schemas.TestRun])
+def get_testruns(page: int = 1, page_size: int = 50,
+                db: Session = Depends(get_db), user: Auth0User = Security(auth.get_user)):
     logging.info("Test - /api/testruns")
     return crud.get_test_runs(db, page, page_size)
 
@@ -62,8 +63,7 @@ def bitbucket_webhook(token: str, project: str, repos: str,
 
 
 @app.post('/api/start')
-def start_testrun(params: TestRunParams, db: Session = Depends(get_db),
-                  dependencies=[Depends(auth.implicit_scheme)]):
+def start_testrun(params: TestRunParams, db: Session = Depends(get_db), user: Auth0User = Security(auth.get_user)):
     crud.cancel_previous_test_runs(db, params.branch)
     celeryapp.send_task('clone_and_build', args=[params.repos, params.branch, params.sha])
     return {'message': 'Test run started'}
@@ -83,7 +83,7 @@ def get_status(sha: str, db: Session = Depends(get_db)):
 
 
 @app.get('/testrun/{sha}/next')
-def get_next_spec(sha: str, db: Session = Depends(get_db)):
+def get_next_spec(sha: str, db: Session = Depends(get_db), user: Auth0User = Security(auth.get_user)):
     """
     Private API - called within the cluster by cypress-runner to get the next file to test
     """

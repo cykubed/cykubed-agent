@@ -24,6 +24,7 @@ alembic = "*"
 ipython = "*"
 pytest-mock = "*"
 celery = {extras = ["redis"], version = "*"}
+fastapi-auth0 = "*"
 
 [requires]
 python_version = "3.8"
