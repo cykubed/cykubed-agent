@@ -16,7 +16,7 @@ from models import get_db
 from notify import notify_failed, notify_fixed
 from report import create_report
 from settings import settings
-from tasks import clone_and_build
+from worker import app as celeryapp
 
 sessionmaker = FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)
 auth = Auth0(domain='khauth.eu.auth0.com', api_audience='https://testhub-api.kisanhub.com')
@@ -25,14 +25,6 @@ app = FastAPI()
 JSONObject = Dict[AnyStr, Any]
 
 logs.init()
-
-
-@app.on_event("startup")
-@repeat_every(seconds=30)
-def handle_timeouts():
-    with sessionmaker.context_session() as db:
-        crud.apply_timeouts(db, settings.TEST_RUN_TIMEOUT, settings.SPEC_FILE_TIMEOUT)
-    delete_old_dists()
 
 
 @app.get('/hc')
@@ -65,7 +57,7 @@ def bitbucket_webhook(token: str, project: str, repos: str,
     params = TestRunParams(branch=branch, sha=sha, repos=repos)
     params.repos = f'{project}/{repos}'
 
-    clone_and_build.delay(repos, branch, sha)
+    celeryapp.send_task('clone_and_build', args=[repos, branch, sha])
     return {'message': 'OK'}
 
 
@@ -73,7 +65,7 @@ def bitbucket_webhook(token: str, project: str, repos: str,
 def start_testrun(params: TestRunParams, db: Session = Depends(get_db),
                   dependencies=[Depends(auth.implicit_scheme)]):
     crud.cancel_previous_test_runs(db, params.branch)
-    clone_and_build.delay(params.repos, params.branch, params.sha)
+    celeryapp.send_task('clone_and_build', args=[params.repos, params.branch, params.sha])
     return {'message': 'Test run started'}
 
 
@@ -125,6 +117,14 @@ def runner_completed(id: int, db: Session = Depends(get_db)):
                 notify_fixed(testrun)
 
     return "OK"
+
+
+@app.on_event("startup")
+@repeat_every(seconds=3000)
+def handle_timeouts():
+    with sessionmaker.context_session() as db:
+        crud.apply_timeouts(db, settings.TEST_RUN_TIMEOUT, settings.SPEC_FILE_TIMEOUT)
+    delete_old_dists()
 
 #
 #
