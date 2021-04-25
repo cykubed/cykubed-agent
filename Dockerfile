@@ -26,10 +26,6 @@ ENV KUSTOMIZE_VERSION 2.1.0
 RUN wget -O /usr/local/bin/kustomize https://github.com/kubernetes-sigs/kustomize/releases/download/v${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64 && \
   chmod +x /usr/local/bin/kustomize
 
-RUN mkdir /root/.ssh && chmod 700 /root/.ssh
-COPY keys/gsr/id_rsa.pub /root/.ssh/
-COPY keys/known_hosts /root/.ssh/
-
 COPY src /app/app
 COPY alembic /app/alembic
 COPY alembic.ini /app/
