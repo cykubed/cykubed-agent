@@ -22,9 +22,7 @@ RUN yarn install --frozen-lockfile
 RUN curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl" && \
     chmod +x ./kubectl && mv kubectl /usr/local/bin/kubectl
 
-ENV KUSTOMIZE_VERSION 2.1.0
-RUN wget -O /usr/local/bin/kustomize https://github.com/kubernetes-sigs/kustomize/releases/download/v${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64 && \
-  chmod +x /usr/local/bin/kustomize
+COPY --from=us.gcr.io/k8s-artifacts-prod/kustomize/kustomize:v4.0.4 /app/kustomize /usr/bin/kustomize
 
 COPY src /app/app
 COPY alembic /app/alembic
