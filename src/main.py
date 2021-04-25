@@ -2,6 +2,7 @@ import logging
 from typing import List, Any, AnyStr, Dict
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi_auth0 import Auth0
 from fastapi_utils.session import FastAPISessionMaker
 from fastapi_utils.tasks import repeat_every
 from sqlalchemy.orm import Session
@@ -17,8 +18,8 @@ from report import create_report
 from settings import settings
 from tasks import clone_and_build
 
-sessionmaker = FastAPISessionMaker(settings.TESTHUB_DATABASE_URL)
-
+sessionmaker = FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)
+auth = Auth0(domain='khauth.eu.auth0.com', api_audience='https://testhub-api.kisanhub.com')
 app = FastAPI()
 
 JSONObject = Dict[AnyStr, Any]
@@ -40,8 +41,9 @@ def health_check(db: Session = Depends(get_db)):
     return {'message': 'OK'}
 
 
-@app.get('/api/testruns', response_model=List[schemas.TestRun])
-def get_testruns(page: int = 1, page_size: int = 50, db: Session = Depends(get_db)):
+@app.get('/api/testruns', response_model=List[schemas.TestRun], dependencies=[Depends(auth.implicit_scheme)])
+def get_testruns(page: int = 1, page_size: int = 50, db: Session = Depends(get_db),
+                 dependencies=[Depends(auth.implicit_scheme)]):
     logging.info("Test - /api/testruns")
     return crud.get_test_runs(db, page, page_size)
 
@@ -68,8 +70,8 @@ def bitbucket_webhook(token: str, project: str, repos: str,
 
 
 @app.post('/api/start')
-def start_testrun(params: TestRunParams,
-                  db: Session = Depends(get_db)):
+def start_testrun(params: TestRunParams, db: Session = Depends(get_db),
+                  dependencies=[Depends(auth.implicit_scheme)]):
     crud.cancel_previous_test_runs(db, params.branch)
     clone_and_build.delay(params.repos, params.branch, params.sha)
     return {'message': 'Test run started'}
@@ -77,6 +79,9 @@ def start_testrun(params: TestRunParams,
 
 @app.get('/testrun/{sha}/status')
 def get_status(sha: str, db: Session = Depends(get_db)):
+    """
+    Private API - called within the cluster by cypress-runner to get the testrun status
+    """
     # return 204 if we're still building - the runners can wait
     tr = crud.get_test_run_status(db, sha)
     if not tr:
@@ -87,6 +92,9 @@ def get_status(sha: str, db: Session = Depends(get_db)):
 
 @app.get('/testrun/{sha}/next')
 def get_next_spec(sha: str, db: Session = Depends(get_db)):
+    """
+    Private API - called within the cluster by cypress-runner to get the next file to test
+    """
     spec = crud.get_next_spec_file(db, sha)
     if spec:
         logging.info(f"Returning spec {spec.file} for {sha}")
@@ -96,6 +104,9 @@ def get_next_spec(sha: str, db: Session = Depends(get_db)):
 
 @app.post('/testrun/{id}/completed')
 def runner_completed(id: int, db: Session = Depends(get_db)):
+    """
+    Private API - called within the cluster by cypress-runner when a test spec has completed
+    """
     spec = crud.mark_completed(db, id)
     testrun = spec.testrun
     remaining = crud.get_remaining(db, testrun)

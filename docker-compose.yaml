@@ -15,11 +15,11 @@ services:
       - ./docker/mysql.cnf:/etc/mysql/conf.d/custom.cnf
     ports:
       - 33062:3306
-  testhub:
+  hub:
     image: gcr.io/kisanhub-uat/test-hub:latest
     restart: always
     environment:
-      TESTHUB_DATABASE_URL: mysql+mysqldb://root:fishfish1234@mysql/testhub
+      CYPRESSHUB_DATABASE_URL: mysql+mysqldb://root:fishfish1234@mysql/testhub
       REDIS_HOST: redis
     env_file:
       - testhub.env
@@ -32,7 +32,7 @@ services:
     command: celery -A tasks worker
     restart: always
     environment:
-      TESTHUB_DATABASE_URL: mysql+mysqldb://root:fishfish1234@mysql/testhub
+      CYPRESSHUB_DATABASE_URL: mysql+mysqldb://root:fishfish1234@mysql/testhub
       REDIS_HOST: redis
     env_file:
       - testhub.env

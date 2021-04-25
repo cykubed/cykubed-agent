@@ -13,7 +13,7 @@ from crud import TestRunParams
 from integration import get_commit_info
 from settings import settings
 
-sessionmaker = FastAPISessionMaker(settings.TESTHUB_DATABASE_URL)
+sessionmaker = FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)
 
 app = Celery('tasks', broker=f'redis://{settings.REDIS_HOST}:6379/0')
 
