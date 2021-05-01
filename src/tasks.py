@@ -32,12 +32,15 @@ def ping():
 
 @app.task
 def clone_and_build(repos: str, sha: str, branch: str):
+    """
+    Clone and build (from Bitbucket)
+    """
     with sessionmaker.context_session() as db:
         t = time.time()
         wdir = None
         try:
             # clone
-            wdir = clone_repos(f'{settings.BITBUCKET_APP_PASSWORD}/{repos}.git', branch)
+            wdir = clone_repos(f'{settings.BITBUCKET_USERNAME}:{settings.BITBUCKET_APP_PASSWORD}@{repos}.git', branch)
             # get the list of specs and create a testrun
             specs = get_specs(wdir)
             info = get_commit_info(repos, sha)

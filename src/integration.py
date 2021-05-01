@@ -35,15 +35,18 @@ def create_user_notification(userid):
 
 def get_bitbucket_info(repos: str, sha: str):
     resp = requests.get(f'https://api.bitbucket.org/2.0/repositories/{repos}/commit/{sha}',
-                        auth=('nickbrook', settings.BITBUCKET_PASSWORD))
+                        auth=(settings.BITBUCKET_USERNAME, settings.BITBUCKET_APP_PASSWORD))
     if resp.status_code != 200:
         raise Exception(f"Failed to fetch information from Bitbucket: {resp.status_code}: {resp.json()}")
     return resp.json()
 
 
 def get_jira_user_details(account_id):
-    return requests.get('https://kisanhub.atlassian.net/rest/api/3/user', {'accountId': account_id},
-                        auth=get_jira_auth()).json()
+    resp = requests.get('https://kisanhub.atlassian.net/rest/api/3/user', {'accountId': account_id},
+                        auth=get_jira_auth())
+    if resp.status_code != 200:
+        raise Exception(f"Failed to fetch information from JIRA: {resp.status_code}: {resp.json()}")
+    return resp.json()
 
 
 def get_commit_info(repos: str, sha: str):
@@ -56,9 +59,13 @@ def get_commit_info(repos: str, sha: str):
         'author': user['displayName']
     }
     for issue_key in {x[0] for x in
-                      re.findall(r'((PLAT-|CI-|SI-|AGR-)[0-9]{1,5})', commit['message'])}:
+                      re.findall(r'([A-Z]{2,5}-[0-9]{1,5})', commit['message'])}:
         r = requests.get(f'https://kisanhub.atlassian.net/rest/api/3/issue/{issue_key}', auth=get_jira_auth())
         if r.status_code == 200:
             ret['jira_ticket'] = f'https://kisanhub.atlassian.net/browse/{issue_key}'
             break
     return ret
+
+
+if __name__ == '__main__':
+    print(get_commit_info('kisanhubcore/kisanhub-webapp', '3ab8eb7eda07a8dcf8f21e65367b66bd32e58768'))
