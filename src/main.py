@@ -55,9 +55,6 @@ def bitbucket_webhook(token: str, project: str, repos: str,
 
     logging.info(f"Webhook received for {branch} {sha}")
     crud.cancel_previous_test_runs(db, branch)
-    params = TestRunParams(branch=branch, sha=sha, repos=repos)
-    params.repos = f'{project}/{repos}'
-
     celeryapp.send_task('clone_and_build', args=[repos, branch, sha])
     return {'message': 'OK'}
 

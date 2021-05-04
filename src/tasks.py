@@ -40,7 +40,7 @@ def clone_and_build(repos: str, sha: str, branch: str):
         wdir = None
         try:
             # clone
-            wdir = clone_repos(f'{settings.BITBUCKET_USERNAME}:{settings.BITBUCKET_APP_PASSWORD}@{repos}.git', branch)
+            wdir = clone_repos(f'https://{settings.BITBUCKET_USERNAME}:{settings.BITBUCKET_APP_PASSWORD}@bitbucket.org/{repos}.git', branch)
             # get the list of specs and create a testrun
             specs = get_specs(wdir)
             info = get_commit_info(repos, sha)
@@ -57,6 +57,4 @@ def clone_and_build(repos: str, sha: str, branch: str):
             logging.info(f"Build created in {t:.1f}s")
         except:
             logging.exception("Failed to create build")
-        finally:
-            if wdir:
-                shutil.rmtree(wdir)
+
