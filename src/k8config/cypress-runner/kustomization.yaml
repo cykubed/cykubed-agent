@@ -7,6 +7,6 @@ configMapGenerator:
   - config.properties
   name: cypress-runner-config
 images:
-- name: gcr.io/kisanhub-uat/cypress-runner
-  newName: gcr.io/kisanhub-uat/cypress-runner
-  newTag: "1.3"
+- name: nickbrookdocker/cypress-runner:1.0
+  newName: nickbrookdocker/cypress-runner:1.0
+  newTag: "1.0"

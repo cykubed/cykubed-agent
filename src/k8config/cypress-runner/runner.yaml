@@ -16,7 +16,7 @@ spec:
       hostIPC: true
       containers:
       - name: testrunner
-        image: gcr.io/kisanhub-uat/cypress-runner:1.3
+        image: nickbrookdocker/cypress-runner:1.0
         imagePullPolicy: IfNotPresent
         resources:
           requests:

@@ -25,7 +25,7 @@ app = FastAPI(dependencies=[Depends(auth.implicit_scheme)])
 
 JSONObject = Dict[AnyStr, Any]
 
-logs.init()
+# logs.init()
 
 
 @app.get('/hc')
