@@ -11,12 +11,10 @@ from kubernetes.client import ApiException
 batchapi = None
 
 RUNNER_CONFIG_DIR = os.path.join(os.path.dirname(__file__), 'k8config/cypress-runner')
-CYPRESS_RUNNER_VERSION = os.environ.get('CYPRESS_RUNNER_VERSION', '6.3.0-3')
-TEST_HUB_URL = os.environ.get('TESTHUB_URL', 'test-hub:5000')
-if 'minikube' in TEST_HUB_URL:
+CYPRESS_RUNNER_VERSION = os.environ.get('CYPRESS_RUNNER_VERSION', '1.0')
+HUB_URL = os.environ.get('CYPRESSHUB_URL', 'http://cypresshub:5000')
+if 'minikube' in HUB_URL:
     RUNNER_CONFIG_DIR += '-test'
-API_TOKEN = os.environ.get('CYPRESS_RUNNER_AUTH_TOKEN')
-
 
 def connect_k8():
 
@@ -121,15 +119,14 @@ def start_job(branch, commit_sha):
     # we overwrite the SHA - it's all the runner needs
     with open(os.path.join(k8cfg, 'config.properties'), 'w') as f:
         f.write(f'COMMIT_SHA={commit_sha}\n')
-        f.write(f'API_TOKEN={API_TOKEN}\n')
-        f.write(f'CYPRESS_HUB={TEST_HUB_URL}\n')
+        f.write(f'HUB_URL={HUB_URL}\n')
     # and create the job
     os.chdir(k8cfg)
     subprocess.check_output(f'kustomize edit set namesuffix {commit_sha}', shell=True)
     subprocess.check_output(f'kustomize edit add label branch:{branch}', shell=True)
     subprocess.check_output(f'kustomize edit add label job:cypress-runner', shell=True)
-    subprocess.check_output(f'kustomize edit set image gcr.io/kisanhub-uat/cypress-runner='
-                            f'gcr.io/kisanhub-uat/cypress-runner:{CYPRESS_RUNNER_VERSION}', shell=True)
+    subprocess.check_output(f'kustomize edit set image nickbrookdocker/cypress-runner='
+                            f'nickbrookdocker/cypress-runner::{CYPRESS_RUNNER_VERSION}', shell=True)
 
     subprocess.check_output('kustomize build . > build.yaml', shell=True)
     subprocess.check_output('kubectl apply -f build.yaml', shell=True)

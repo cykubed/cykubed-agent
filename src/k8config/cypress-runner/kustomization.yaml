@@ -6,7 +6,3 @@ configMapGenerator:
 - envs:
   - config.properties
   name: cypress-runner-config
-images:
-- name: nickbrookdocker/cypress-runner:1.0
-  newName: nickbrookdocker/cypress-runner:1.0
-  newTag: "1.0"
