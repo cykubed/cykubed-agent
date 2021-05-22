@@ -99,7 +99,7 @@ def prune_jobs(namespace):
     kube_delete_empty_pods(namespace)
 
 
-def start_job(branch, commit_sha, logfile):
+def start_job(branch, commit_sha, logfile, parallelism=None):
     """
     Start a cypress-runner Job
     """
@@ -117,13 +117,14 @@ def start_job(branch, commit_sha, logfile):
 
     # copy the k8 config
     with open(os.path.join(RUNNER_CONFIG_DIR, 'runner.yaml')) as f:
-        cfg = f.read().format(SHA=commit_sha, PARALLELISM=settings.PARALLELISM,
+        cfg = f.read().format(SHA=commit_sha, PARALLELISM=parallelism or settings.PARALLELISM,
                               BRANCH=branch, HUB_URL=settings.HUB_URL,
                               DIST_URL=settings.DIST_URL,
                               CYPRESS_RUNNER_VERSION=settings.CYPRESS_RUNNER_VERSION)
-    k8cfg = tempfile.NamedTemporaryFile('w', suffix='.yaml')
+    k8cfg = tempfile.NamedTemporaryFile('w', suffix='.yaml', delete=False)
     k8cfg.write(cfg)
-    runcmd(f'kubectl apply -f {k8cfg}', logfile=logfile)
+    k8cfg.flush()
+    runcmd(f'kubectl apply -f {k8cfg.name}', logfile=logfile)
     k8cfg.close()
 
 

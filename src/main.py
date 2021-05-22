@@ -1,15 +1,16 @@
 import logging
 from typing import List, Any, AnyStr, Dict
-from unittest import mock
 
 from fastapi import Depends, FastAPI, HTTPException, Security
 from fastapi_auth0 import Auth0, Auth0User
 from fastapi_utils.session import FastAPISessionMaker
 from fastapi_utils.tasks import repeat_every
+from loguru import logger
 from sqlalchemy.orm import Session
 from starlette.middleware.cors import CORSMiddleware
 
 import crud
+import jobs
 import schemas
 from build import delete_old_dists
 from crud import TestRunParams
@@ -18,7 +19,6 @@ from notify import notify_failed, notify_fixed
 from report import create_report
 from settings import settings
 from worker import app as celeryapp
-from loguru import logger
 
 sessionmaker = FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)
 auth = Auth0(domain='khauth.eu.auth0.com', api_audience='https://testhub-api.kisanhub.com')
@@ -41,6 +41,8 @@ JSONObject = Dict[AnyStr, Any]
 
 logger.info("Started server")
 
+jobs.connect_k8()
+
 
 @app.get('/hc')
 def health_check(db: Session = Depends(get_db)):
@@ -50,8 +52,7 @@ def health_check(db: Session = Depends(get_db)):
 
 @app.get('/api/testruns', response_model=List[schemas.TestRun])
 def get_testruns(page: int = 1, page_size: int = 50,
-                db: Session = Depends(get_db), user: Auth0User = Security(auth.get_user)):
-    logging.info("Test - /api/testruns")
+                db: Session = Depends(get_db)): #, user: Auth0User = Security(auth.get_user)):
     return crud.get_test_runs(db, page, page_size)
 
 
@@ -74,9 +75,9 @@ def bitbucket_webhook(token: str, project: str, repos: str,
 
 
 @app.post('/api/start')
-def start_testrun(params: TestRunParams, db: Session = Depends(get_db), user: Auth0User = Security(auth.get_user)):
-    crud.cancel_previous_test_runs(db, params.branch)
-    celeryapp.send_task('clone_and_build', args=[params.repos, params.branch, params.sha])
+def start_testrun(params: TestRunParams, db: Session = Depends(get_db)): #, user: Auth0User = Security(auth.get_user)):
+    logger.info(f"Start test run {params.repos} {params.branch} {params.sha}")
+    celeryapp.send_task('clone_and_build', args=[params.repos, params.sha, params.branch])
     return {'message': 'Test run started'}
 
 
@@ -86,21 +87,22 @@ def get_status(sha: str, db: Session = Depends(get_db)):
     Private API - called within the cluster by cypress-runner to get the testrun status
     """
     # return 204 if we're still building - the runners can wait
-    tr = crud.get_test_run_status(db, sha)
-    if not tr:
+    status = crud.get_test_run_status(db, sha)
+    if not status:
         raise HTTPException(404)
 
-    return {'status': str(tr.status).lower()}
+    logger.info(f"status={status}")
+    return {'status': status}
 
 
 @app.get('/testrun/{sha}/next')
-def get_next_spec(sha: str, db: Session = Depends(get_db), user: Auth0User = Security(auth.get_user)):
+def get_next_spec(sha: str, db: Session = Depends(get_db)):
     """
     Private API - called within the cluster by cypress-runner to get the next file to test
     """
     spec = crud.get_next_spec_file(db, sha)
     if spec:
-        logging.info(f"Returning spec {spec.file} for {sha}")
+        logger.info(f"Returning spec {spec.file} for {sha}")
         return {"spec": spec.file, "id": spec.id}
     raise HTTPException(204)
 
@@ -110,6 +112,7 @@ def runner_completed(id: int, db: Session = Depends(get_db)):
     """
     Private API - called within the cluster by cypress-runner when a test spec has completed
     """
+    logger.info(f"mark_completed {id}")
     spec = crud.mark_completed(db, id)
     testrun = spec.testrun
     remaining = crud.get_remaining(db, testrun)

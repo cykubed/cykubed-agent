@@ -19,8 +19,7 @@ def clone_repos(url: str, branch: str, logfile) -> str:
     logfile.write("Cloning repository\n")
     builddir = tempfile.mkdtemp()
     os.chdir(builddir)
-    subprocess.check_call(f'git clone --single-branch --depth 1 --recursive --branch {branch} {url} {builddir}',
-                          shell=True, stdout=logfile, stderr=logfile)
+    runcmd(f'git clone --single-branch --depth 1 --recursive --branch {branch} {url} {builddir}', logfile=logfile)
     return builddir
 
 

@@ -40,9 +40,9 @@ def create_testrun(db: Session, params: TestRunParams, specs, **info) -> TestRun
     return tr
 
 
-def cancel_previous_test_runs(db: Session, branch: str):
-    db.query(TestRun).filter_by(branch=branch, active=True).update({'status': 'cancelled',
-                                                                    'active': False})
+def cancel_previous_test_runs(db: Session, sha:str, branch: str):
+    db.query(TestRun).filter_by(branch=branch).update({'status': 'cancelled', 'active': False})
+    db.query(TestRun).filter_by(sha=sha).update({'status': 'cancelled', 'active': False})
     db.commit()
 
 
@@ -57,11 +57,11 @@ def mark_as_running(db: Session, sha: str):
 def get_test_run_status(db: Session, sha: str):
     tr = db.query(TestRun).filter_by(sha=sha, active=True).one_or_none()
     if tr:
-        return tr.status
+        return tr.status.lower()
 
 
 def get_test_runs(db: Session, page: int = 1, page_size: int = 50):
-    return db.query(TestRun).join(SpecFile).offset((page - 1) * page_size).limit(page_size).all()
+    return db.query(TestRun).join(SpecFile).order_by(TestRun.started.desc()).offset((page - 1) * page_size).limit(page_size).all()
 
 
 def get_next_spec_file(db: Session, sha: str) -> SpecFile:
@@ -78,7 +78,6 @@ def get_next_spec_file(db: Session, sha: str) -> SpecFile:
 
 def mark_completed(db: Session, id: int) -> SpecFile:
     specfile = db.query(SpecFile).get(id)
-    logging.info(f"Runner completed {id} for {specfile.testrun.sha} for {specfile.file}")
     specfile.finished = now()
     db.add(specfile)
     db.commit()

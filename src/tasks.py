@@ -1,10 +1,7 @@
 import logging
 import os
-import shutil
-import tempfile
 import time
 
-from celery import Celery
 from fastapi_utils.session import FastAPISessionMaker
 
 import crud
@@ -19,7 +16,7 @@ sessionmaker = FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)
 from worker import app
 
 
-@app.task
+@app.task(name='ping')
 def ping():
     logging.info("ping called")
     try:
@@ -29,16 +26,19 @@ def ping():
         logging.exception("Failed")
 
 
-@app.task
-def clone_and_build(repos: str, sha: str, branch: str):
+@app.task(name='clone_and_build')
+def clone_and_build(repos: str, sha: str, branch: str, parallelism: int = None):
     """
     Clone and build (from Bitbucket)
     """
     with sessionmaker.context_session() as db:
+        # cancel previous runs
+        crud.cancel_previous_test_runs(db, sha, branch)
+
         t = time.time()
-        wdir = None
         try:
             logfile = open(os.path.join(settings.DIST_DIR, f'{sha}.log'), 'w')
+
             # clone
             logging.info(f"Logfile = {logfile.name}")
             wdir = clone_repos(f'https://{settings.BITBUCKET_USERNAME}:{settings.BITBUCKET_APP_PASSWORD}@bitbucket.org/{repos}.git', branch, logfile)
@@ -50,7 +50,7 @@ def clone_and_build(repos: str, sha: str, branch: str):
 
             # start the runner jobs - that way the cluster has a head start on spinning up new nodes
             if jobs.batchapi:
-                jobs.start_job(branch, sha)
+                jobs.start_job(branch, sha, logfile, parallelism=parallelism)
 
             # build the distro
             create_build(db, sha, wdir, branch, logfile)
