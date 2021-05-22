@@ -1,8 +1,0 @@
-resources:
-- runner.yaml
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-configMapGenerator:
-- envs:
-  - config.properties
-  name: cypress-runner-config

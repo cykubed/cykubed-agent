@@ -1,4 +1,5 @@
 import logging
+import os
 import shutil
 import tempfile
 import time
@@ -37,9 +38,9 @@ def clone_and_build(repos: str, sha: str, branch: str):
         t = time.time()
         wdir = None
         try:
+            logfile = open(os.path.join(settings.DIST_DIR, f'{sha}.log'), 'w')
             # clone
-            logfile = tempfile.NamedTemporaryFile('w', encoding='utf-8', delete=False)
-            print(f"Logfile = {logfile.name}")
+            logging.info(f"Logfile = {logfile.name}")
             wdir = clone_repos(f'https://{settings.BITBUCKET_USERNAME}:{settings.BITBUCKET_APP_PASSWORD}@bitbucket.org/{repos}.git', branch, logfile)
             # get the list of specs and create a testrun
             specs = get_specs(wdir)
@@ -54,8 +55,7 @@ def clone_and_build(repos: str, sha: str, branch: str):
             # build the distro
             create_build(db, sha, wdir, branch, logfile)
             t = time.time() - t
-
-            logfile.write("Distribution created in {t:.1f}s\n")
+            logfile.write(f"Distribution created in {t:.1f}s\n")
         except Exception as ex:
             logfile.write(f"BUILD FAILED: {str(ex)}\n")
             logging.exception("Failed to create build")

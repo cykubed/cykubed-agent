@@ -22,8 +22,6 @@ RUN yarn install --frozen-lockfile
 RUN curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl" && \
     chmod +x ./kubectl && mv kubectl /usr/local/bin/kubectl
 
-COPY --from=us.gcr.io/k8s-artifacts-prod/kustomize/kustomize:v4.0.4 /app/kustomize /usr/bin/kustomize
-
 COPY src /app/app
 COPY alembic /app/alembic
 COPY alembic.ini /app/

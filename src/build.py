@@ -52,20 +52,18 @@ def create_build(db: Session, sha: str, builddir: str, branch: str, logfile):
     else:
         # build node_modules
         logfile.write("Build new npm cache")
-        subprocess.check_call('npm ci', shell=True)
+        runcmd('npm ci', logfile=logfile)
         # the test runner will need some deps
-        subprocess.check_call('npm i node-fetch walk-sync uuid @google-cloud/storage sleep-promise mime-types',
-                              shell=True, stdout=logfile, stderr=logfile)
+        runcmd('npm i node-fetch walk-sync uuid @google-cloud/storage sleep-promise mime-types', logfile=logfile)
 
     # build the app
     logfile.write(f"Building {branch}\n")
-    subprocess.run(['./node_modules/.bin/ng', 'build', '-c', 'ci'],
-                   check=True, stdout=logfile, stderr=logfile)
+    runcmd('./node_modules/.bin/ng build -c ci', logfile=logfile)
 
     # tar it up
     distdir = settings.DIST_DIR
     os.makedirs(distdir, exist_ok=True)
-    logfile.write("Create distribution and cleanup")
+    logfile.write("Create distribution and cleanup\n")
     # tarball everything - we're running in gigabit ethernet
     subprocess.check_call(f'tar zcf {distdir}/{sha}.tgz ./node_modules ./dist ./src ./cypress *.json *.js',
                           shell=True)
@@ -96,7 +94,7 @@ def get_specs(wdir):
 
 
 def delete_old_dists(threshold_hours: int = 12):
-    # delete old runs and distributions
+    # delete old runs and distributions (along with log files)
     threshold = datetime.utcnow() - timedelta(hours=threshold_hours)
     distdir = settings.DIST_DIR
     for f in os.listdir(distdir):

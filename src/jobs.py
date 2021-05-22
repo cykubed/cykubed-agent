@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+from settings import settings
 
 from kubernetes import client, config
 from kubernetes.client import ApiException
@@ -115,25 +116,15 @@ def start_job(branch, commit_sha, logfile):
             # batchapi.delete_namespaced_job(job.metadata.name, namespace)
 
     # copy the k8 config
-    k8cfg = tempfile.mkdtemp()
-    shutil.copy(os.path.join(RUNNER_CONFIG_DIR, 'kustomization.yaml'), k8cfg)
-    shutil.copy(os.path.join(RUNNER_CONFIG_DIR, 'runner.yaml'), k8cfg)
-    # we overwrite the SHA - it's all the runner needs
-    with open(os.path.join(k8cfg, 'config.properties'), 'w') as f:
-        f.write(f'COMMIT_SHA={commit_sha}\n')
-        f.write(f'HUB_URL={HUB_URL}\n')
-        f.write(f'DIST_URL={DIST_URL}\n')
-    # and create the job
-    os.chdir(k8cfg)
-    runcmd(f'kustomize edit set namesuffix {commit_sha}', logfile=logfile)
-    runcmd(f'kustomize edit add label branch:{branch}', logfile=logfile)
-    runcmd(f'kustomize edit add label job:cypress-runner', logfile=logfile)
-    runcmd(f'kustomize edit set image nickbrookdocker/cypress-runner='
-                            f'nickbrookdocker/cypress-runner::{CYPRESS_RUNNER_VERSION}', logfile=logfile)
-
-    runcmd('kustomize build . > build.yaml', logfile=logfile)
-    runcmd('kubectl apply -f build.yaml', logfile=logfile)
-    shutil.rmtree(k8cfg)
+    with open(os.path.join(RUNNER_CONFIG_DIR, 'runner.yaml')) as f:
+        cfg = f.read().format(SHA=commit_sha, PARALLELISM=settings.PARALLELISM,
+                              BRANCH=branch, HUB_URL=settings.HUB_URL,
+                              DIST_URL=settings.DIST_URL,
+                              CYPRESS_RUNNER_VERSION=settings.CYPRESS_RUNNER_VERSION)
+    k8cfg = tempfile.NamedTemporaryFile('w', suffix='.yaml')
+    k8cfg.write(cfg)
+    runcmd(f'kubectl apply -f {k8cfg}', logfile=logfile)
+    k8cfg.close()
 
 
 if __name__ == '__main__':
