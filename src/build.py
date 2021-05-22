@@ -9,16 +9,18 @@ from sqlalchemy.orm import Session
 
 import crud
 from settings import settings
+from utils import runcmd
 
 FILES_TO_COPY = ['.npmrc', 'package.json', 'package-lock.json']
 ROOT_DIR = os.path.join(os.path.dirname(__file__), '..')
 
 
-def clone_repos(url: str, branch: str) -> str:
-    logging.info("Cloning repository")
+def clone_repos(url: str, branch: str, logfile) -> str:
+    logfile.write("Cloning repository\n")
     builddir = tempfile.mkdtemp()
     os.chdir(builddir)
-    subprocess.check_call(f'git clone --single-branch --depth 1 --recursive --branch {branch} {url} {builddir}', shell=True)
+    subprocess.check_call(f'git clone --single-branch --depth 1 --recursive --branch {branch} {url} {builddir}',
+                          shell=True, stdout=logfile, stderr=logfile)
     return builddir
 
 
@@ -31,11 +33,11 @@ def get_lock_hash(build_dir):
     return m.hexdigest()
 
 
-def create_build(db: Session, sha: str, builddir: str, branch: str):
+def create_build(db: Session, sha: str, builddir: str, branch: str, logfile):
     """
     Build the Angular app. Uses a cache for node_modules
     """
-    logging.info(f"Creating build distribution for branch {branch}")
+    logfile.write(f"Creating build distribution for branch {branch}\n")
     os.chdir(builddir)
     lockhash = get_lock_hash(builddir)
     cache_dir = settings.NPM_CACHE_DIR
@@ -44,27 +46,29 @@ def create_build(db: Session, sha: str, builddir: str, branch: str):
     cached_node_modules_dir = os.path.join(cache_dir, lockhash)
     cache_exists = os.path.exists(cached_node_modules_dir)
     if cache_exists:
-        logging.info("Using npm cache")
-        subprocess.check_call(f'cp -ar {cached_node_modules_dir} node_modules', shell=True)
+        logfile.write("Using npm cache")
+        subprocess.check_call(f'cp -ar {cached_node_modules_dir} node_modules', shell=True, stdout=logfile,
+                              stderr=logfile)
     else:
         # build node_modules
-        logging.info("Build new npm cache")
+        logfile.write("Build new npm cache")
         subprocess.check_call('npm ci', shell=True)
         # the test runner will need some deps
-        subprocess.check_call('npm i node-fetch walk-sync uuid @google-cloud/storage sleep-promise mime-types', shell=True)
+        subprocess.check_call('npm i node-fetch walk-sync uuid @google-cloud/storage sleep-promise mime-types',
+                              shell=True, stdout=logfile, stderr=logfile)
 
     # build the app
-    logging.info(f"Building {branch}")
+    logfile.write(f"Building {branch}\n")
     subprocess.run(['./node_modules/.bin/ng', 'build', '-c', 'ci'],
-                   check=True,
-                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                   check=True, stdout=logfile, stderr=logfile)
 
     # tar it up
     distdir = settings.DIST_DIR
     os.makedirs(distdir, exist_ok=True)
-    logging.info("Create distribution and cleanup")
+    logfile.write("Create distribution and cleanup")
     # tarball everything - we're running in gigabit ethernet
-    subprocess.check_call(f'tar zcf {distdir}/{sha}.tgz ./node_modules ./dist ./src ./cypress *.json *.js', shell=True)
+    subprocess.check_call(f'tar zcf {distdir}/{sha}.tgz ./node_modules ./dist ./src ./cypress *.json *.js',
+                          shell=True)
 
     # mark the spec as 'running'
     crud.mark_as_running(db, sha)
@@ -73,10 +77,10 @@ def create_build(db: Session, sha: str, builddir: str, branch: str):
     if not cache_exists:
         # store in the cache
         logging.info("Updating cache")
-        subprocess.check_call(f'cp -fr ./node_modules {cached_node_modules_dir}', shell=True)
+        runcmd(f'cp -fr ./node_modules {cached_node_modules_dir}', logfile)
 
     # clean up the build, but leave the distribution
-    subprocess.check_call(f'rm -fr {builddir}', shell=True)
+    subprocess.check_call(f'rm -fr {builddir}', shell=True, stdout=logfile, stderr=logfile)
 
     return os.path.join(distdir, f'{sha}.tgz')
 

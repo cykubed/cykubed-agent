@@ -94,7 +94,7 @@ spec:
         - name: nginx
           image: nickbrookdocker/cypresshub-nginx:1.0
           ports:
-            - containerPort: 80
+            - containerPort: 5001
 
         #
         # Worker

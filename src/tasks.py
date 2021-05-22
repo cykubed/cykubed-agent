@@ -1,5 +1,6 @@
 import logging
 import shutil
+import tempfile
 import time
 
 from celery import Celery
@@ -7,7 +8,6 @@ from fastapi_utils.session import FastAPISessionMaker
 
 import crud
 import jobs
-import logs
 from build import clone_repos, get_specs, create_build
 from crud import TestRunParams
 from integration import get_commit_info
@@ -16,8 +16,6 @@ from settings import settings
 sessionmaker = FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)
 
 from worker import app
-
-logs.init()
 
 
 @app.task
@@ -40,7 +38,9 @@ def clone_and_build(repos: str, sha: str, branch: str):
         wdir = None
         try:
             # clone
-            wdir = clone_repos(f'https://{settings.BITBUCKET_USERNAME}:{settings.BITBUCKET_APP_PASSWORD}@bitbucket.org/{repos}.git', branch)
+            logfile = tempfile.NamedTemporaryFile('w', encoding='utf-8', delete=False)
+            print(f"Logfile = {logfile.name}")
+            wdir = clone_repos(f'https://{settings.BITBUCKET_USERNAME}:{settings.BITBUCKET_APP_PASSWORD}@bitbucket.org/{repos}.git', branch, logfile)
             # get the list of specs and create a testrun
             specs = get_specs(wdir)
             info = get_commit_info(repos, sha)
@@ -52,9 +52,11 @@ def clone_and_build(repos: str, sha: str, branch: str):
                 jobs.start_job(branch, sha)
 
             # build the distro
-            create_build(db, sha, wdir, branch)
+            create_build(db, sha, wdir, branch, logfile)
             t = time.time() - t
-            logging.info(f"Build created in {t:.1f}s")
-        except:
+
+            logfile.write("Distribution created in {t:.1f}s\n")
+        except Exception as ex:
+            logfile.write(f"BUILD FAILED: {str(ex)}\n")
             logging.exception("Failed to create build")
 

@@ -7,9 +7,9 @@ from fastapi_auth0 import Auth0, Auth0User
 from fastapi_utils.session import FastAPISessionMaker
 from fastapi_utils.tasks import repeat_every
 from sqlalchemy.orm import Session
+from starlette.middleware.cors import CORSMiddleware
 
 import crud
-import logs
 import schemas
 from build import delete_old_dists
 from crud import TestRunParams
@@ -18,14 +18,28 @@ from notify import notify_failed, notify_fixed
 from report import create_report
 from settings import settings
 from worker import app as celeryapp
+from loguru import logger
 
 sessionmaker = FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)
 auth = Auth0(domain='khauth.eu.auth0.com', api_audience='https://testhub-api.kisanhub.com')
 app = FastAPI(dependencies=[Depends(auth.implicit_scheme)])
 
+origins = [
+    'http://localhost:4201',
+    'https://cypresshub.kisanhub.com',
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 JSONObject = Dict[AnyStr, Any]
 
-# logs.init()
+logger.info("Started server")
 
 
 @app.get('/hc')

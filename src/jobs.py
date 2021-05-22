@@ -8,13 +8,15 @@ import tempfile
 from kubernetes import client, config
 from kubernetes.client import ApiException
 
+from utils import runcmd
+
 batchapi = None
 
 RUNNER_CONFIG_DIR = os.path.join(os.path.dirname(__file__), 'k8config/cypress-runner')
 CYPRESS_RUNNER_VERSION = os.environ.get('CYPRESS_RUNNER_VERSION', '1.0')
 HUB_URL = os.environ.get('CYPRESSHUB_URL', 'http://cypresshub:5000')
-if 'minikube' in HUB_URL:
-    RUNNER_CONFIG_DIR += '-test'
+DIST_URL = os.environ.get('CYPRESSHUB_URL', 'http://cypresshub:5001')
+
 
 def connect_k8():
 
@@ -96,7 +98,7 @@ def prune_jobs(namespace):
     kube_delete_empty_pods(namespace)
 
 
-def start_job(branch, commit_sha):
+def start_job(branch, commit_sha, logfile):
     """
     Start a cypress-runner Job
     """
@@ -108,7 +110,7 @@ def start_job(branch, commit_sha):
         # delete it (there should just be one, but iterate anyway)
         for job in jobs.items:
             logging.info(f"Deleting existing job {job.metadata.name}")
-            subprocess.check_output(f'kubectl delete job/{job.metadata.name}', shell=True)
+            runcmd(f'kubectl delete job/{job.metadata.name}', logfile=logfile)
             # the following doesn't appear to actually delete the job?
             # batchapi.delete_namespaced_job(job.metadata.name, namespace)
 
@@ -120,16 +122,17 @@ def start_job(branch, commit_sha):
     with open(os.path.join(k8cfg, 'config.properties'), 'w') as f:
         f.write(f'COMMIT_SHA={commit_sha}\n')
         f.write(f'HUB_URL={HUB_URL}\n')
+        f.write(f'DIST_URL={DIST_URL}\n')
     # and create the job
     os.chdir(k8cfg)
-    subprocess.check_output(f'kustomize edit set namesuffix {commit_sha}', shell=True)
-    subprocess.check_output(f'kustomize edit add label branch:{branch}', shell=True)
-    subprocess.check_output(f'kustomize edit add label job:cypress-runner', shell=True)
-    subprocess.check_output(f'kustomize edit set image nickbrookdocker/cypress-runner='
-                            f'nickbrookdocker/cypress-runner::{CYPRESS_RUNNER_VERSION}', shell=True)
+    runcmd(f'kustomize edit set namesuffix {commit_sha}', logfile=logfile)
+    runcmd(f'kustomize edit add label branch:{branch}', logfile=logfile)
+    runcmd(f'kustomize edit add label job:cypress-runner', logfile=logfile)
+    runcmd(f'kustomize edit set image nickbrookdocker/cypress-runner='
+                            f'nickbrookdocker/cypress-runner::{CYPRESS_RUNNER_VERSION}', logfile=logfile)
 
-    subprocess.check_output('kustomize build . > build.yaml', shell=True)
-    subprocess.check_output('kubectl apply -f build.yaml', shell=True)
+    runcmd('kustomize build . > build.yaml', logfile=logfile)
+    runcmd('kubectl apply -f build.yaml', logfile=logfile)
     shutil.rmtree(k8cfg)
 
 

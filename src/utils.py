@@ -1,3 +1,4 @@
+import subprocess
 from datetime import datetime
 from json.encoder import JSONEncoder
 
@@ -17,3 +18,7 @@ class CustomJSONEncoder(JSONEncoder):
 
 def now():
     return datetime.now()
+
+
+def runcmd(cmd: str, logfile):
+    subprocess.check_call(cmd, shell=True, stderr=logfile, stdout=logfile)

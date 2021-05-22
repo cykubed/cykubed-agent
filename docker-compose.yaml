@@ -16,7 +16,7 @@ services:
     ports:
       - 33062:3306
   hub:
-    image: gcr.io/kisanhub-uat/test-hub:latest
+    image: gcr.io/kisanhub-uat/hub:latest
     restart: always
     environment:
       CYPRESSHUB_DATABASE_URL: mysql+mysqldb://root:fishfish1234@mysql/testhub
@@ -28,7 +28,7 @@ services:
     volumes:
     - ./src:/app/app
   worker:
-    image: gcr.io/kisanhub-uat/test-hub:latest
+    image: gcr.io/kisanhub-uat/hub:latest
     command: celery -A tasks worker
     restart: always
     environment:
