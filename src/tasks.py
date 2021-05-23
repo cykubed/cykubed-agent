@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import time
 
 from fastapi_utils.session import FastAPISessionMaker
@@ -27,7 +28,8 @@ def ping():
 
 
 @app.task(name='clone_and_build')
-def clone_and_build(repos: str, sha: str, branch: str, parallelism: int = None):
+def clone_and_build(repos: str, sha: str, branch: str, parallelism: int = None,
+                    spec_filter: str = None):
     """
     Clone and build (from Bitbucket)
     """
@@ -50,6 +52,14 @@ def clone_and_build(repos: str, sha: str, branch: str, parallelism: int = None):
                 wdir = clone_repos(f'https://{settings.BITBUCKET_USERNAME}:{settings.BITBUCKET_APP_PASSWORD}@bitbucket.org/{repos}.git', branch, logfile)
                 # get the list of specs and create a testrun
                 specs = get_specs(wdir)
+
+            # filter the specs through the glob
+            if spec_filter:
+                try:
+                    filter_compiled = re.compile(spec_filter)
+                    specs = [spec for spec in specs if filter_compiled.match(spec)]
+                except re.error:
+                    logfile.write(f"Invalid filter {spec_filter}: ignoring")
 
             info = get_commit_info(repos, sha)
             crud.create_testrun(db, TestRunParams(repos=repos, sha=sha, branch=branch),

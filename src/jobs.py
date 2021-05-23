@@ -17,18 +17,19 @@ RUNNER_CONFIG_DIR = os.path.join(os.path.dirname(__file__), 'k8config/cypress-ru
 CYPRESS_RUNNER_VERSION = os.environ.get('CYPRESS_RUNNER_VERSION', '1.0')
 HUB_URL = os.environ.get('CYPRESSHUB_URL', 'http://cypresshub:5000')
 DIST_URL = os.environ.get('CYPRESSHUB_URL', 'http://cypresshub:5001')
+CONNECT_K8 = bool(os.environ.get('CONNECT_K8', "true") == "true")
 
 
 def connect_k8():
-
-    global batchapi
-    if os.path.exists('/var/run/secrets/kubernetes.io/serviceaccount/token'):
-        # we're inside a cluster
-        config.load_incluster_config()
-        batchapi = client.BatchV1Api()
-    else:
-        config.load_kube_config()
-        batchapi = client.BatchV1Api()
+    if CONNECT_K8:
+        global batchapi
+        if os.path.exists('/var/run/secrets/kubernetes.io/serviceaccount/token'):
+            # we're inside a cluster
+            config.load_incluster_config()
+            batchapi = client.BatchV1Api()
+        else:
+            config.load_kube_config()
+            batchapi = client.BatchV1Api()
 
 
 def get_latest_runner_tag():

@@ -53,11 +53,11 @@ def create_build(db: Session, sha: str, builddir: str, branch: str, logfile):
         logfile.write("Build new npm cache")
         runcmd('npm ci', logfile=logfile)
         # the test runner will need some deps
-        runcmd('npm i node-fetch walk-sync uuid @google-cloud/storage sleep-promise mime-types', logfile=logfile)
+        runcmd('npm i node-fetch walk-sync uuid sleep-promise mime-types', logfile=logfile)
 
     # build the app
     logfile.write(f"Building {branch}\n")
-    runcmd('./node_modules/.bin/ng build -c ci', logfile=logfile)
+    runcmd('./node_modules/.bin/ng build -c ci --output-path=dist', logfile=logfile)
 
     # tar it up
     distdir = settings.DIST_DIR

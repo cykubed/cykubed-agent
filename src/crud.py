@@ -17,6 +17,7 @@ class TestRunParams(BaseModel):
     sha: str
     branch: str
     parallelism: Optional[int]
+    spec_filter: Optional[str]
 
 
 def count_test_runs(db: Session) -> int:
@@ -61,7 +62,8 @@ def cancel_previous_test_runs(db: Session, sha: str, branch: str):
 
 def get_last_specs(db: Session, sha: str):
     tr = db.query(TestRun).filter_by(sha=sha).join(SpecFile).order_by(TestRun.started.desc()).first()
-    return [s.file for s in tr.files]
+    if tr:
+        return [s.file for s in tr.files]
 
 
 def mark_as_running(db: Session, sha: str):

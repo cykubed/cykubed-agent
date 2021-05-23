@@ -78,7 +78,7 @@ def bitbucket_webhook(token: str, project: str, repos: str,
 def start_testrun(params: TestRunParams, db: Session = Depends(get_db)): #, user: Auth0User = Security(auth.get_user)):
     logger.info(f"Start test run {params.repos} {params.branch} {params.sha} {params.parallelism}")
     celeryapp.send_task('clone_and_build', args=[params.repos, params.sha, params.branch,
-                                                 params.parallelism])
+                                                 params.parallelism, params.spec_filter])
     return {'message': 'Test run started'}
 
 
