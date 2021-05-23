@@ -23,6 +23,14 @@ class TestRun(BaseModel):
     status: str
     files: List[SpecFile]
 
+    commit_summary: str
+    commit_link: str
+    results_url: Optional[str]
+
+    avatar: Optional[str]
+    author: Optional[str]
+    jira_ticket: Optional[str]
+
     class Config:
         orm_mode = True
 

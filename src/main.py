@@ -76,9 +76,18 @@ def bitbucket_webhook(token: str, project: str, repos: str,
 
 @app.post('/api/start')
 def start_testrun(params: TestRunParams, db: Session = Depends(get_db)): #, user: Auth0User = Security(auth.get_user)):
-    logger.info(f"Start test run {params.repos} {params.branch} {params.sha}")
-    celeryapp.send_task('clone_and_build', args=[params.repos, params.sha, params.branch])
+    logger.info(f"Start test run {params.repos} {params.branch} {params.sha} {params.parallelism}")
+    celeryapp.send_task('clone_and_build', args=[params.repos, params.sha, params.branch,
+                                                 params.parallelism])
     return {'message': 'Test run started'}
+
+
+@app.post('/api/cancel/{id}')
+def cancel_testrun(id: int, db: Session = Depends(get_db)):
+    tr = crud.get_testrun(db, id)
+    jobs.delete_jobs_for_branch(tr.branch)
+    crud.cancel_testrun(db, tr)
+    return {'cancelled': 'OK'}
 
 
 @app.get('/testrun/{sha}/status')

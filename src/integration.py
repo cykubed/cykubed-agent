@@ -58,8 +58,7 @@ def get_commit_info(repos: str, sha: str):
         'avatar': user['avatarUrls']['48x48'],
         'author': user['displayName']
     }
-    for issue_key in {x[0] for x in
-                      re.findall(r'([A-Z]{2,5}-[0-9]{1,5})', commit['message'])}:
+    for issue_key in set(re.findall(r'([A-Z]{2,5}-[0-9]{1,5})', commit['message'])):
         r = requests.get(f'https://kisanhub.atlassian.net/rest/api/3/issue/{issue_key}', auth=get_jira_auth())
         if r.status_code == 200:
             ret['jira_ticket'] = f'https://kisanhub.atlassian.net/browse/{issue_key}'

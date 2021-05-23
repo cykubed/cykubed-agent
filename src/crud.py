@@ -1,5 +1,6 @@
-import logging
 from datetime import datetime, timedelta
+from datetime import datetime, timedelta
+from typing import Optional
 
 from pydantic import BaseModel
 from sqlalchemy import and_
@@ -15,10 +16,22 @@ class TestRunParams(BaseModel):
     repos: str
     sha: str
     branch: str
+    parallelism: Optional[int]
 
 
 def count_test_runs(db: Session) -> int:
     return db.query(func.count(TestRun.id)).scalar()
+
+
+def get_testrun(db: Session, id: int) -> TestRun:
+    return db.query(TestRun).get(id)
+
+
+def cancel_testrun(db: Session, tr: TestRun):
+    tr.status = 'cancelled'
+    tr.active = False
+    db.add(tr)
+    db.commit()
 
 
 def create_testrun(db: Session, params: TestRunParams, specs, **info) -> TestRun:
@@ -40,10 +53,15 @@ def create_testrun(db: Session, params: TestRunParams, specs, **info) -> TestRun
     return tr
 
 
-def cancel_previous_test_runs(db: Session, sha:str, branch: str):
+def cancel_previous_test_runs(db: Session, sha: str, branch: str):
     db.query(TestRun).filter_by(branch=branch).update({'status': 'cancelled', 'active': False})
     db.query(TestRun).filter_by(sha=sha).update({'status': 'cancelled', 'active': False})
     db.commit()
+
+
+def get_last_specs(db: Session, sha: str):
+    tr = db.query(TestRun).filter_by(sha=sha).join(SpecFile).order_by(TestRun.started.desc()).first()
+    return [s.file for s in tr.files]
 
 
 def mark_as_running(db: Session, sha: str):

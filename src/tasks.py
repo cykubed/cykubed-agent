@@ -37,13 +37,20 @@ def clone_and_build(repos: str, sha: str, branch: str, parallelism: int = None):
 
         t = time.time()
         try:
-            logfile = open(os.path.join(settings.DIST_DIR, f'{sha}.log'), 'w')
+            logfile_name = os.path.join(settings.DIST_DIR, f'{sha}.log')
+            logfile = open(logfile_name, 'w')
+            # check for existing dist (for a rerun)
+            dist = os.path.join(settings.DIST_DIR, f'{sha}.tgz')
+            if os.path.exists(dist):
+                # we'll have a previous run - use that for the specs
+                specs = crud.get_last_specs(db, sha)
+            else:
+                # clone
+                logging.info(f"Logfile = {logfile.name}")
+                wdir = clone_repos(f'https://{settings.BITBUCKET_USERNAME}:{settings.BITBUCKET_APP_PASSWORD}@bitbucket.org/{repos}.git', branch, logfile)
+                # get the list of specs and create a testrun
+                specs = get_specs(wdir)
 
-            # clone
-            logging.info(f"Logfile = {logfile.name}")
-            wdir = clone_repos(f'https://{settings.BITBUCKET_USERNAME}:{settings.BITBUCKET_APP_PASSWORD}@bitbucket.org/{repos}.git', branch, logfile)
-            # get the list of specs and create a testrun
-            specs = get_specs(wdir)
             info = get_commit_info(repos, sha)
             crud.create_testrun(db, TestRunParams(repos=repos, sha=sha, branch=branch),
                                 specs, **info)
@@ -53,9 +60,12 @@ def clone_and_build(repos: str, sha: str, branch: str, parallelism: int = None):
                 jobs.start_job(branch, sha, logfile, parallelism=parallelism)
 
             # build the distro
-            create_build(db, sha, wdir, branch, logfile)
-            t = time.time() - t
-            logfile.write(f"Distribution created in {t:.1f}s\n")
+            if not os.path.exists(dist):
+                create_build(db, sha, wdir, branch, logfile)
+                t = time.time() - t
+                logfile.write(f"Distribution created in {t:.1f}s\n")
+            else:
+                crud.mark_as_running(db, sha)
         except Exception as ex:
             logfile.write(f"BUILD FAILED: {str(ex)}\n")
             logging.exception("Failed to create build")

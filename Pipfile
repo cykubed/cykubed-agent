@@ -26,6 +26,7 @@ pytest-mock = "*"
 celery = {extras = ["redis"], version = "*"}
 fastapi-auth0 = "*"
 loguru = "*"
+click = "*"
 
 [requires]
 python_version = "3.8"
