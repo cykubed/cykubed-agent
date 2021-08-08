@@ -13,6 +13,7 @@ class AppSettings(BaseSettings):
     BUILD_TIMEOUT: int = 900
     NPM_CACHE_DIR = '/var/lib/cypresshub/npm-cache'
     DIST_DIR = '/var/lib/cypresshub/dist-cache'
+    RESULTS_DIR = '/var/lib/cypresshub/results'
     SLACK_TOKEN: str = None
     JIRA_TOKEN: str = None
     JIRA_USER: str = 'nick@kisanhub.com'

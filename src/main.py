@@ -1,7 +1,14 @@
+import json
 import logging
+import os
+import shutil
+import subprocess
+import tarfile
+import tempfile
+from io import BytesIO
 from typing import List, Any, AnyStr, Dict
 
-from fastapi import Depends, FastAPI, HTTPException, Security
+from fastapi import Depends, FastAPI, HTTPException, Security, Request
 from fastapi_auth0 import Auth0, Auth0User
 from fastapi_utils.session import FastAPISessionMaker
 from fastapi_utils.tasks import repeat_every
@@ -74,9 +81,17 @@ def bitbucket_webhook(token: str, project: str, repos: str,
     return {'message': 'OK'}
 
 
+def clear_results(sha: str):
+    rdir = os.path.join(settings.RESULTS_DIR, sha)
+    shutil.rmtree(rdir, ignore_errors=True)
+    os.mkdir(rdir)
+
+
 @app.post('/api/start')
 def start_testrun(params: TestRunParams, db: Session = Depends(get_db)): #, user: Auth0User = Security(auth.get_user)):
     logger.info(f"Start test run {params.repos} {params.branch} {params.sha} {params.parallelism}")
+    crud.cancel_previous_test_runs(db, params.sha, params.branch)
+    clear_results(params.sha)
     celeryapp.send_task('clone_and_build', args=[params.repos, params.sha, params.branch,
                                                  params.parallelism, params.spec_filter])
     return {'message': 'Test run started'}
@@ -117,34 +132,83 @@ def get_next_spec(sha: str, db: Session = Depends(get_db)):
 
 
 @app.post('/testrun/{id}/completed')
-def runner_completed(id: int, db: Session = Depends(get_db)):
+async def runner_completed(id: int, request: Request, db: Session = Depends(get_db)):
     """
     Private API - called within the cluster by cypress-runner when a test spec has completed
     """
     logger.info(f"mark_completed {id}")
     spec = crud.mark_completed(db, id)
+    # the body will be a tar of the results
+    tf = tarfile.TarFile(fileobj=BytesIO(await request.body()))
+    tf.extractall(os.path.join(settings.RESULTS_DIR, spec.testrun.sha, 'json', str(id)))
+
     testrun = spec.testrun
     remaining = crud.get_remaining(db, testrun)
     # has the entire run finished?
     if not remaining:
         logging.info(f"Creating report for {testrun.sha}")
-        total_fails, specs_with_fails = create_report(testrun.sha, testrun.branch)
 
-        if total_fails:
-            notify_failed(testrun, total_fails, specs_with_fails)
-        else:
-            # did the last run pass?
-            last = crud.get_last_run(db, testrun)
-            if last and last.status != 'passed':
-                # nope - notify
-                notify_fixed(testrun)
+        stats = merge_results(testrun.sha)
+
+    #     total_fails, specs_with_fails = create_report(testrun.sha, testrun.branch)
+    #
+    #     if total_fails:
+    #         notify_failed(testrun, total_fails, specs_with_fails)
+    #     else:
+    #         # did the last run pass?
+    #         last = crud.get_last_run(db, testrun)
+    #         if last and last.status != 'passed':
+    #             # nope - notify
+    #             notify_fixed(testrun)
 
     return "OK"
+
+
+def merge_results(sha: str):
+    """
+    Merge the mochawesome results and screenshots into a single directory
+    """
+    root = os.path.join(settings.RESULTS_DIR, sha)
+    json_root = os.path.join(root, 'json')
+
+    tests = 0
+    passes = 0
+    fails = 0
+    skipped = 0
+    results = []
+
+    sshots_dir = os.path.join(root, 'screenshots')
+    if not os.path.exists(sshots_dir):
+        os.mkdir(sshots_dir)
+
+    for d in os.listdir(json_root):
+        subd = os.path.join(json_root, d, 'mochawesome-report')
+        with open(os.path.join(subd, 'mochawesome.json')) as f:
+            report = json.loads(f.read())
+            stats = report['stats']
+            tests += stats['tests']
+            passes += stats['passes']
+            fails += stats['failures']
+            skipped += stats['skipped']
+            results.extend(report['results'])
+
+        spec_sshots = os.path.join(subd, 'screenshots')
+        if os.path.exists(spec_sshots):
+            shutil.copytree(spec_sshots, sshots_dir, dirs_exist_ok=True)
+        shutil.rmtree(subd)
+
+    merged = dict(stats=dict(tests=tests, failures=fails, passes=passes, skipped=skipped),
+                  results=results)
+    with open(os.path.join(root, 'results.json'), 'w') as f:
+        f.write(json.dumps(merged, indent=4))
+
+    return merged['stats']
 
 
 @app.on_event("startup")
 @repeat_every(seconds=3000)
 def handle_timeouts():
+
     with sessionmaker.context_session() as db:
         crud.apply_timeouts(db, settings.TEST_RUN_TIMEOUT, settings.SPEC_FILE_TIMEOUT)
     delete_old_dists()
