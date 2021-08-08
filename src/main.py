@@ -3,6 +3,7 @@ import logging
 import os
 import shutil
 import tarfile
+from datetime import datetime
 from io import BytesIO
 from typing import List, Any, AnyStr, Dict
 
@@ -145,7 +146,8 @@ async def runner_completed(id: int, request: Request, db: Session = Depends(get_
     if not remaining:
         logging.info(f"Creating report for {testrun.sha}")
 
-        stats = merge_results(testrun.sha)
+        stats = merge_results(testrun)
+        crud.mark_complete(db, testrun, stats['failures'])
         notify(stats, testrun, db)
 
     return "OK"
@@ -162,10 +164,11 @@ def notify(stats, testrun: TestRun, db: Session):
             notify_fixed(testrun)
 
 
-def merge_results(sha: str):
+def merge_results(testrun: TestRun):
     """
     Merge the mochawesome results and screenshots into a single directory
     """
+    sha = testrun.sha
     root = os.path.join(settings.RESULTS_DIR, sha)
     json_root = os.path.join(root, 'json')
 
@@ -173,6 +176,8 @@ def merge_results(sha: str):
     passes = 0
     fails = 0
     skipped = 0
+    pending = 0
+    suites = 0
     results = []
 
     sshots_dir = os.path.join(root, 'screenshots')
@@ -187,11 +192,13 @@ def merge_results(sha: str):
             report = json.loads(f.read())
             stats = report['stats']
             tests += stats['tests']
+            pending += stats['pending']
             passes += stats['passes']
             fails += stats['failures']
             skipped += stats['skipped']
             for result in report['results']:
                 for suite in result['suites']:
+                    suites += 1
                     for test in suite['tests']:
                         if test['fail']:
                             failed_tests.append({'file': result['file'], 'test': test['title']})
@@ -203,9 +210,20 @@ def merge_results(sha: str):
             shutil.copytree(spec_sshots, sshots_dir, dirs_exist_ok=True)
         # shutil.rmtree(subd)
 
-    merged = dict(stats=dict(tests=tests, failures=fails, passes=passes, skipped=skipped,
-                             failed_tests=failed_tests),
+    merged = dict(stats=dict(suites=suites, tests=tests, pending=pending,
+                             failures=fails, passes=passes, skipped=skipped,
+                             start=testrun.started.isoformat(), end=datetime.now().isoformat(),
+
+                             duration=(datetime.now() - testrun.started).seconds,
+                             testsRegistered=tests,
+                             passPercent=(passes * 100) / tests,
+                             pendingPercent=0,
+                             other=0,
+                             hasOther=False,
+                             hasSkipped=(skipped > 0),
+                  failed_tests=failed_tests),
                   results=results)
+
     with open(os.path.join(root, 'results.json'), 'w') as f:
         f.write(json.dumps(merged, indent=4))
 
