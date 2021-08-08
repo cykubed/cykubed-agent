@@ -83,7 +83,7 @@ def notify_fixed(testrun: TestRun):
     send_slack_message_blocks(branch, slack_id, blocks, True)
 
 
-def notify_failed(testrun: TestRun, failures, specs_with_fails=None):
+def notify_failed(testrun: TestRun, failures, failed_tests=None):
     sha = testrun.sha
     commit = get_bitbucket_info(testrun.repos, testrun.sha)
     # get the author name so we can find a Slack handle
@@ -98,11 +98,12 @@ def notify_failed(testrun: TestRun, failures, specs_with_fails=None):
                              branch=testrun.branch,
                              artifacts_url=settings.ARTIFACTS_URL,
                              commit_url=commit['links']['html']['href'])
-    if specs_with_fails:
-        text += "\n".join([" * {}".format(f) for f in specs_with_fails[:SPEC_FILE_SLACK_LIMIT]])
+    if failed_tests:
+        for failed_test in failed_tests[:SPEC_FILE_SLACK_LIMIT]:
+            text += f"\n * {failed_test['file']}: \"{failed_test['test']}\""
 
-    if len(specs_with_fails) > SPEC_FILE_SLACK_LIMIT:
-        text += f"\n + {len(specs_with_fails) - SPEC_FILE_SLACK_LIMIT} others..."
+    if len(failed_tests) > SPEC_FILE_SLACK_LIMIT:
+        text += f"\n + {len(failed_tests) - SPEC_FILE_SLACK_LIMIT} others..."
 
     blocks = [
         {

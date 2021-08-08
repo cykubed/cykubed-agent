@@ -2,14 +2,12 @@ import json
 import logging
 import os
 import shutil
-import subprocess
 import tarfile
-import tempfile
 from io import BytesIO
 from typing import List, Any, AnyStr, Dict
 
-from fastapi import Depends, FastAPI, HTTPException, Security, Request
-from fastapi_auth0 import Auth0, Auth0User
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi_auth0 import Auth0
 from fastapi_utils.session import FastAPISessionMaker
 from fastapi_utils.tasks import repeat_every
 from loguru import logger
@@ -21,9 +19,8 @@ import jobs
 import schemas
 from build import delete_old_dists
 from crud import TestRunParams
-from models import get_db
+from models import get_db, TestRun
 from notify import notify_failed, notify_fixed
-from report import create_report
 from settings import settings
 from worker import app as celeryapp
 
@@ -149,19 +146,20 @@ async def runner_completed(id: int, request: Request, db: Session = Depends(get_
         logging.info(f"Creating report for {testrun.sha}")
 
         stats = merge_results(testrun.sha)
-
-    #     total_fails, specs_with_fails = create_report(testrun.sha, testrun.branch)
-    #
-    #     if total_fails:
-    #         notify_failed(testrun, total_fails, specs_with_fails)
-    #     else:
-    #         # did the last run pass?
-    #         last = crud.get_last_run(db, testrun)
-    #         if last and last.status != 'passed':
-    #             # nope - notify
-    #             notify_fixed(testrun)
+        notify(stats, testrun, db)
 
     return "OK"
+
+
+def notify(stats, testrun: TestRun, db: Session):
+    if stats['failures']:
+        notify_failed(testrun, stats['failures'], stats['failed_tests'])
+    else:
+        # did the last run pass?
+        last = crud.get_last_run(db, testrun)
+        if last and last.status != 'passed':
+            # nope - notify
+            notify_fixed(testrun)
 
 
 def merge_results(sha: str):
@@ -181,6 +179,8 @@ def merge_results(sha: str):
     if not os.path.exists(sshots_dir):
         os.mkdir(sshots_dir)
 
+    failed_tests = []
+
     for d in os.listdir(json_root):
         subd = os.path.join(json_root, d, 'mochawesome-report')
         with open(os.path.join(subd, 'mochawesome.json')) as f:
@@ -190,14 +190,21 @@ def merge_results(sha: str):
             passes += stats['passes']
             fails += stats['failures']
             skipped += stats['skipped']
+            for result in report['results']:
+                for suite in result['suites']:
+                    for test in suite['tests']:
+                        if test['fail']:
+                            failed_tests.append({'file': result['file'], 'test': test['title']})
+
             results.extend(report['results'])
 
         spec_sshots = os.path.join(subd, 'screenshots')
         if os.path.exists(spec_sshots):
             shutil.copytree(spec_sshots, sshots_dir, dirs_exist_ok=True)
-        shutil.rmtree(subd)
+        # shutil.rmtree(subd)
 
-    merged = dict(stats=dict(tests=tests, failures=fails, passes=passes, skipped=skipped),
+    merged = dict(stats=dict(tests=tests, failures=fails, passes=passes, skipped=skipped,
+                             failed_tests=failed_tests),
                   results=results)
     with open(os.path.join(root, 'results.json'), 'w') as f:
         f.write(json.dumps(merged, indent=4))
