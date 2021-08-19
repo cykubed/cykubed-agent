@@ -20,7 +20,7 @@ class AppSettings(BaseSettings):
     TEST_MODE: bool = True
     PARALLELISM: int = 1
     HUB_URL: str = 'http://cypresshub:5000'
-    DIST_URL: str = 'http://cypresshub:5001'
+    DIST_URL: str = 'http://cypresshub:5001/dist-cache'
     CYPRESS_RUNNER_VERSION: str = '1.0'
 
 
