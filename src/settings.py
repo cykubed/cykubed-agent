@@ -20,8 +20,11 @@ class AppSettings(BaseSettings):
     TEST_MODE: bool = True
     PARALLELISM: int = 1
     HUB_URL: str = 'http://cypresshub:5000'
+    # Public face to NGINX server for screenshots and videos
+    RESULT_URL: str = 'http://cypresshub:5001/results'
     DIST_URL: str = 'http://cypresshub:5001/dist-cache'
     CYPRESS_RUNNER_VERSION: str = '1.0'
+    DIST_CACHE_TTL_HOURS: int = 365*24
 
 
 settings = AppSettings()

@@ -92,7 +92,7 @@ def get_specs(wdir):
     return specs
 
 
-def delete_old_dists(threshold_hours: int = 12):
+def delete_old_dists(threshold_hours: int = settings.DIST_CACHE_TTL_HOURS):
     # delete old runs and distributions (along with log files)
     threshold = datetime.utcnow() - timedelta(hours=threshold_hours)
     distdir = settings.DIST_DIR

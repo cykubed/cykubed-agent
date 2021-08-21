@@ -35,3 +35,43 @@ class TestRun(BaseModel):
         orm_mode = True
 
 
+class CodeFrame(BaseModel):
+    line: int
+    column: int
+    file: str
+    frame: str
+
+
+class TestResultError(BaseModel):
+    name: str
+    message: str
+    stack: str
+    code_frame: CodeFrame
+    screenshots: List[str]
+    videos: List[str]
+
+
+class TestResult(BaseModel):
+    title: str
+    failed: bool
+    body: str
+    num_attempts: int
+    duration: int
+    display_error: Optional[str]
+    started_at: datetime
+    error: Optional[TestResultError]
+
+
+class SpecResult(BaseModel):
+    file: str
+    results: List[TestResult]
+
+
+class Results(BaseModel):
+    testrun: TestRun
+    specs: List[SpecResult]
+    failures: int = 0
+
+
+
+

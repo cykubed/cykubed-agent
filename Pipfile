@@ -27,6 +27,7 @@ celery = {extras = ["redis"], version = "*"}
 fastapi-auth0 = "*"
 loguru = "*"
 click = "*"
+pydantic-to-typescript = "*"
 
 [requires]
 python_version = "3.8"

@@ -3,7 +3,6 @@ import logging
 import os
 import shutil
 import tarfile
-from datetime import datetime
 from io import BytesIO
 from typing import List, Any, AnyStr, Dict
 
@@ -103,6 +102,17 @@ def cancel_testrun(id: int, db: Session = Depends(get_db)):
     return {'cancelled': 'OK'}
 
 
+@app.get('/api/testrun/{id}/result')
+def get_testrun_result(id: int, db: Session = Depends(get_db)) -> schemas.Results:
+    tr = crud.get_testrun(db, id)
+    json_result = os.path.join(settings.RESULTS_DIR, tr.sha, 'json', 'results.json')
+    if os.path.exists(json_result):
+        result: schemas.Results = schemas.Results.parse_file(json_result)
+        result.testrun = tr
+        return result
+    return schemas.Results(testrun=tr, specs=[])
+
+
 @app.get('/testrun/{sha}/status')
 def get_status(sha: str, db: Session = Depends(get_db)):
     """
@@ -138,7 +148,7 @@ async def runner_completed(id: int, request: Request, db: Session = Depends(get_
     spec = crud.mark_completed(db, id)
     # the body will be a tar of the results
     tf = tarfile.TarFile(fileobj=BytesIO(await request.body()))
-    tf.extractall(os.path.join(settings.RESULTS_DIR, spec.testrun.sha, 'json', str(id)))
+    tf.extractall(os.path.join(settings.RESULTS_DIR, spec.testrun.sha))
 
     testrun = spec.testrun
     remaining = crud.get_remaining(db, testrun)
@@ -147,8 +157,8 @@ async def runner_completed(id: int, request: Request, db: Session = Depends(get_
         logging.info(f"Creating report for {testrun.sha}")
 
         stats = merge_results(testrun)
-        crud.mark_complete(db, testrun, stats['failures'])
-        notify(stats, testrun, db)
+        crud.mark_complete(db, testrun, stats.failures)
+        # notify(stats, testrun, db)
 
     return "OK"
 
@@ -164,76 +174,64 @@ def notify(stats, testrun: TestRun, db: Session):
             notify_fixed(testrun)
 
 
-def merge_results(testrun: TestRun):
+def create_file_path(sha: str, path: str) -> str:
+    i = path.find('build/results/')
+    return f'{settings.RESULT_URL}/{sha}/{path[i+14:]}'
+
+
+def merge_results(testrun: TestRun) -> schemas.Results:
     """
-    Merge the mochawesome results and screenshots into a single directory
+    Merge the results and screenshots into a single directory
     """
     sha = testrun.sha
-    root = os.path.join(settings.RESULTS_DIR, sha)
-    json_root = os.path.join(root, 'json')
+    results_root = os.path.join(settings.RESULTS_DIR, sha)
+    json_root = os.path.join(results_root, 'json')
 
-    tests = 0
-    passes = 0
-    fails = 0
-    skipped = 0
-    pending = 0
-    suites = 0
-    results = []
+    results = schemas.Results(testrun=testrun, specs=[])
 
-    sshots_dir = os.path.join(root, 'screenshots')
-    if not os.path.exists(sshots_dir):
-        os.mkdir(sshots_dir)
-
-    failed_tests = []
-
-    for d in os.listdir(json_root):
-        subd = os.path.join(json_root, d, 'mochawesome-report')
-        with open(os.path.join(subd, 'mochawesome.json')) as f:
+    for subd in os.listdir(json_root):
+        with open(os.path.join(json_root, subd, 'result.json')) as f:
             report = json.loads(f.read())
-            stats = report['stats']
-            tests += stats['tests']
-            pending += stats['pending']
-            passes += stats['passes']
-            fails += stats['failures']
-            skipped += stats['skipped']
-            for result in report['results']:
-                for suite in result['suites']:
-                    suites += 1
-                    for test in suite['tests']:
-                        if test['fail']:
-                            failed_tests.append({'file': result['file'], 'test': test['title']})
+            run = report['runs'][-1]
+            spec_result = schemas.SpecResult(file=run['spec']['name'], results=[])
+            results.specs.append(spec_result)
+            for test in run['tests']:
+                attempt = test['attempts'][-1]
+                test_result = schemas.TestResult(title=test['title'][1],
+                                                 failed=(test['state'] == 'failed'),
+                                                 body=test['body'],
+                                                 display_error=test['displayError'],
+                                                 duration=attempt['duration'],
+                                                 num_attempts=len(test['attempts']),
+                                                 started_at=test['attempts'][0]['startedAt']
+                                                 )
+                spec_result.results.append(test_result)
+                if test_result.failed:
+                    results.failures += 1
+                    err = attempt['error']
+                    frame = err['codeFrame']
+                    code_frame = schemas.CodeFrame(line=frame['line'],
+                                                   file=frame['relativeFile'],
+                                                   column=frame['column'],
+                                                   frame=frame['frame'])
 
-            results.extend(report['results'])
+                    test_result.error = schemas.TestResultError(
+                        name=err['name'],
+                        message=err['message'],
+                        stack=err['stack'],
+                        screenshots=[create_file_path(sha, ss['path']) for ss in attempt.get('screenshots', [])],
+                        videos=[create_file_path(sha, ss['path']) for ss in attempt.get('videos', [])],
+                        code_frame=code_frame)
 
-        spec_sshots = os.path.join(subd, 'screenshots')
-        if os.path.exists(spec_sshots):
-            shutil.copytree(spec_sshots, sshots_dir, dirs_exist_ok=True)
-        # shutil.rmtree(subd)
+    with open(os.path.join(json_root, 'results.json'), 'w') as f:
+        f.write(results.json(indent=4))
 
-    merged = dict(stats=dict(suites=suites, tests=tests, pending=pending,
-                             failures=fails, passes=passes, skipped=skipped,
-                             start=testrun.started.isoformat(), end=datetime.now().isoformat(),
-
-                             duration=(datetime.now() - testrun.started).seconds,
-                             testsRegistered=tests,
-                             passPercent=(passes * 100) / tests,
-                             pendingPercent=0,
-                             other=0,
-                             hasOther=False,
-                             hasSkipped=(skipped > 0),
-                  failed_tests=failed_tests),
-                  results=results)
-
-    with open(os.path.join(root, 'results.json'), 'w') as f:
-        f.write(json.dumps(merged, indent=4))
-
-    return merged['stats']
+    return results
 
 
 @app.on_event("startup")
 @repeat_every(seconds=3000)
 def handle_timeouts():
-
     with sessionmaker.context_session() as db:
         crud.apply_timeouts(db, settings.TEST_RUN_TIMEOUT, settings.SPEC_FILE_TIMEOUT)
     delete_old_dists()
