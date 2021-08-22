@@ -56,9 +56,9 @@ class TestResult(BaseModel):
     failed: bool
     body: str
     num_attempts: int
-    duration: int
+    duration: Optional[int]
     display_error: Optional[str]
-    started_at: datetime
+    started_at: Optional[datetime]
     error: Optional[TestResultError]
 
 
@@ -70,6 +70,9 @@ class SpecResult(BaseModel):
 class Results(BaseModel):
     testrun: TestRun
     specs: List[SpecResult]
+    total: int = 0
+    skipped: int = 0
+    passes: int = 0
     failures: int = 0
 
 

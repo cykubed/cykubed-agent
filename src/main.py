@@ -196,17 +196,28 @@ def merge_results(testrun: TestRun) -> schemas.Results:
             spec_result = schemas.SpecResult(file=run['spec']['name'], results=[])
             results.specs.append(spec_result)
             for test in run['tests']:
+                results.total += 1
                 attempt = test['attempts'][-1]
+
+                if test['state'] == 'pending':
+                    results.skipped += 1
+                    startedAt = None
+                    duration = None
+                else:
+                    startedAt = test['attempts'][0]['startedAt']
+                    duration = attempt['duration']
                 test_result = schemas.TestResult(title=test['title'][1],
                                                  failed=(test['state'] == 'failed'),
                                                  body=test['body'],
                                                  display_error=test['displayError'],
-                                                 duration=attempt['duration'],
+                                                 duration=duration,
                                                  num_attempts=len(test['attempts']),
-                                                 started_at=test['attempts'][0]['startedAt']
-                                                 )
+                                                 started_at=startedAt)
                 spec_result.results.append(test_result)
-                if test_result.failed:
+
+                if not test_result.failed:
+                    results.passes += 1
+                else:
                     results.failures += 1
                     err = attempt['error']
                     frame = err['codeFrame']
