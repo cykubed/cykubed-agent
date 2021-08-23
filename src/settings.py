@@ -9,7 +9,7 @@ class AppSettings(BaseSettings):
     CYPRESSHUB_DATABASE_URL: str = 'sqlite:///:memory:'
     BITBUCKET_APP_PASSWORD: str = 'dummy'
     BITBUCKET_USERNAME: str = 'nickbrook'
-    ARTIFACTS_URL = 'https://storage.googleapis.com/kisanhub-cypress-artifacts'
+
     BUILD_TIMEOUT: int = 900
     NPM_CACHE_DIR = '/var/lib/cypresshub/npm-cache'
     DIST_DIR = '/var/lib/cypresshub/dist-cache'
@@ -19,6 +19,8 @@ class AppSettings(BaseSettings):
     JIRA_USER: str = 'nick@kisanhub.com'
     TEST_MODE: bool = True
     PARALLELISM: int = 1
+
+    RESULTS_UI_URL: str = 'http://cypresshub.kisanhub.com'
     HUB_URL: str = 'http://cypresshub:5000'
     # Public face to NGINX server for screenshots and videos
     RESULT_URL: str = 'http://cypresshub:5001/results'

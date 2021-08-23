@@ -1,14 +1,14 @@
 import json
-import json
 import logging
 
 import requests
 from sqlalchemy.orm import Session
 
 import crud
-from integration import create_user_notification, get_slack_headers
-from schemas import Results
+from integration import create_user_notification, get_slack_headers, get_slack_user_id
+from schemas import Results, TestRun
 from settings import settings
+from utils import now
 
 logging.basicConfig(level=logging.INFO)
 
@@ -48,12 +48,12 @@ def send_slack_message_blocks(branch, slack_id, blocks, test_mode=True):
 
 
 BUILD_FAIL = """
-:warning: *{failures}* <{artifacts_url}/reports/{sha}/index.html|Tests for branch *{branch}* failed> with commit <{commit_url}|{short_sha}> by {user}
-*Failed spec files*:
+:no_entry: <{hub_url}/results/{testrun.id}|*{results.failures}* tests failed> on branch `{testrun.branch}` @ `{short_sha}` by {user}
+> {testrun.commit_summary}
 """
 
 PASSED = """
-:thumbsup: Fixed tests for <{artifacts_url}/reports/{sha}/index.html|branch *{branch}*> now pass: nice one {user}!
+:thumbsup: <{hub_url}/results/{testrun.id}|Tests fixed> for branch `{testrun.branch}` by {user}
 """
 
 
@@ -66,8 +66,10 @@ def notify_fixed(results: Results):
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": PASSED.format(user=create_user_notification(testrun.author_slack_id),
-                                      sha=sha, branch=branch, artifacts_url=settings.ARTIFACTS_URL)
+                "text": PASSED.format(results=results,
+                                      hub_url=settings.RESULTS_UI_URL,
+                                      testrun=results.testrun,
+                                      user=create_user_notification(testrun.author_slack_id))
             },
             "accessory": {
                 "type": "image",
@@ -84,20 +86,13 @@ def notify_failed(results: Results):
     testrun = results.testrun
     sha = testrun.sha
 
-    text = BUILD_FAIL.format(failures=results.failures, sha=sha,
+    text = BUILD_FAIL.format(hub_url=settings.RESULTS_UI_URL,
+                             results=results,
                              user=create_user_notification(testrun.author_slack_id),
                              short_sha=sha[:8],
+                             testrun=testrun,
                              branch=testrun.branch,
-                             artifacts_url=settings.ARTIFACTS_URL,
                              commit_url=testrun.commit_link)
-    # get specs with fails
-    # TODO replace with Handlebars
-    # if failed_tests:
-    #     for failed_test in failed_tests[:SPEC_FILE_SLACK_LIMIT]:
-    #         text += f"\n * {failed_test['file']}: \"{failed_test['test']}\""
-    #
-    # if len(failed_tests) > SPEC_FILE_SLACK_LIMIT:
-    #     text += f"\n + {len(failed_tests) - SPEC_FILE_SLACK_LIMIT} others..."
 
     blocks = [
         {
@@ -128,12 +123,20 @@ def notify(results: Results, db: Session):
                 # nope - notify
                 notify_fixed(results)
 
-#
-# if __name__ == '__main__':
-#     parser = argparse.ArgumentParser()
-#     parser.add_argument('sha')
-#     parser.add_argument('branch')
-#     options = parser.parse_args()
-#     tr = TestRun(sha=options.sha, repos='kisanhubcore/kisanhub-webapp', branch=options.branch)
-#     notify_failed(tr, 1, ['spec1.ts', 'spec2.ts'])
-#     notify_fixed(tr)
+
+if __name__ == '__main__':
+
+    tr = TestRun(branch='PH-471-force-fail', id=1,
+                 sha='46be8575c9c11c6fff6cd34cae03ba53e349f1ea',
+                 started=now(),
+                 repos="kisanhubcore/kisanhub-webapp",
+                 active=False,
+                 status='failed',
+                 author_slack_id=get_slack_user_id('nick@kisanhub.com'),
+                 commit_link='commit_link',
+                 commit_summary='Run tests on all commits, using new base image with pre-built Cypress',
+                 files=[])
+
+    results = Results(testrun=tr, specs=[], failures=2, total=5)
+    notify_failed(results)
+    notify_fixed(results)

@@ -158,7 +158,7 @@ async def runner_completed(id: int, request: Request, db: Session = Depends(get_
 
         stats = merge_results(testrun)
         crud.mark_complete(db, testrun, stats.failures)
-        notify(stats)
+        notify(stats, db)
 
     return "OK"
 

@@ -13,12 +13,6 @@ class SpecFile(BaseModel):
         orm_mode = True
 
 
-class PullRequest(BaseModel):
-    id: int
-    link: str
-    title: str
-
-
 class TestRun(BaseModel):
     id: int
     started: datetime
@@ -32,7 +26,7 @@ class TestRun(BaseModel):
 
     commit_summary: str
     commit_link: str
-    pull_request: Optional[PullRequest]
+    pull_request_link: Optional[str]
 
     avatar: Optional[str]
     author_slack_id: Optional[str]
@@ -41,6 +35,7 @@ class TestRun(BaseModel):
 
     class Config:
         orm_mode = True
+
 
 class CodeFrame(BaseModel):
     line: int

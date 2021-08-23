@@ -1,7 +1,6 @@
 import logging
 import re
 from email.utils import parseaddr
-from pprint import pprint
 
 import requests
 
@@ -82,21 +81,17 @@ def get_bitbucket_details(repos: str, branch: str, sha: str):
     resp = requests.get(f'https://api.bitbucket.org/2.0/repositories/{repos}/pullrequests',
                         params={'q': f'source.branch.name=\"{branch}\"', 'state': 'OPEN'},
                         auth=bitbucket_auth())
-    prdata = None
+    pr_title = None
     if resp.status_code == 200:
         prdata = resp.json()
         if prdata['size']:
-            prdata = ret['pull_request'] = dict(id=prdata['values'][0]['id'],
-                                                title=prdata['values'][0]['title'],
-                                                link=prdata['values'][0]['links']['html']['href'])
-        else:
-            prdata = None
+            ret['pull_request_link'] = prdata['values'][0]['links']['html']['href']
+            pr_title = prdata['values'][0]['title']
 
     ticket_link = get_jira_ticket_link(branch)
-    if not ticket_link and prdata:
+    if not ticket_link and pr_title:
         # check PR title
-        pprint(prdata)
-        ticket_link = get_jira_ticket_link(prdata['title'])
+        ticket_link = get_jira_ticket_link(pr_title)
 
     if ticket_link:
         ret['jira_ticket'] = ticket_link

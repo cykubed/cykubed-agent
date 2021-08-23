@@ -40,16 +40,6 @@ class SpecFile(Base):
 #     data = Column(JSON, nullable=True)
 
 
-class PullRequest(Base):
-    __tablename__ = 'pull_request'
-
-    id = Column(Integer, primary_key=True)
-    link = Column(String(255))
-    title = Column(String(255))
-    testrun = relationship('TestRun', back_populates='pull_request')
-    testrun_id = Column(Integer, ForeignKey('test_run.id'), nullable=False)
-
-
 class TestRun(Base):
     __tablename__ = 'test_run'
 
@@ -74,7 +64,7 @@ class TestRun(Base):
 
     commit_summary = Column(String(255))
     commit_link = Column(String(255))
-    pull_request = relationship('PullRequest', back_populates='testrun')
+    pull_request_link = Column(String(255))
 
     avatar = Column(String(255))
     author = Column(String(64))
