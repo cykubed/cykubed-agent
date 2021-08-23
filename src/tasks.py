@@ -9,7 +9,7 @@ import crud
 import jobs
 from build import clone_repos, get_specs, create_build
 from crud import TestRunParams
-from integration import get_commit_info
+from integration import get_bitbucket_details
 from settings import settings
 
 sessionmaker = FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)
@@ -43,10 +43,12 @@ def clone_and_build(repos: str, sha: str, branch: str, parallelism: int = None,
             logfile = open(logfile_name, 'w')
             # check for existing dist (for a rerun)
             dist = os.path.join(settings.DIST_DIR, f'{sha}.tgz')
+            specs = None
             if os.path.exists(dist):
                 # we'll have a previous run - use that for the specs
                 specs = crud.get_last_specs(db, sha)
-            else:
+
+            if not specs:
                 # clone
                 logging.info(f"Logfile = {logfile.name}")
                 wdir = clone_repos(f'https://{settings.BITBUCKET_USERNAME}:{settings.BITBUCKET_APP_PASSWORD}@bitbucket.org/{repos}.git', branch, logfile)
@@ -61,7 +63,10 @@ def clone_and_build(repos: str, sha: str, branch: str, parallelism: int = None,
                 except re.error:
                     logfile.write(f"Invalid filter {spec_filter}: ignoring")
 
-            info = get_commit_info(repos, sha)
+            if not specs:
+                logfile.write("No specs - nothing to test")
+                return
+            info = get_bitbucket_details(repos, branch, sha)
             crud.create_testrun(db, TestRunParams(repos=repos, sha=sha, branch=branch),
                                 specs, **info)
 

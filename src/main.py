@@ -20,7 +20,7 @@ import schemas
 from build import delete_old_dists
 from crud import TestRunParams
 from models import get_db, TestRun
-from notify import notify_failed, notify_fixed
+from notify import notify
 from settings import settings
 from worker import app as celeryapp
 
@@ -158,20 +158,9 @@ async def runner_completed(id: int, request: Request, db: Session = Depends(get_
 
         stats = merge_results(testrun)
         crud.mark_complete(db, testrun, stats.failures)
-        # notify(stats, testrun, db)
+        notify(stats)
 
     return "OK"
-
-
-def notify(stats, testrun: TestRun, db: Session):
-    if stats['failures']:
-        notify_failed(testrun, stats['failures'], stats['failed_tests'])
-    else:
-        # did the last run pass?
-        last = crud.get_last_run(db, testrun)
-        if last and last.status != 'passed':
-            # nope - notify
-            notify_fixed(testrun)
 
 
 def create_file_path(sha: str, path: str) -> str:

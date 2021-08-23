@@ -1,12 +1,13 @@
-import argparse
+import json
 import json
 import logging
-from email.utils import parseaddr
 
 import requests
+from sqlalchemy.orm import Session
 
-from integration import get_slack_user_id, get_bitbucket_info, create_user_notification, get_slack_headers
-from models import TestRun
+import crud
+from integration import create_user_notification, get_slack_headers
+from schemas import Results
 from settings import settings
 
 logging.basicConfig(level=logging.INFO)
@@ -56,21 +57,17 @@ PASSED = """
 """
 
 
-def notify_fixed(testrun: TestRun):
+def notify_fixed(results: Results):
+    testrun = results.testrun
     repos, sha, branch = testrun.repos, testrun.sha, testrun.branch
-    commit = get_bitbucket_info(repos, sha)
-    # get the author name so we can find a Slack handle
-    name, email = parseaddr(commit['author']['raw'])
-    if email:
-        slack_id = get_slack_user_id(email)
-    else:
-        slack_id = email
+
     blocks = [
         {
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": PASSED.format(user=create_user_notification(slack_id), sha=sha, branch=branch, artifacts_url=settings.ARTIFACTS_URL)
+                "text": PASSED.format(user=create_user_notification(testrun.author_slack_id),
+                                      sha=sha, branch=branch, artifacts_url=settings.ARTIFACTS_URL)
             },
             "accessory": {
                 "type": "image",
@@ -80,30 +77,27 @@ def notify_fixed(testrun: TestRun):
 
         }
     ]
-    send_slack_message_blocks(branch, slack_id, blocks, True)
+    send_slack_message_blocks(branch, testrun.author_slack_id, blocks, True)
 
 
-def notify_failed(testrun: TestRun, failures, failed_tests=None):
+def notify_failed(results: Results):
+    testrun = results.testrun
     sha = testrun.sha
-    commit = get_bitbucket_info(testrun.repos, testrun.sha)
-    # get the author name so we can find a Slack handle
-    name, email = parseaddr(commit['author']['raw'])
-    if email:
-        slack_id = get_slack_user_id(email)
-    else:
-        slack_id = email
 
-    text = BUILD_FAIL.format(failures=failures, sha=sha, user=create_user_notification(slack_id),
+    text = BUILD_FAIL.format(failures=results.failures, sha=sha,
+                             user=create_user_notification(testrun.author_slack_id),
                              short_sha=sha[:8],
                              branch=testrun.branch,
                              artifacts_url=settings.ARTIFACTS_URL,
-                             commit_url=commit['links']['html']['href'])
-    if failed_tests:
-        for failed_test in failed_tests[:SPEC_FILE_SLACK_LIMIT]:
-            text += f"\n * {failed_test['file']}: \"{failed_test['test']}\""
-
-    if len(failed_tests) > SPEC_FILE_SLACK_LIMIT:
-        text += f"\n + {len(failed_tests) - SPEC_FILE_SLACK_LIMIT} others..."
+                             commit_url=testrun.commit_link)
+    # get specs with fails
+    # TODO replace with Handlebars
+    # if failed_tests:
+    #     for failed_test in failed_tests[:SPEC_FILE_SLACK_LIMIT]:
+    #         text += f"\n * {failed_test['file']}: \"{failed_test['test']}\""
+    #
+    # if len(failed_tests) > SPEC_FILE_SLACK_LIMIT:
+    #     text += f"\n + {len(failed_tests) - SPEC_FILE_SLACK_LIMIT} others..."
 
     blocks = [
         {
@@ -119,14 +113,27 @@ def notify_failed(testrun: TestRun, failures, failed_tests=None):
             }
         }
     ]
-    send_slack_message_blocks(testrun.branch, slack_id, blocks, settings.TEST_MODE)
+    send_slack_message_blocks(testrun.branch, testrun.author_slack_id, blocks, settings.TEST_MODE)
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('sha')
-    parser.add_argument('branch')
-    options = parser.parse_args()
-    tr = TestRun(sha=options.sha, repos='kisanhubcore/kisanhub-webapp', branch=options.branch)
-    notify_failed(tr, 1, ['spec1.ts', 'spec2.ts'])
-    notify_fixed(tr)
+def notify(results: Results, db: Session):
+    if results.testrun.author_slack_id:
+
+        if results.failures:
+            notify_failed(results)
+        else:
+            # did the last run pass?
+            last = crud.get_last_run(db, results.testrun)
+            if last and last.status != 'passed':
+                # nope - notify
+                notify_fixed(results)
+
+#
+# if __name__ == '__main__':
+#     parser = argparse.ArgumentParser()
+#     parser.add_argument('sha')
+#     parser.add_argument('branch')
+#     options = parser.parse_args()
+#     tr = TestRun(sha=options.sha, repos='kisanhubcore/kisanhub-webapp', branch=options.branch)
+#     notify_failed(tr, 1, ['spec1.ts', 'spec2.ts'])
+#     notify_fixed(tr)

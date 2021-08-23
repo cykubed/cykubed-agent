@@ -13,10 +13,17 @@ class SpecFile(BaseModel):
         orm_mode = True
 
 
+class PullRequest(BaseModel):
+    id: int
+    link: str
+    title: str
+
+
 class TestRun(BaseModel):
     id: int
     started: datetime
     finished: Optional[datetime] = None
+    repos: str
     sha: str
     branch: str
     active: bool
@@ -25,15 +32,15 @@ class TestRun(BaseModel):
 
     commit_summary: str
     commit_link: str
-    results_url: Optional[str]
+    pull_request: Optional[PullRequest]
 
     avatar: Optional[str]
+    author_slack_id: Optional[str]
     author: Optional[str]
     jira_ticket: Optional[str]
 
     class Config:
         orm_mode = True
-
 
 class CodeFrame(BaseModel):
     line: int
@@ -56,8 +63,7 @@ class TestResult(BaseModel):
     failed: bool
     body: str
     num_attempts: int
-    duration: Optional[int]
-    display_error: Optional[str]
+    duration: Optional[int]; display_error: Optional[str]
     started_at: Optional[datetime]
     error: Optional[TestResultError]
 

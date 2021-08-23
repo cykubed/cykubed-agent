@@ -1,8 +1,11 @@
 import logging
 import re
+from email.utils import parseaddr
+from pprint import pprint
 
 import requests
 
+from models import TestRun
 from settings import settings
 
 JIRA_HEADERS = {'Content-Type': 'application/json',
@@ -33,9 +36,13 @@ def create_user_notification(userid):
     return f"<@{userid}>"
 
 
-def get_bitbucket_info(repos: str, sha: str):
+def bitbucket_auth():
+    return (settings.BITBUCKET_USERNAME, settings.BITBUCKET_APP_PASSWORD)
+
+
+def get_bitbucket_commit_info(repos: str, sha: str):
     resp = requests.get(f'https://api.bitbucket.org/2.0/repositories/{repos}/commit/{sha}',
-                        auth=(settings.BITBUCKET_USERNAME, settings.BITBUCKET_APP_PASSWORD))
+                        auth=bitbucket_auth())
     if resp.status_code != 200:
         raise Exception(f"Failed to fetch information from Bitbucket: {resp.status_code}: {resp.json()}")
     return resp.json()
@@ -49,8 +56,15 @@ def get_jira_user_details(account_id):
     return resp.json()
 
 
-def get_commit_info(repos: str, sha: str):
-    commit = get_bitbucket_info(repos, sha)
+def get_jira_ticket_link(message):
+    for issue_key in set(re.findall(r'([A-Z]{2,5}-[0-9]{1,5})', message)):
+        r = requests.get(f'https://kisanhub.atlassian.net/rest/api/3/issue/{issue_key}', auth=get_jira_auth())
+        if r.status_code == 200:
+            return f'https://kisanhub.atlassian.net/browse/{issue_key}'
+
+
+def get_bitbucket_details(repos: str, branch: str, sha: str):
+    commit = get_bitbucket_commit_info(repos, sha)
     user = get_jira_user_details(commit['author']['user']['account_id'])
     ret = {
         'commit_summary': commit['summary']['raw'],
@@ -58,13 +72,62 @@ def get_commit_info(repos: str, sha: str):
         'avatar': user['avatarUrls']['48x48'],
         'author': user['displayName']
     }
-    for issue_key in set(re.findall(r'([A-Z]{2,5}-[0-9]{1,5})', commit['message'])):
-        r = requests.get(f'https://kisanhub.atlassian.net/rest/api/3/issue/{issue_key}', auth=get_jira_auth())
-        if r.status_code == 200:
-            ret['jira_ticket'] = f'https://kisanhub.atlassian.net/browse/{issue_key}'
-            break
+    # get the author name so we can find a Slack handle
+    name, email = parseaddr(commit['author']['raw'])
+    if email:
+        ret['author_slack_id'] = get_slack_user_id(email)
+
+    # look for open PRs
+    print(branch)
+    resp = requests.get(f'https://api.bitbucket.org/2.0/repositories/{repos}/pullrequests',
+                        params={'q': f'source.branch.name=\"{branch}\"', 'state': 'OPEN'},
+                        auth=bitbucket_auth())
+    prdata = None
+    if resp.status_code == 200:
+        prdata = resp.json()
+        if prdata['size']:
+            prdata = ret['pull_request'] = dict(id=prdata['values'][0]['id'],
+                                                title=prdata['values'][0]['title'],
+                                                link=prdata['values'][0]['links']['html']['href'])
+        else:
+            prdata = None
+
+    ticket_link = get_jira_ticket_link(branch)
+    if not ticket_link and prdata:
+        # check PR title
+        pprint(prdata)
+        ticket_link = get_jira_ticket_link(prdata['title'])
+
+    if ticket_link:
+        ret['jira_ticket'] = ticket_link
+
     return ret
 
 
+def set_bitbucket_build_status(tr: TestRun):
+    # and tell BB that we're running a build
+    if tr.status == 'building':
+        state = 'INPROGRESS'
+        description = 'Building'
+    elif tr.status == 'running':
+        state = 'INPROGRESS'
+        description = 'Running'
+    elif tr.status == 'failed':
+        state = 'FAILED'
+        description = 'Tests failed'
+    elif tr.status == 'cancelled':
+        state = 'FAILED'
+        description = 'Cancelled'
+
+
+    requests.post(f'https://api.bitbucket.org/2.0/repositories/{tr.repos}/commit/{tr.sha}/statuses/build/',
+                  data={'key': 'Cypress tests',
+                        'state': 'INPROGRESS',
+                        'description': 'Running',
+                        'url': f'{settings.HUB_URL}/results/{tr.id}'})
+
+
 if __name__ == '__main__':
-    print(get_commit_info('kisanhubcore/kisanhub-webapp', '3ab8eb7eda07a8dcf8f21e65367b66bd32e58768'))
+    print(get_slack_user_id('nick@kisanhub.com'))
+    # pprint(get_bitbucket_details('kisanhubcore/kisanhub-webapp', 'PH-471-force-fail',
+    #                        '46be8575c9c11c6fff6cd34cae03ba53e349f1ea'))

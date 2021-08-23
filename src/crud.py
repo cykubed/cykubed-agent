@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-from datetime import datetime, timedelta
 from typing import Optional
 
 from pydantic import BaseModel
@@ -43,11 +42,13 @@ def create_testrun(db: Session, params: TestRunParams, specs, **info) -> TestRun
                  branch=params.branch,
                  status='building',
                  commit_summary=info.get('commit_summary'),
-                 commit_link=info.get('commit_summary'),
+                 commit_link=info.get('commit_link'),
                  avatar=info.get('avatar'),
                  author=info.get('author'),
+                 author_slack_id=info.get('author_slack_id'),
                  jira_ticket=info.get('jira_ticket'))
     db.add(tr)
+
     for spec in specs:
         db.add(SpecFile(testrun=tr, file=spec))
     db.commit()
