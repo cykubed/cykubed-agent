@@ -13,37 +13,36 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: mysql
+  name: cypresshub-mysql
 spec:
   ports:
   - port: 3306
   selector:
-    app: mysql
+    app: cypresshub-mysql
   clusterIP: None
-
 ---
 
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: mysql
+  name: cypresshub-mysql
 spec:
   selector:
     matchLabels:
-      app: mysql
+      app: cypresshub-mysql
   strategy:
     type: Recreate
   template:
     metadata:
       labels:
-        app: mysql
+        app: cypresshub-mysql
     spec:
       terminationGracePeriodSeconds: 10
       containers:
       - image: mysql:5.7
         name: mysql
         args:
-          - --ignore-db-dir=lost+found
+          - --ignore-db-dir=lost+found --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --bind-address=0.0.0.0
         env:
         - name: MYSQL_ROOT_PASSWORD
           valueFrom:

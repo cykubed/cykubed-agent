@@ -6,6 +6,7 @@ kind: Service
 metadata:
   name: cypresshub
 spec:
+  type: NodePort
   selector:
     app: cypresshub
   ports:
@@ -75,7 +76,7 @@ spec:
             httpGet:
               path: /hc
               port: 5000
-            initialDelaySeconds: 5
+            initialDelaySeconds: 60
             periodSeconds: 5
           volumeMounts:
           - name: cypresshub-persistent-storage
@@ -104,9 +105,6 @@ spec:
             - name: cypresshub-persistent-storage
               mountPath: /var/lib/cypresshub
           command: ["celery", "-A", "tasks", "worker", "-B"]
-          env:
-            - name: DIST_DIR
-              value: /var/lib/cypresshub/dist-cache
           envFrom:
           - configMapRef:
               name: cypresshub-config
