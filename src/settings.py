@@ -25,7 +25,7 @@ class AppSettings(BaseSettings):
     # Public face to NGINX server for screenshots and videos
     RESULT_URL: str = 'http://cypresshub:5001/results'
     DIST_URL: str = 'http://cypresshub:5001/dist-cache'
-    CYPRESS_RUNNER_VERSION: str = '1.0'
+    CYPRESS_RUNNER_VERSION: str = '8.3.1-1.0'
     DIST_CACHE_TTL_HOURS: int = 365*24
 
 
