@@ -66,7 +66,7 @@ spec:
         #
         - name: server
           image: nickbrookdocker/cypresshub:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5000"]
           ports:
             - containerPort: 5000

@@ -38,6 +38,9 @@ def clone_and_build(repos: str, sha: str, branch: str, parallelism: int = None,
         crud.cancel_previous_test_runs(db, sha, branch)
 
         t = time.time()
+        os.makedirs(settings.DIST_DIR, exist_ok=True)
+        os.makedirs(settings.RESULTS_DIR, exist_ok=True)
+        os.makedirs(settings.NPM_CACHE_DIR, exist_ok=True)
         try:
             logfile_name = os.path.join(settings.DIST_DIR, f'{sha}.log')
             logfile = open(logfile_name, 'w')
