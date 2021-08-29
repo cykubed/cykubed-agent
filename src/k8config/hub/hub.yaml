@@ -65,8 +65,8 @@ spec:
         # API server
         #
         - name: server
-          image: nickbrookdocker/cypresshub:latest
-          imagePullPolicy: Always
+          image: nickbrookdocker/cypresshub:1.0
+          imagePullPolicy: IfNotPresent
           command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5000"]
           ports:
             - containerPort: 5000
@@ -92,6 +92,7 @@ spec:
         #
         - name: nginx
           image: nickbrookdocker/cypresshub-nginx:1.0
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5001
 
@@ -99,7 +100,7 @@ spec:
         # Worker
         #
         - name: worker
-          image: nickbrookdocker/cypresshub:latest
+          image: nickbrookdocker/cypresshub:1.0
           imagePullPolicy: IfNotPresent
           volumeMounts:
             - name: cypresshub-persistent-storage

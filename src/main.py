@@ -80,6 +80,7 @@ def bitbucket_webhook(token: str, project: str, repos: str,
 
 def clear_results(sha: str):
     rdir = os.path.join(settings.RESULTS_DIR, sha)
+    os.makedirs(rdir, exist_ok=True)
     shutil.rmtree(rdir, ignore_errors=True)
     os.mkdir(rdir)
 
