@@ -8,6 +8,8 @@ from typing import List, Any, AnyStr, Dict
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi_auth0 import Auth0
+from fastapi_cloudauth import FirebaseCurrentUser
+from fastapi_cloudauth.firebase import FirebaseClaims
 from fastapi_utils.session import FastAPISessionMaker
 from fastapi_utils.tasks import repeat_every
 from loguru import logger
@@ -41,6 +43,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+get_current_user = FirebaseCurrentUser(
+    project_id=settings.FIREBASE_PROJECT_ID
+)
+
+
 JSONObject = Dict[AnyStr, Any]
 
 logger.info("Started server")
@@ -56,7 +63,7 @@ def health_check(db: Session = Depends(get_db)):
 
 @app.get('/api/testruns', response_model=List[schemas.TestRun])
 def get_testruns(page: int = 1, page_size: int = 50,
-                db: Session = Depends(get_db)): #, user: Auth0User = Security(auth.get_user)):
+                db: Session = Depends(get_db), user: FirebaseClaims = Depends(get_current_user)):
     return crud.get_test_runs(db, page, page_size)
 
 

@@ -28,6 +28,9 @@ fastapi-auth0 = "*"
 loguru = "*"
 click = "*"
 pydantic-to-typescript = "*"
+fastapi-cloudauth = "*"
+ecdsa = "*"
+jwt = "*"
 
 [requires]
 python_version = "3.8"

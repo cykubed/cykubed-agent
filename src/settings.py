@@ -10,6 +10,8 @@ class AppSettings(BaseSettings):
     BITBUCKET_APP_PASSWORD: str = 'dummy'
     BITBUCKET_USERNAME: str = 'nickbrook'
 
+    FIREBASE_PROJECT_ID: str = 'kisanhub-uat'
+
     BUILD_TIMEOUT: int = 900
     NPM_CACHE_DIR = '/var/lib/cypresshub/npm-cache'
     DIST_DIR = '/var/lib/cypresshub/dist-cache'
