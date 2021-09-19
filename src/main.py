@@ -93,7 +93,8 @@ def clear_results(sha: str):
 
 
 @app.post('/api/start')
-def start_testrun(params: TestRunParams, db: Session = Depends(get_db)): #, user: Auth0User = Security(auth.get_user)):
+def start_testrun(params: TestRunParams, db: Session = Depends(get_db),
+                  user: FirebaseClaims = Depends(get_current_user)):
     logger.info(f"Start test run {params.repos} {params.branch} {params.sha} {params.parallelism}")
     crud.cancel_previous_test_runs(db, params.sha, params.branch)
     clear_results(params.sha)
@@ -103,7 +104,8 @@ def start_testrun(params: TestRunParams, db: Session = Depends(get_db)): #, user
 
 
 @app.post('/api/cancel/{id}')
-def cancel_testrun(id: int, db: Session = Depends(get_db)):
+def cancel_testrun(id: int, db: Session = Depends(get_db),
+                   user: FirebaseClaims = Depends(get_current_user)):
     tr = crud.get_testrun(db, id)
     jobs.delete_jobs_for_branch(tr.branch)
     crud.cancel_testrun(db, tr)
@@ -111,7 +113,10 @@ def cancel_testrun(id: int, db: Session = Depends(get_db)):
 
 
 @app.get('/api/testrun/{id}/result')
-def get_testrun_result(id: int, db: Session = Depends(get_db)) -> schemas.Results:
+def get_testrun_result(id: int,
+                       db: Session = Depends(get_db),
+                       user: FirebaseClaims = Depends(get_current_user)
+                       ) -> schemas.Results:
     tr = crud.get_testrun(db, id)
     json_result = os.path.join(settings.RESULTS_DIR, tr.sha, 'json', 'results.json')
     if os.path.exists(json_result):
