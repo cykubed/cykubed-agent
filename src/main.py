@@ -112,6 +112,16 @@ def cancel_testrun(id: int, db: Session = Depends(get_db),
     return {'cancelled': 'OK'}
 
 
+@app.get('/api/testrun/{sha}/logs')
+def get_testrun_logs(sha: str,
+                     offset: int = 0,
+                     user: FirebaseClaims = Depends(get_current_user)) -> str:
+    with open(os.path.join(settings.DIST_DIR, f'{sha}.log')) as f:
+        if offset:
+            f.seek(offset)
+        return f.read()
+
+
 @app.get('/api/testrun/{id}/result')
 def get_testrun_result(id: int,
                        db: Session = Depends(get_db),
