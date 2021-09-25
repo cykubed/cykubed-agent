@@ -28,13 +28,21 @@ def ping():
 
 
 @app.task(name='clone_and_build')
-def clone_and_build(repos: str, sha: str, branch: str, parallelism: int = None,
+def clone_and_build(trid: int, parallelism: int = None,
                     spec_filter: str = None):
     """
     Clone and build (from Bitbucket)
     """
     with sessionmaker.context_session() as db:
+
+        logfile_name = os.path.join(settings.DIST_DIR, f'{trid}.log')
+        logfile = open(logfile_name, 'w')
+
         # cancel previous runs
+        tr = crud.get_testrun(db, trid)
+        sha = tr.sha
+        branch = tr.branch
+        repos = tr.repos
         crud.cancel_previous_test_runs(db, sha, branch)
 
         t = time.time()
@@ -42,8 +50,6 @@ def clone_and_build(repos: str, sha: str, branch: str, parallelism: int = None,
         os.makedirs(settings.RESULTS_DIR, exist_ok=True)
         os.makedirs(settings.NPM_CACHE_DIR, exist_ok=True)
         try:
-            logfile_name = os.path.join(settings.DIST_DIR, f'{sha}.log')
-            logfile = open(logfile_name, 'w')
             # check for existing dist (for a rerun)
             dist = os.path.join(settings.DIST_DIR, f'{sha}.tgz')
             specs = None
@@ -51,7 +57,7 @@ def clone_and_build(repos: str, sha: str, branch: str, parallelism: int = None,
                 # we'll have a previous run - use that for the specs
                 specs = crud.get_last_specs(db, sha)
 
-            if not specs:
+            if specs is None:
                 # clone
                 logging.info(f"Logfile = {logfile.name}")
                 wdir = clone_repos(f'https://{settings.BITBUCKET_USERNAME}:{settings.BITBUCKET_APP_PASSWORD}@bitbucket.org/{repos}.git', branch, logfile)
@@ -70,8 +76,8 @@ def clone_and_build(repos: str, sha: str, branch: str, parallelism: int = None,
                 logfile.write("No specs - nothing to test")
                 return
             info = get_bitbucket_details(repos, branch, sha)
-            crud.create_testrun(db, TestRunParams(repos=repos, sha=sha, branch=branch),
-                                specs, **info)
+
+            crud.update_test_run(db, tr, specs, **info)
 
             # start the runner jobs - that way the cluster has a head start on spinning up new nodes
             if jobs.batchapi:

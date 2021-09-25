@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from models import TestRun, SpecFile
 from report import get_report_url
+from schemas import Status
 from utils import now
 
 
@@ -28,19 +29,19 @@ def get_testrun(db: Session, id: int) -> TestRun:
 
 
 def cancel_testrun(db: Session, tr: TestRun):
-    tr.status = 'cancelled'
+    tr.status = Status.cancelled
     tr.active = False
     db.add(tr)
     db.commit()
 
 
-def create_testrun(db: Session, params: TestRunParams, specs, **info) -> TestRun:
+def create_testrun(db: Session, params: TestRunParams, specs=None, **info) -> TestRun:
     tr = TestRun(started=now(),
                  repos=params.repos,
                  sha=params.sha,
                  active=True,
                  branch=params.branch,
-                 status='building',
+                 status=Status.building,
                  commit_summary=info.get('commit_summary'),
                  commit_link=info.get('commit_link'),
                  avatar=info.get('avatar'),
@@ -49,10 +50,20 @@ def create_testrun(db: Session, params: TestRunParams, specs, **info) -> TestRun
                  jira_ticket=info.get('jira_ticket'))
     db.add(tr)
 
+    if specs:
+        for spec in specs:
+            db.add(SpecFile(testrun=tr, file=spec))
+    db.commit()
+    return tr
+
+
+def update_test_run(db: Session, tr: TestRun, specs, **info):
+    db.add(tr)
+    for k, v in info.items():
+        setattr(tr, k, v)
     for spec in specs:
         db.add(SpecFile(testrun=tr, file=spec))
     db.commit()
-    return tr
 
 
 def cancel_previous_test_runs(db: Session, sha: str, branch: str):
@@ -70,7 +81,7 @@ def get_last_specs(db: Session, sha: str):
 def mark_as_running(db: Session, sha: str):
     # mark the spec as 'running'
     tr = db.query(TestRun).filter_by(sha=sha, active=True).with_for_update().one()
-    tr.status = 'running'
+    tr.status = Status.running
     db.add(tr)
     db.commit()
 
@@ -114,7 +125,7 @@ def mark_complete(db: Session, testrun: TestRun, total_fails: int):
     testrun.finished = now()
     testrun.results_url = get_report_url(testrun.sha)
     testrun.active = False
-    testrun.status = 'failed' if total_fails else 'passed'
+    testrun.status = Status.failed if total_fails else Status.passed
     db.add(testrun)
     db.commit()
 
@@ -130,7 +141,7 @@ def apply_timeouts(db: Session, test_run_timeout: int, spec_file_timeout: int):
 
     for run in db.query(TestRun).filter_by(active=True).filter(TestRun.started < dt):
         run.active = False
-        run.status = 'timeout'
+        run.status = Status.timeout
         run.finished = datetime.now()
         db.add(run)
 

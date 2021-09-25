@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum
 from typing import List, Optional
 
 from pydantic import BaseModel
@@ -13,6 +14,15 @@ class SpecFile(BaseModel):
         orm_mode = True
 
 
+class Status(str, Enum):
+    building = 'building'
+    cancelled = 'cancelled'
+    running = 'running'
+    timeout = 'timeout'
+    failed = 'failed'
+    passed = 'passed'
+
+
 class TestRun(BaseModel):
     id: int
     started: datetime
@@ -21,11 +31,11 @@ class TestRun(BaseModel):
     sha: str
     branch: str
     active: bool
-    status: str
+    status: Status
     files: List[SpecFile]
 
-    commit_summary: str
-    commit_link: str
+    commit_summary: Optional[str]
+    commit_link: Optional[str]
     pull_request_link: Optional[str]
 
     avatar: Optional[str]

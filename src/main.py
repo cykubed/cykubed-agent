@@ -7,7 +7,6 @@ from io import BytesIO
 from typing import List, Any, AnyStr, Dict
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi_auth0 import Auth0
 from fastapi_cloudauth import FirebaseCurrentUser
 from fastapi_cloudauth.firebase import FirebaseClaims
 from fastapi_utils.session import FastAPISessionMaker
@@ -27,8 +26,7 @@ from settings import settings
 from worker import app as celeryapp
 
 sessionmaker = FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)
-auth = Auth0(domain='khauth.eu.auth0.com', api_audience='https://testhub-api.kisanhub.com')
-app = FastAPI(dependencies=[Depends(auth.implicit_scheme)])
+app = FastAPI()
 
 origins = [
     'http://localhost:4201',
@@ -59,6 +57,12 @@ jobs.connect_k8()
 def health_check(db: Session = Depends(get_db)):
     crud.count_test_runs(db)
     return {'message': 'OK'}
+
+
+@app.get('/api/testrun/{id}', response_model=schemas.TestRun)
+def get_testrun(id: int,
+                 db: Session = Depends(get_db), user: FirebaseClaims = Depends(get_current_user)):
+    return crud.get_testrun(db, id)
 
 
 @app.get('/api/testruns', response_model=List[schemas.TestRun])
@@ -92,15 +96,17 @@ def clear_results(sha: str):
     os.mkdir(rdir)
 
 
-@app.post('/api/start')
-def start_testrun(params: TestRunParams, db: Session = Depends(get_db),
-                  user: FirebaseClaims = Depends(get_current_user)):
+@app.post('/api/start', response_model=schemas.TestRun)
+def start_testrun(params: TestRunParams, db: Session = Depends(get_db)
+                  # ,user: FirebaseClaims = Depends(get_current_user)
+    ):
     logger.info(f"Start test run {params.repos} {params.branch} {params.sha} {params.parallelism}")
     crud.cancel_previous_test_runs(db, params.sha, params.branch)
     clear_results(params.sha)
-    celeryapp.send_task('clone_and_build', args=[params.repos, params.sha, params.branch,
+    tr = crud.create_testrun(db, TestRunParams(repos=params.repos, sha=params.sha, branch=params.branch))
+    celeryapp.send_task('clone_and_build', args=[tr.id,
                                                  params.parallelism, params.spec_filter])
-    return {'message': 'Test run started'}
+    return tr
 
 
 @app.post('/api/cancel/{id}')
@@ -112,11 +118,11 @@ def cancel_testrun(id: int, db: Session = Depends(get_db),
     return {'cancelled': 'OK'}
 
 
-@app.get('/api/testrun/{sha}/logs')
-def get_testrun_logs(sha: str,
+@app.get('/api/testrun/{id}/logs')
+def get_testrun_logs(id: int,
                      offset: int = 0,
                      user: FirebaseClaims = Depends(get_current_user)) -> str:
-    with open(os.path.join(settings.DIST_DIR, f'{sha}.log')) as f:
+    with open(os.path.join(settings.DIST_DIR, f'{id}.log')) as f:
         if offset:
             f.seek(offset)
         return f.read()

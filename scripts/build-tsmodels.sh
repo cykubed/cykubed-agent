@@ -1,3 +1,3 @@
-PYTHONPATH=src pydantic2ts --module schemas --output ../cypress-ui/src/app/models/results.model.ts
+PYTHONPATH=src pydantic2ts --module schemas --output ../cypresshub-ui/src/app/models/testrun.model.ts
 
 
