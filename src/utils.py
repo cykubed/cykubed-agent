@@ -22,3 +22,9 @@ def now():
 
 def runcmd(cmd: str, logfile):
     subprocess.check_call(cmd, shell=True, stderr=logfile, stdout=logfile)
+
+
+def log(logfile, msg):
+    logfile.write(msg+"\n")
+    logfile.flush()
+

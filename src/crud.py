@@ -78,9 +78,8 @@ def get_last_specs(db: Session, sha: str):
         return [s.file for s in tr.files]
 
 
-def mark_as_running(db: Session, sha: str):
+def mark_as_running(db: Session, tr: TestRun):
     # mark the spec as 'running'
-    tr = db.query(TestRun).filter_by(sha=sha, active=True).with_for_update().one()
     tr.status = Status.running
     db.add(tr)
     db.commit()

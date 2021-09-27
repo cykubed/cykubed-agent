@@ -84,7 +84,7 @@ def bitbucket_webhook(token: str, project: str, repos: str,
     sha = change['target']['hash']
 
     logging.info(f"Webhook received for {branch} {sha}")
-    crud.cancel_previous_test_runs(db, branch)
+    crud.cancel_previous_test_runs(db, sha, branch)
     celeryapp.send_task('clone_and_build', args=[repos, branch, sha])
     return {'message': 'OK'}
 
@@ -122,6 +122,9 @@ def cancel_testrun(id: int, db: Session = Depends(get_db),
 def get_testrun_logs(id: int,
                      offset: int = 0,
                      user: FirebaseClaims = Depends(get_current_user)) -> str:
+    logs = os.path.join(settings.DIST_DIR, f'{id}.log')
+    if not os.path.exists(logs):
+        raise HTTPException(404)
     with open(os.path.join(settings.DIST_DIR, f'{id}.log')) as f:
         if offset:
             f.seek(offset)

@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 
 import crud
+from models import TestRun
 from settings import settings
 from utils import runcmd
 
@@ -32,10 +33,13 @@ def get_lock_hash(build_dir):
     return m.hexdigest()
 
 
-def create_build(db: Session, sha: str, builddir: str, branch: str, logfile):
+def create_build(db: Session, testrun: TestRun, builddir: str, logfile):
     """
     Build the Angular app. Uses a cache for node_modules
     """
+    branch = testrun.branch
+    sha = testrun.sha
+
     logfile.write(f"Creating build distribution for branch {branch}\n")
     os.chdir(builddir)
     lockhash = get_lock_hash(builddir)
@@ -68,7 +72,7 @@ def create_build(db: Session, sha: str, builddir: str, branch: str, logfile):
                           shell=True)
 
     # mark the spec as 'running'
-    crud.mark_as_running(db, sha)
+    crud.mark_as_running(db, testrun)
 
     # update the node cache
     if not cache_exists:

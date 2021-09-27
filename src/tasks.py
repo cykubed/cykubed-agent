@@ -8,9 +8,9 @@ from fastapi_utils.session import FastAPISessionMaker
 import crud
 import jobs
 from build import clone_repos, get_specs, create_build
-from crud import TestRunParams
 from integration import get_bitbucket_details
 from settings import settings
+from utils import log
 
 sessionmaker = FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)
 
@@ -28,7 +28,7 @@ def ping():
 
 
 @app.task(name='clone_and_build')
-def clone_and_build(trid: int, parallelism: int = None,
+def clone_and_build(trid: int, parallelism: int = 4,
                     spec_filter: str = None):
     """
     Clone and build (from Bitbucket)
@@ -38,12 +38,10 @@ def clone_and_build(trid: int, parallelism: int = None,
         logfile_name = os.path.join(settings.DIST_DIR, f'{trid}.log')
         logfile = open(logfile_name, 'w')
 
-        # cancel previous runs
         tr = crud.get_testrun(db, trid)
         sha = tr.sha
         branch = tr.branch
         repos = tr.repos
-        crud.cancel_previous_test_runs(db, sha, branch)
 
         t = time.time()
         os.makedirs(settings.DIST_DIR, exist_ok=True)
@@ -55,6 +53,7 @@ def clone_and_build(trid: int, parallelism: int = None,
             specs = None
             if os.path.exists(dist):
                 # we'll have a previous run - use that for the specs
+                log(logfile, "Using existing distribution")
                 specs = crud.get_last_specs(db, sha)
 
             if specs is None:
@@ -73,7 +72,7 @@ def clone_and_build(trid: int, parallelism: int = None,
                     logfile.write(f"Invalid filter {spec_filter}: ignoring")
 
             if not specs:
-                logfile.write("No specs - nothing to test")
+                logfile.write("No specs - nothing to test\n")
                 return
             info = get_bitbucket_details(repos, branch, sha)
 
@@ -81,16 +80,18 @@ def clone_and_build(trid: int, parallelism: int = None,
 
             # start the runner jobs - that way the cluster has a head start on spinning up new nodes
             if jobs.batchapi:
+                log(logfile, f"starting {parallelism} Jobs")
                 jobs.start_job(branch, sha, logfile, parallelism=parallelism)
 
             # build the distro
             if not os.path.exists(dist):
-                create_build(db, sha, wdir, branch, logfile)
+                create_build(db, tr, wdir, logfile)
                 t = time.time() - t
                 logfile.write(f"Distribution created in {t:.1f}s\n")
             else:
-                crud.mark_as_running(db, sha)
+                crud.mark_as_running(db, tr)
         except Exception as ex:
             logfile.write(f"BUILD FAILED: {str(ex)}\n")
             logging.exception("Failed to create build")
+            logfile.close()
 
