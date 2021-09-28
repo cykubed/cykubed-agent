@@ -65,19 +65,19 @@ spec:
         # API server
         #
         - name: server
-          image: nickbrookdocker/cypresshub:1.0
+          image: nickbrookdocker/cypresshub:1.2
           imagePullPolicy: IfNotPresent
           command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5000"]
           ports:
             - containerPort: 5000
               name: cypresshub-port
               protocol: TCP
-          livenessProbe:
-            httpGet:
-              path: /hc
-              port: 5000
-            initialDelaySeconds: 60
-            periodSeconds: 5
+#          livenessProbe:
+#            httpGet:
+#              path: /hc
+#              port: 5000
+#            initialDelaySeconds: 60
+#            periodSeconds: 5
           volumeMounts:
           - name: cypresshub-persistent-storage
             mountPath: /var/lib/cypresshub
@@ -100,7 +100,7 @@ spec:
         # Worker
         #
         - name: worker
-          image: nickbrookdocker/cypresshub:1.0
+          image: nickbrookdocker/cypresshub:1.2
           imagePullPolicy: IfNotPresent
           volumeMounts:
             - name: cypresshub-persistent-storage

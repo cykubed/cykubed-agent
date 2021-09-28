@@ -21,6 +21,7 @@ def now():
 
 
 def runcmd(cmd: str, logfile):
+    logfile.write(cmd+'\n')
     subprocess.check_call(cmd, shell=True, stderr=logfile, stdout=logfile)
 
 

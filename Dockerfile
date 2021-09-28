@@ -1,6 +1,9 @@
 FROM python:3.8-slim
 
 RUN apt-get update && apt-get install -y wget gnupg2 curl pipenv default-libmysqlclient-dev git-core
+# Using Debian, as root
+RUN curl -fsSL https://deb.nodesource.com/setup_14.x | bash -
+RUN apt-get install -y nodejs
 
 WORKDIR /app
 COPY Pipfile* ./

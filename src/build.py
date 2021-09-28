@@ -21,6 +21,7 @@ def clone_repos(url: str, branch: str, logfile) -> str:
     builddir = tempfile.mkdtemp()
     os.chdir(builddir)
     runcmd(f'git clone --single-branch --depth 1 --recursive --branch {branch} {url} {builddir}', logfile=logfile)
+    logfile.write("Cloned\n")
     return builddir
 
 
@@ -40,7 +41,7 @@ def create_build(db: Session, testrun: TestRun, builddir: str, logfile):
     branch = testrun.branch
     sha = testrun.sha
 
-    logfile.write(f"Creating build distribution for branch {branch}\n")
+    logfile.write(f"Creating build distribution for branch {branch} in dir {builddir}\n")
     os.chdir(builddir)
     lockhash = get_lock_hash(builddir)
     cache_dir = settings.NPM_CACHE_DIR
@@ -49,12 +50,12 @@ def create_build(db: Session, testrun: TestRun, builddir: str, logfile):
     cached_node_modules_dir = os.path.join(cache_dir, lockhash)
     cache_exists = os.path.exists(cached_node_modules_dir)
     if cache_exists:
-        logfile.write("Using npm cache")
+        logfile.write("Using npm cache\n")
         subprocess.check_call(f'cp -ar {cached_node_modules_dir} node_modules', shell=True, stdout=logfile,
                               stderr=logfile)
     else:
         # build node_modules
-        logfile.write("Build new npm cache")
+        logfile.write("Build new npm cache\n")
         runcmd('npm ci', logfile=logfile)
         # the test runner will need some deps
         runcmd('npm i node-fetch walk-sync uuid sleep-promise mime-types', logfile=logfile)

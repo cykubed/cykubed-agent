@@ -30,12 +30,13 @@ app = FastAPI()
 
 origins = [
     'http://localhost:4201',
-    'https://cypresshub.kisanhub.com',
+    'https://cypresshub.kisanhub.com'
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],
+    # allow_origin_regex=r"https://.*\.ngrok\.io",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -48,7 +49,7 @@ get_current_user = FirebaseCurrentUser(
 
 JSONObject = Dict[AnyStr, Any]
 
-logger.info("Started server")
+logger.info("** Started server **")
 
 jobs.connect_k8()
 
@@ -56,7 +57,17 @@ jobs.connect_k8()
 @app.get('/hc')
 def health_check(db: Session = Depends(get_db)):
     crud.count_test_runs(db)
-    return {'message': 'OK'}
+    return {'message': 'OK!'}
+
+
+@app.get('/dummy')
+def dummy(db: Session = Depends(get_db)):
+    return {'message': 'Dummy'}
+
+
+@app.get('/api/dummy')
+def api_dummy():
+    return {'message': 'API Dummy'}
 
 
 @app.get('/api/testrun/{id}', response_model=schemas.TestRun)
@@ -71,21 +82,25 @@ def get_testruns(page: int = 1, page_size: int = 50,
     return crud.get_test_runs(db, page, page_size)
 
 
-@app.get('/api/bitbucket/webhook/{token}/{project}/{repos}')
-def bitbucket_webhook(token: str, project: str, repos: str,
+@app.post('/api/bitbucket/webhook/{token}')
+def bitbucket_webhook(token: str,
                       payload: JSONObject,
                       db: Session = Depends(get_db)):
     if token != settings.BITBUCKET_WEBHOOK_TOKEN:
         raise HTTPException(status_code=403)
-    change = payload['push']['changes'][0]['new']
+
+    repos = payload[b'repository']['full_name']
+    change = payload[b'push']['changes'][0]['new']
     if change['type'] != 'branch':
         return "no content", 204
     branch = change['name']
     sha = change['target']['hash']
 
-    logging.info(f"Webhook received for {branch} {sha}")
+    logging.info(f"Webhook received for {repos}: {branch} {sha}")
     crud.cancel_previous_test_runs(db, sha, branch)
-    celeryapp.send_task('clone_and_build', args=[repos, branch, sha])
+    tr = crud.create_testrun(db, TestRunParams(repos=repos, sha=sha, branch=branch))
+    logging.info(f"Created new testrun {tr.id}")
+    celeryapp.send_task('clone_and_build', args=[tr.id])
     return {'message': 'OK'}
 
 
@@ -97,9 +112,8 @@ def clear_results(sha: str):
 
 
 @app.post('/api/start', response_model=schemas.TestRun)
-def start_testrun(params: TestRunParams, db: Session = Depends(get_db)
-                  # ,user: FirebaseClaims = Depends(get_current_user)
-    ):
+def start_testrun(params: TestRunParams, db: Session = Depends(get_db),
+                  user: FirebaseClaims = Depends(get_current_user)):
     logger.info(f"Start test run {params.repos} {params.branch} {params.sha} {params.parallelism}")
     crud.cancel_previous_test_runs(db, params.sha, params.branch)
     clear_results(params.sha)
@@ -113,7 +127,8 @@ def start_testrun(params: TestRunParams, db: Session = Depends(get_db)
 def cancel_testrun(id: int, db: Session = Depends(get_db),
                    user: FirebaseClaims = Depends(get_current_user)):
     tr = crud.get_testrun(db, id)
-    jobs.delete_jobs_for_branch(tr.branch)
+    if jobs.batchapi:
+        jobs.delete_jobs_for_branch(tr.branch)
     crud.cancel_testrun(db, tr)
     return {'cancelled': 'OK'}
 

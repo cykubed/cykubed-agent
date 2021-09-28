@@ -28,11 +28,13 @@ def ping():
 
 
 @app.task(name='clone_and_build')
-def clone_and_build(trid: int, parallelism: int = 4,
+def clone_and_build(trid: int, parallelism: int = None,
                     spec_filter: str = None):
     """
     Clone and build (from Bitbucket)
     """
+    if not parallelism:
+        parallelism = 4
     with sessionmaker.context_session() as db:
 
         logfile_name = os.path.join(settings.DIST_DIR, f'{trid}.log')
@@ -62,6 +64,7 @@ def clone_and_build(trid: int, parallelism: int = 4,
                 wdir = clone_repos(f'https://{settings.BITBUCKET_USERNAME}:{settings.BITBUCKET_APP_PASSWORD}@bitbucket.org/{repos}.git', branch, logfile)
                 # get the list of specs and create a testrun
                 specs = get_specs(wdir)
+                logfile.write(f"Found {len(specs)} spec files\n")
 
             # filter the specs through the glob
             if spec_filter:
@@ -80,7 +83,7 @@ def clone_and_build(trid: int, parallelism: int = 4,
 
             # start the runner jobs - that way the cluster has a head start on spinning up new nodes
             if jobs.batchapi:
-                log(logfile, f"starting {parallelism} Jobs")
+                log(logfile, f"Starting {parallelism} Jobs")
                 jobs.start_job(branch, sha, logfile, parallelism=parallelism)
 
             # build the distro
@@ -89,6 +92,7 @@ def clone_and_build(trid: int, parallelism: int = 4,
                 t = time.time() - t
                 logfile.write(f"Distribution created in {t:.1f}s\n")
             else:
+                logfile.write(f"Distribution already exists: reuse it\n")
                 crud.mark_as_running(db, tr)
         except Exception as ex:
             logfile.write(f"BUILD FAILED: {str(ex)}\n")
