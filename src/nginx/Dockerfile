@@ -1,3 +1,4 @@
 FROM nginx
 
-COPY nginx.conf /etc/nginx.conf
+COPY cypresshub.conf /etc/nginx/conf.d
+

@@ -1,5 +1,8 @@
 from pydantic import BaseSettings
 
+#
+# Most of this needs to move to the database
+#
 
 class AppSettings(BaseSettings):
     BITBUCKET_WEBHOOK_TOKEN: str = None
@@ -25,8 +28,8 @@ class AppSettings(BaseSettings):
     RESULTS_UI_URL: str = 'http://cypresshub.kisanhub.com'
     HUB_URL: str = 'http://cypresshub:5000'
     # Public face to NGINX server for screenshots and videos
-    RESULT_URL: str = 'http://cypresshub:5001/results'
-    DIST_URL: str = 'http://cypresshub:5001/dist-cache'
+    RESULT_URL: str = 'http://192.168.49.2:32600/results'
+    DIST_URL: str = 'http://cypresshub-external:5001/dist-cache'
     CYPRESS_RUNNER_VERSION: str = '8.3.1-1.0'
     DIST_CACHE_TTL_HOURS: int = 365*24
 

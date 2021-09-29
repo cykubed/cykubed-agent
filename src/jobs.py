@@ -99,15 +99,17 @@ def prune_jobs(namespace):
     kube_delete_empty_pods(namespace)
 
 
-def delete_jobs_for_branch(branch: str, logfile):
-    logfile.write(f'Look for existing jobs for branch {branch}\n')
+def delete_jobs_for_branch(branch: str, logfile=None):
+    if logfile:
+        logfile.write(f'Look for existing jobs for branch {branch}\n')
     namespace = os.environ.get('NAMESPACE', 'default')
 
     # delete any job already running
     jobs = batchapi.list_namespaced_job(namespace, label_selector=f'job=cypress-runner,'
                                                                   f'branch={branch}')
     if jobs.items:
-        logfile.write(f'Found {len(jobs.items)} existing Jobs - deleting them\n')
+        if logfile:
+            logfile.write(f'Found {len(jobs.items)} existing Jobs - deleting them\n')
         # delete it (there should just be one, but iterate anyway)
         for job in jobs.items:
             logging.info(f"Deleting existing job {job.metadata.name}")
