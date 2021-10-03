@@ -1,8 +1,9 @@
+import enum
 from functools import lru_cache
 from typing import Iterator
 
 from fastapi_utils.session import FastAPISessionMaker
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, Enum
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import relationship
@@ -23,21 +24,47 @@ def _get_fastapi_sessionmaker() -> FastAPISessionMaker:
     return FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)
 
 
+class AuthPlatforms(enum.Enum):
+    bitbucket = 1
+    jira = 2
+    slack = 3
+
+
 class SpecFile(Base):
     __tablename__ = 'spec_file'
 
     id = Column(Integer, primary_key=True)
     file = Column(String(255))
     testrun = relationship('TestRun', back_populates='files')
-    # results = relationship('SpecFileResults', back_populates='results')
     testrun_id = Column(Integer, ForeignKey('test_run.id'), nullable=False)
     started = Column(DateTime, nullable=True)
     finished = Column(DateTime, nullable=True)
 
 
-# class SpecFileResults(Base):
-#     file_id = Column(Integer, ForeignKey('spec_file.id'), nullable=False)
-#     data = Column(JSON, nullable=True)
+class User(Base):
+    __tablename__  = 'user'
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(255))
+    email = Column(String(255))
+    team_id = Column(Integer, ForeignKey('team.id'), nullable=False)
+
+
+class Team(Base):
+    __tablename__ = 'team'
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(255))
+    users = relationship('User')
+    credentials = relationship('OauthCredentials')
+
+
+class OauthCredentials(Base):
+    __tablename__ = 'credentials'
+
+    id = Column(Integer, primary_key=True)
+    team_id = Column(Integer, ForeignKey('team.id'), nullable=False)
+    platform = Column(Enum(AuthPlatforms))
 
 
 class TestRun(Base):

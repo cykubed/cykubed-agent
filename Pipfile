@@ -28,7 +28,6 @@ fastapi-auth0 = "*"
 loguru = "*"
 click = "*"
 pydantic-to-typescript = "*"
-fastapi-cloudauth = "*"
 ecdsa = "*"
 jwt = "*"
 

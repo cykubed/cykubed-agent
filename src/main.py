@@ -6,9 +6,8 @@ import tarfile
 from io import BytesIO
 from typing import List, Any, AnyStr, Dict
 
-from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi_cloudauth import FirebaseCurrentUser
-from fastapi_cloudauth.firebase import FirebaseClaims
+from fastapi import Depends, FastAPI, HTTPException, Request, Security
+from fastapi_auth0 import Auth0, Auth0User
 from fastapi_utils.session import FastAPISessionMaker
 from fastapi_utils.tasks import repeat_every
 from loguru import logger
@@ -26,6 +25,9 @@ from settings import settings
 from worker import app as celeryapp
 
 sessionmaker = FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)
+auth = Auth0(domain='cypresshub.eu.auth0.com',
+             api_audience='cykube-api')
+
 app = FastAPI()
 
 origins = [
@@ -41,11 +43,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-get_current_user = FirebaseCurrentUser(
-    project_id=settings.FIREBASE_PROJECT_ID
-)
-
 
 JSONObject = Dict[AnyStr, Any]
 
@@ -72,13 +69,15 @@ def api_dummy():
 
 @app.get('/api/testrun/{id}', response_model=schemas.TestRun)
 def get_testrun(id: int,
-                 db: Session = Depends(get_db), user: FirebaseClaims = Depends(get_current_user)):
+                 user: Auth0User = Security(auth.get_user),
+                 db: Session = Depends(get_db)):
     return crud.get_testrun(db, id)
 
 
 @app.get('/api/testruns', response_model=List[schemas.TestRun])
 def get_testruns(page: int = 1, page_size: int = 50,
-                db: Session = Depends(get_db), user: FirebaseClaims = Depends(get_current_user)):
+                db: Session = Depends(get_db),
+                 user: Auth0User = Security(auth.get_user)):
     return crud.get_test_runs(db, page, page_size)
 
 
@@ -113,7 +112,7 @@ def clear_results(sha: str):
 
 @app.post('/api/start', response_model=schemas.TestRun)
 def start_testrun(params: TestRunParams, db: Session = Depends(get_db),
-                  user: FirebaseClaims = Depends(get_current_user)):
+                  user: Auth0User = Security(auth.get_user)):
     logger.info(f"Start test run {params.repos} {params.branch} {params.sha} {params.parallelism}")
     crud.cancel_previous_test_runs(db, params.sha, params.branch)
     clear_results(params.sha)
@@ -125,7 +124,7 @@ def start_testrun(params: TestRunParams, db: Session = Depends(get_db),
 
 @app.post('/api/cancel/{id}')
 def cancel_testrun(id: int, db: Session = Depends(get_db),
-                   user: FirebaseClaims = Depends(get_current_user)):
+                   user: Auth0User = Security(auth.get_user)):
     tr = crud.get_testrun(db, id)
     if jobs.batchapi:
         jobs.delete_jobs_for_branch(tr.branch)
@@ -136,7 +135,7 @@ def cancel_testrun(id: int, db: Session = Depends(get_db),
 @app.get('/api/testrun/{id}/logs')
 def get_testrun_logs(id: int,
                      offset: int = 0,
-                     user: FirebaseClaims = Depends(get_current_user)) -> str:
+                     user: Auth0User = Security(auth.get_user)) -> str:
     logs = os.path.join(settings.DIST_DIR, f'{id}.log')
     if not os.path.exists(logs):
         raise HTTPException(404)
@@ -149,7 +148,7 @@ def get_testrun_logs(id: int,
 @app.get('/api/testrun/{id}/result')
 def get_testrun_result(id: int,
                        db: Session = Depends(get_db),
-                       user: FirebaseClaims = Depends(get_current_user)
+                       user: Auth0User = Security(auth.get_user)
                        ) -> schemas.Results:
     tr = crud.get_testrun(db, id)
     json_result = os.path.join(settings.RESULTS_DIR, tr.sha, 'json', 'results.json')
