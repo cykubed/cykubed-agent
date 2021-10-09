@@ -24,11 +24,9 @@ alembic = "*"
 ipython = "*"
 pytest-mock = "*"
 celery = {extras = ["redis"], version = "*"}
-fastapi-auth0 = "*"
 loguru = "*"
 click = "*"
 pydantic-to-typescript = "*"
-fastapi-cloudauth = "*"
 ecdsa = "*"
 jwt = "*"
 

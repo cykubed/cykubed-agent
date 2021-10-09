@@ -7,13 +7,12 @@ from io import BytesIO
 from typing import List, Any, AnyStr, Dict
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi_cloudauth import FirebaseCurrentUser
-from fastapi_cloudauth.firebase import FirebaseClaims
 from fastapi_utils.session import FastAPISessionMaker
 from fastapi_utils.tasks import repeat_every
 from loguru import logger
 from sqlalchemy.orm import Session
 from starlette.middleware.cors import CORSMiddleware
+from starlette.responses import PlainTextResponse
 
 import crud
 import jobs
@@ -42,9 +41,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-get_current_user = FirebaseCurrentUser(
-    project_id=settings.FIREBASE_PROJECT_ID
-)
+
+@app.middleware('http')
+async def verify_auth_token(request: Request, call_next):
+    if request.url.path != '/hc' and not request.url.path.startswith('/testrun'):
+        if "Authorization" not in request.headers:
+            return PlainTextResponse('Missing auth token', status_code=401)
+        auth = request.headers["Authorization"].split(' ')
+        if len(auth) != 2 or auth[0] != 'Token':
+            return PlainTextResponse('Invalid authorization header', status_code=401)
+        if auth[1] != settings.API_TOKEN:
+            return PlainTextResponse('Invalid token', status_code=401)
+    return await call_next(request)
 
 
 JSONObject = Dict[AnyStr, Any]
@@ -60,25 +68,15 @@ def health_check(db: Session = Depends(get_db)):
     return {'message': 'OK!'}
 
 
-@app.get('/dummy')
-def dummy(db: Session = Depends(get_db)):
-    return {'message': 'Dummy'}
-
-
-@app.get('/api/dummy')
-def api_dummy():
-    return {'message': 'API Dummy'}
-
-
 @app.get('/api/testrun/{id}', response_model=schemas.TestRun)
 def get_testrun(id: int,
-                 db: Session = Depends(get_db), user: FirebaseClaims = Depends(get_current_user)):
+                 db: Session = Depends(get_db)):
     return crud.get_testrun(db, id)
 
 
 @app.get('/api/testruns', response_model=List[schemas.TestRun])
 def get_testruns(page: int = 1, page_size: int = 50,
-                db: Session = Depends(get_db), user: FirebaseClaims = Depends(get_current_user)):
+                db: Session = Depends(get_db)):
     return crud.get_test_runs(db, page, page_size)
 
 
@@ -110,10 +108,10 @@ def clear_results(sha: str):
     shutil.rmtree(rdir, ignore_errors=True)
     os.mkdir(rdir)
 
+# @requires(['authenticated'])
 
 @app.post('/api/start', response_model=schemas.TestRun)
-def start_testrun(params: TestRunParams, db: Session = Depends(get_db),
-                  user: FirebaseClaims = Depends(get_current_user)):
+def start_testrun(params: TestRunParams, db: Session = Depends(get_db)):
     logger.info(f"Start test run {params.repos} {params.branch} {params.sha} {params.parallelism}")
     crud.cancel_previous_test_runs(db, params.sha, params.branch)
     clear_results(params.sha)
@@ -124,8 +122,7 @@ def start_testrun(params: TestRunParams, db: Session = Depends(get_db),
 
 
 @app.post('/api/cancel/{id}')
-def cancel_testrun(id: int, db: Session = Depends(get_db),
-                   user: FirebaseClaims = Depends(get_current_user)):
+def cancel_testrun(id: int, db: Session = Depends(get_db)):
     tr = crud.get_testrun(db, id)
     if jobs.batchapi:
         jobs.delete_jobs_for_branch(tr.branch)
@@ -135,8 +132,7 @@ def cancel_testrun(id: int, db: Session = Depends(get_db),
 
 @app.get('/api/testrun/{id}/logs')
 def get_testrun_logs(id: int,
-                     offset: int = 0,
-                     user: FirebaseClaims = Depends(get_current_user)) -> str:
+                     offset: int = 0) -> str:
     logs = os.path.join(settings.DIST_DIR, f'{id}.log')
     if not os.path.exists(logs):
         raise HTTPException(404)
@@ -148,8 +144,7 @@ def get_testrun_logs(id: int,
 
 @app.get('/api/testrun/{id}/result')
 def get_testrun_result(id: int,
-                       db: Session = Depends(get_db),
-                       user: FirebaseClaims = Depends(get_current_user)
+                       db: Session = Depends(get_db)
                        ) -> schemas.Results:
     tr = crud.get_testrun(db, id)
     json_result = os.path.join(settings.RESULTS_DIR, tr.sha, 'json', 'results.json')
