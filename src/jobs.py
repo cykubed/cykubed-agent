@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import subprocess
@@ -29,14 +28,6 @@ def connect_k8():
         else:
             config.load_kube_config()
             batchapi = client.BatchV1Api()
-
-
-def get_latest_runner_tag():
-    tags = set(json.loads(subprocess.check_output(
-        "gcloud container images list-tags gcr.io/kisanhub-uat/cypress-runner --filter='tags=latest' --format=json",
-        shell=True).decode())[0]['tags'])
-    tags.remove('latest')
-    return list(tags)[0]
 
 
 def kube_delete_empty_pods(namespace='default', phase='Succeeded'):

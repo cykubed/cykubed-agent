@@ -87,5 +87,13 @@ class Results(BaseModel):
     failures: int = 0
 
 
+class Settings(BaseModel):
+    hub_url: str
+    bitbucket_username: Optional[str]
+    bitbucket_password: Optional[str]
+    slack_token: Optional[str]
+    jira_url: Optional[str]
+    jira_token: Optional[str]
+
 
 

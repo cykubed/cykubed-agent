@@ -6,7 +6,7 @@ from sqlalchemy import and_
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from models import TestRun, SpecFile
+from models import TestRun, SpecFile, Settings, SettingsModel
 from report import get_report_url
 from schemas import Status
 from utils import now
@@ -18,6 +18,17 @@ class TestRunParams(BaseModel):
     branch: str
     parallelism: Optional[int]
     spec_filter: Optional[str]
+
+
+def update_settings(db: Session, settings: Settings):
+    s = db.query(SettingsModel).one_or_none()
+    if not s:
+        db.add(settings)
+    else:
+        for k, v in settings.items():
+            setattr(s, k, v)
+        db.add(s)
+    db.commit()
 
 
 def count_test_runs(db: Session) -> int:

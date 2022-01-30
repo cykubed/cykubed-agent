@@ -68,6 +68,11 @@ def health_check(db: Session = Depends(get_db)):
     return {'message': 'OK!'}
 
 
+@app.put('/api/settings')
+def update_settings(s: schemas.Settings, db: Session = Depends(get_db)):
+    crud.update_settings(db, s)
+
+
 @app.get('/api/testrun/{id}', response_model=schemas.TestRun)
 def get_testrun(id: int,
                  db: Session = Depends(get_db)):

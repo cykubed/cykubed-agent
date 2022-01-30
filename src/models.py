@@ -72,3 +72,12 @@ class TestRun(Base):
     jira_ticket = Column(String(255))
 
 
+class SettingsModel(Base):
+    __tablename__ = 'settings'
+
+    hub_url = Column(String(255), nullable=True)
+    bitbucket_username = Column(String(32), nullable=True)
+    bitbucket_password = Column(String(32), nullable=True)
+    slack_token = Column(String(255), nullable=True)
+    jira_url = Column(String(255), nullable=True)
+    jira_token = Column(String(255), nullable=True)
