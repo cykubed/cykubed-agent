@@ -6,10 +6,11 @@ from sqlalchemy import and_
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from models import TestRun, SpecFile, Settings, SettingsModel
+from models import TestRun, SpecFile, SettingsModel
 from report import get_report_url
 from schemas import Status
 from utils import now
+import settings
 
 
 class TestRunParams(BaseModel):
@@ -20,15 +21,28 @@ class TestRunParams(BaseModel):
     spec_filter: Optional[str]
 
 
-def update_settings(db: Session, settings: Settings):
+def get_settings(db: Session) -> SettingsModel:
+    if settings.cached_settings:
+        return settings.cached_settings
+    s = db.query(SettingsModel).one_or_none()
+    if s:
+        settings.cached_settings = s
+    else:
+        s = SettingsModel()
+
+    return s
+
+
+def update_settings(db: Session, updated_settings: SettingsModel):
     s = db.query(SettingsModel).one_or_none()
     if not s:
-        db.add(settings)
+        s = updated_settings
     else:
-        for k, v in settings.items():
+        for k, v in updated_settings.items():
             setattr(s, k, v)
-        db.add(s)
+    db.add(s)
     db.commit()
+    settings.cached_settings = s
 
 
 def count_test_runs(db: Session) -> int:

@@ -93,7 +93,12 @@ class Settings(BaseModel):
     bitbucket_password: Optional[str]
     slack_token: Optional[str]
     jira_url: Optional[str]
+    jira_user: Optional[str]
     jira_token: Optional[str]
+
+    class Config:
+        orm_mode = True
+
 
 
 

@@ -13,12 +13,6 @@ class AppSettings(BaseSettings):
     REDIS_HOST: str = 'localhost'
     CYPRESSHUB_DATABASE_URL: str = 'sqlite:///:memory:'
 
-    BITBUCKET_APP_PASSWORD: str = 'dummy'
-    BITBUCKET_USERNAME: str = 'nickbrook'
-    SLACK_TOKEN: str = None
-    JIRA_TOKEN: str = None
-    JIRA_USER: str = 'nick@kisanhub.com'
-
     BUILD_TIMEOUT: int = 900
     NPM_CACHE_DIR = '/var/lib/cypresshub/npm-cache'
     DIST_DIR = '/var/lib/cypresshub/dist-cache'
@@ -28,7 +22,6 @@ class AppSettings(BaseSettings):
     PARALLELISM: int = 1
 
     RESULTS_UI_URL: str = 'http://cypresshub.kisanhub.com'
-    HUB_URL: str = 'http://cypresshub:5000'
     # Public face to NGINX server for screenshots and videos
     RESULT_URL: str = 'http://192.168.49.2:32600/results'
     DIST_URL: str = 'http://cypresshub-external:5001/dist-cache'
@@ -36,4 +29,7 @@ class AppSettings(BaseSettings):
     DIST_CACHE_TTL_HOURS: int = 365*24
 
 
-settings = AppSettings()
+global_settings = AppSettings()
+
+cached_settings = None
+

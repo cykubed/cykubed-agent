@@ -5,19 +5,10 @@ from email.utils import parseaddr
 import requests
 
 from models import TestRun
-from settings import settings
+from settings import cached_settings
 
 JIRA_HEADERS = {'Content-Type': 'application/json',
                 'Accept': 'application/json; charset=utf8'}
-
-
-def get_jira_auth():
-    return (settings.JIRA_USER, settings.JIRA_TOKEN)
-
-
-def get_slack_headers():
-    return {'Authorization': f'Bearer {settings.SLACK_TOKEN}',
-     'Content-Type': 'application/json; charset=utf8'}
 
 
 def get_slack_user_id(email):

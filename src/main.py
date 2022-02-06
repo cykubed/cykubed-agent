@@ -19,12 +19,13 @@ import jobs
 import schemas
 from build import delete_old_dists
 from crud import TestRunParams
-from models import get_db, TestRun
+from models import get_db, TestRun, SettingsModel
 from notify import notify
-from settings import settings
+import settings
+from settings import  global_settings
 from worker import app as celeryapp
 
-sessionmaker = FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)
+sessionmaker = FastAPISessionMaker(global_settings.CYPRESSHUB_DATABASE_URL)
 app = FastAPI()
 
 origins = [
@@ -50,8 +51,9 @@ async def verify_auth_token(request: Request, call_next):
         auth = request.headers["Authorization"].split(' ')
         if len(auth) != 2 or auth[0] != 'Token':
             return PlainTextResponse('Invalid authorization header', status_code=401)
-        if auth[1] != settings.API_TOKEN:
+        if auth[1] != settings.global_settings.API_TOKEN:
             return PlainTextResponse('Invalid token', status_code=401)
+
     return await call_next(request)
 
 
@@ -69,7 +71,7 @@ def health_check(db: Session = Depends(get_db)):
 
 
 @app.put('/api/settings')
-def update_settings(s: schemas.Settings, db: Session = Depends(get_db)):
+def update_settings(s: SettingsModel, db: Session = Depends(get_db)):
     crud.update_settings(db, s)
 
 

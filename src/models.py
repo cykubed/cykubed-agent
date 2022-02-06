@@ -80,4 +80,14 @@ class SettingsModel(Base):
     bitbucket_password = Column(String(32), nullable=True)
     slack_token = Column(String(255), nullable=True)
     jira_url = Column(String(255), nullable=True)
-    jira_token = Column(String(255), nullable=True)
+    jira_user = Column(String(32), nullable=True)
+    jira_token = Column(String(64), nullable=True)
+
+    @property
+    def jira_auth(self):
+        return self.jira_user, self.jira_token
+
+    @property
+    def slack_headers(self):
+        return {'Authorization': f'Bearer {self.slack_token}',
+                'Content-Type': 'application/json; charset=utf8'}
