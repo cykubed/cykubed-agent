@@ -61,7 +61,7 @@ def clone_and_build(trid: int, parallelism: int = None,
             if specs is None:
                 # clone
                 logging.info(f"Logfile = {logfile.name}")
-                wdir = clone_repos(f'https://{settings.BITBUCKET_USERNAME}:{settings.BITBUCKET_APP_PASSWORD}@bitbucket.org/{repos}.git', branch, logfile)
+                wdir = clone_repos(f'https://{settings.BITBUCKET_USERNAME}:{settings.BITBUCKET_PASSWORD}@bitbucket.org/{repos}.git', branch, logfile)
                 # get the list of specs and create a testrun
                 specs = get_specs(wdir)
                 logfile.write(f"Found {len(specs)} spec files\n")

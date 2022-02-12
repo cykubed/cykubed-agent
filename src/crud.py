@@ -6,11 +6,10 @@ from sqlalchemy import and_
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+import settings
 from models import TestRun, SpecFile, SettingsModel
-from report import get_report_url
 from schemas import Status
 from utils import now
-import settings
 
 
 class TestRunParams(BaseModel):
@@ -147,7 +146,6 @@ def get_remaining(db: Session, testrun: TestRun) -> int:
 def mark_complete(db: Session, testrun: TestRun, total_fails: int):
     # mark run as finished and inactive
     testrun.finished = now()
-    testrun.results_url = get_report_url(testrun.sha)
     testrun.active = False
     testrun.status = Status.failed if total_fails else Status.passed
     db.add(testrun)
