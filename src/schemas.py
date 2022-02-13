@@ -89,6 +89,7 @@ class Results(BaseModel):
 
 class Settings(BaseModel):
     hub_url: str
+    bitbucket_url: Optional[str]
     bitbucket_username: Optional[str]
     bitbucket_password: Optional[str]
     slack_token: Optional[str]

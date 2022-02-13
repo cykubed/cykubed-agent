@@ -31,36 +31,6 @@ class AppSettings(BaseSettings):
     CYPRESS_RUNNER_VERSION: str = '8.3.1-1.0'
     DIST_CACHE_TTL_HOURS: int = 365*24
 
-    #
-    # This will be fetched from the database
-    #
-    HUB_URL: str
-    BITBUCKET_URL: str
-    BITBUCKET_USERNAME: str
-    BITBUCKET_PASSWORD: str
-    SLACK_TOKEN: str
-    JIRA_URL: str
-    JIRA_USER: str
-    JIRA_TOKEN: str
-
-    @property
-    def jira_auth(self):
-        return self.JIRA_USER, self.JIRA_TOKEN
-
-    @property
-    def slack_headers(self):
-        return {'Authorization': f'Bearer {self.SLACK_TOKEN}',
-                'Content-Type': 'application/json; charset=utf8'}
-
-    @property
-    def bitbucket_auth(self):
-        return settings.BITBUCKET_USERNAME, settings.BITBUCKET_APP_PASSWORD
-
-    def __getattr__(self, key):
-        if cached_settings and cached_settings.get(key.lower()):
-            return cached_settings[key.lower()]
-        return self[key]
-
 
 settings = AppSettings()
 

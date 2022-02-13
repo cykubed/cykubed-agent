@@ -17,15 +17,15 @@ from starlette.responses import PlainTextResponse
 import crud
 import jobs
 import schemas
+import settings
 from build import delete_old_dists
 from crud import TestRunParams
-from models import get_db, TestRun, SettingsModel
+from models import get_db, TestRun
 from notify import notify
-import settings
-from settings import  global_settings
+from settings import settings
 from worker import app as celeryapp
 
-sessionmaker = FastAPISessionMaker(global_settings.CYPRESSHUB_DATABASE_URL)
+sessionmaker = FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)
 app = FastAPI()
 
 origins = [
@@ -45,13 +45,14 @@ app.add_middleware(
 
 @app.middleware('http')
 async def verify_auth_token(request: Request, call_next):
-    if request.url.path != '/hc' and not request.url.path.startswith('/testrun'):
+    if request.url.path != '/hc' and not request.url.path.startswith('/testrun') and \
+            request.method != 'OPTIONS':
         if "Authorization" not in request.headers:
             return PlainTextResponse('Missing auth token', status_code=401)
         auth = request.headers["Authorization"].split(' ')
         if len(auth) != 2 or auth[0] != 'Token':
             return PlainTextResponse('Invalid authorization header', status_code=401)
-        if auth[1] != settings.global_settings.API_TOKEN:
+        if auth[1] != settings.API_TOKEN:
             return PlainTextResponse('Invalid token', status_code=401)
 
     return await call_next(request)
@@ -70,8 +71,13 @@ def health_check(db: Session = Depends(get_db)):
     return {'message': 'OK!'}
 
 
+@app.get('/api/settings')
+def get_settings(db: Session = Depends(get_db)):
+    return crud.get_settings(db)
+
+
 @app.put('/api/settings')
-def update_settings(s: SettingsModel, db: Session = Depends(get_db)):
+def update_settings(s: schemas.Settings, db: Session = Depends(get_db)):
     crud.update_settings(db, s)
 
 
