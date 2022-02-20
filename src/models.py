@@ -32,7 +32,7 @@ class PlatformEnum(enum.Enum):
     SLACK = 3
 
 
-class ProjectModel(Base):
+class Project(Base):
     __tablename__ = 'project'
     id = Column(Integer, primary_key=True)
     url = Column(String(255), nullable=True)

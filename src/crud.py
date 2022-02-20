@@ -6,8 +6,8 @@ from sqlalchemy import and_
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from models import TestRun, SpecFile, PlatformEnum, PlatformSettingsModel, ProjectModel
-from schemas import Status, GenericUserTokenAuth
+from models import TestRun, SpecFile, PlatformEnum, PlatformSettingsModel, Project
+from schemas import Status, GenericUserTokenAuth, AllSettings
 from utils import now
 
 
@@ -20,10 +20,10 @@ class TestRunParams(BaseModel):
 
 
 def get_projects(db: Session):
-    return db.query(ProjectModel).all()
+    return db.query(Project).all()
 
 
-def create_project(db: Session, project: ProjectModel):
+def create_project(db: Session, project: Project):
     db.add(project)
     db.commit()
     return project
@@ -161,6 +161,23 @@ def apply_timeouts(db: Session, test_run_timeout: int, spec_file_timeout: int):
         spec.started = None
         db.add(spec)
     db.commit()
+
+
+def get_all_settings(db: Session) -> AllSettings:
+    s = AllSettings()
+    bb = get_platform_settings(db, PlatformEnum.BITBUCKET)
+    if bb:
+        s.bitbucket = bb
+
+    jira = get_platform_settings(db, PlatformEnum.JIRA)
+    if jira:
+        s.jira = jira
+
+    slack = get_platform_settings(db, PlatformEnum.SLACK)
+    if slack:
+        s.slack_token = slack.token
+
+    return s
 
 
 def get_platform_settings(db: Session, platform_id: PlatformEnum) -> PlatformSettingsModel:

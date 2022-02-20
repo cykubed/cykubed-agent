@@ -71,6 +71,11 @@ def health_check(db: Session = Depends(get_db)):
     return {'message': 'OK!'}
 
 
+@app.get('/api/settings', response_model=schemas.AllSettings)
+def get_all_settings(db: Session = Depends(get_db)):
+    return crud.get_all_settings(db)
+
+
 @app.get('/api/settings/bitbucket', response_model=schemas.GenericUserTokenAuth)
 def get_bitbucket_settings(db: Session = Depends(get_db)):
     return crud.get_platform_settings(db, PlatformEnum.BITBUCKET)

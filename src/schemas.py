@@ -107,3 +107,12 @@ class Project(BaseModel):
     platform: PlatformEnum
     url: str
 
+
+class AllSettings(BaseModel):
+    bitbucket: Optional[GenericUserTokenAuth]
+    jira: Optional[GenericUserTokenAuth]
+    slack_token: Optional[str]
+
+    class Config:
+        orm_mode = True
+
