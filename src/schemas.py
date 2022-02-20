@@ -4,6 +4,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel
 
+from models import PlatformEnum
+
 
 class SpecFile(BaseModel):
     file: str
@@ -87,19 +89,21 @@ class Results(BaseModel):
     failures: int = 0
 
 
-class Settings(BaseModel):
-    hub_url: str
-    bitbucket_url: Optional[str]
-    bitbucket_username: Optional[str]
-    bitbucket_password: Optional[str]
-    slack_token: Optional[str]
-    jira_url: Optional[str]
-    jira_user: Optional[str]
-    jira_token: Optional[str]
+class SimpleTokenAuth(BaseModel):
+    token: str
+
+
+class GenericUserTokenAuth(BaseModel):
+    url: str
+    username: str
+    token: str
 
     class Config:
         orm_mode = True
 
 
-
+class Project(BaseModel):
+    id: int
+    platform: PlatformEnum
+    url: str
 

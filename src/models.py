@@ -1,8 +1,9 @@
+import enum
 from functools import lru_cache
 from typing import Iterator
 
 from fastapi_utils.session import FastAPISessionMaker
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, Enum
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import relationship
@@ -10,6 +11,8 @@ from sqlalchemy.orm import relationship
 from settings import settings
 
 Base = declarative_base()
+
+BITBUCKET_PLATFORM = 1
 
 
 def get_db() -> Iterator[Session]:
@@ -23,21 +26,28 @@ def _get_fastapi_sessionmaker() -> FastAPISessionMaker:
     return FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)
 
 
+class PlatformEnum(enum.Enum):
+    BITBUCKET = 1
+    JIRA = 2
+    SLACK = 3
+
+
+class ProjectModel(Base):
+    __tablename__ = 'project'
+    id = Column(Integer, primary_key=True)
+    url = Column(String(255), nullable=True)
+    platform = Column(Enum(PlatformEnum))
+
+
 class SpecFile(Base):
     __tablename__ = 'spec_file'
 
     id = Column(Integer, primary_key=True)
     file = Column(String(255))
     testrun = relationship('TestRun', back_populates='files')
-    # results = relationship('SpecFileResults', back_populates='results')
     testrun_id = Column(Integer, ForeignKey('test_run.id'), nullable=False)
     started = Column(DateTime, nullable=True)
     finished = Column(DateTime, nullable=True)
-
-
-# class SpecFileResults(Base):
-#     file_id = Column(Integer, ForeignKey('spec_file.id'), nullable=False)
-#     data = Column(JSON, nullable=True)
 
 
 class TestRun(Base):
@@ -53,7 +63,9 @@ class TestRun(Base):
     ]
 
     id = Column(Integer, primary_key=True)
-    repos = Column(String(255))
+    project_id = Column(Integer, ForeignKey('project.id'), nullable=False)
+    project = relationship('Project', lazy='joined')
+
     started = Column(DateTime)
     finished = Column(DateTime, nullable=True)
     sha = Column(String(64))
@@ -71,29 +83,14 @@ class TestRun(Base):
     author_slack_id = Column(String(255))
     jira_ticket = Column(String(255))
 
-
-class SettingsModel(Base):
-    __tablename__ = 'settings'
-
-    id = Column(Integer, primary_key=True)
-    hub_url = Column(String(255), nullable=True)
-    bitbucket_url = Column(String(32), nullable=True)
-    bitbucket_username = Column(String(32), nullable=True)
-    bitbucket_password = Column(String(32), nullable=True)
-    slack_token = Column(String(255), nullable=True)
-    jira_url = Column(String(255), nullable=True)
-    jira_user = Column(String(32), nullable=True)
-    jira_token = Column(String(64), nullable=True)
-
     @property
-    def jira_auth(self):
-        return self.jira_user, self.jira_token
+    def repos(self):
+        return self.project.url
 
-    @property
-    def slack_headers(self):
-        return {'Authorization': f'Bearer {self.slack_token}',
-                'Content-Type': 'application/json; charset=utf8'}
-    @property
-    def bitbucket_auth(self):
-        return self.bitbucket_username, self.bitbucket_password
 
+class PlatformSettingsModel(Base):
+    __tablename__ = 'platform_settings'
+    platform_id = Column(Enum(PlatformEnum), primary_key=True, unique=True)
+    url = Column(String(255), nullable=True)
+    username = Column(String(64), nullable=True)
+    token = Column(String(255), nullable=True)

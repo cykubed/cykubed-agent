@@ -20,7 +20,7 @@ import schemas
 import settings
 from build import delete_old_dists
 from crud import TestRunParams
-from models import get_db, TestRun
+from models import get_db, TestRun, PlatformEnum
 from notify import notify
 from settings import settings
 from worker import app as celeryapp
@@ -71,14 +71,48 @@ def health_check(db: Session = Depends(get_db)):
     return {'message': 'OK!'}
 
 
-@app.get('/api/settings')
-def get_settings(db: Session = Depends(get_db)):
-    return crud.get_settings(db)
+@app.get('/api/settings/bitbucket', response_model=schemas.GenericUserTokenAuth)
+def get_bitbucket_settings(db: Session = Depends(get_db)):
+    return crud.get_platform_settings(db, PlatformEnum.BITBUCKET)
 
 
-@app.put('/api/settings')
-def update_settings(s: schemas.Settings, db: Session = Depends(get_db)):
-    crud.update_settings(db, s)
+@app.put('/api/settings/bitbucket')
+def update_bitbucket_settings(s: schemas.GenericUserTokenAuth, db: Session = Depends(get_db)):
+    crud.update_bitbucket_settings(db, s)
+    return {'message': 'OK'}
+
+
+@app.get('/api/settings/jira', response_model=schemas.GenericUserTokenAuth)
+def get_bitbucket_settings(db: Session = Depends(get_db)):
+    return crud.get_platform_settings(db, PlatformEnum.JIRA)
+
+
+@app.put('/api/settings/jira')
+def update_bitbucket_settings(s: schemas.GenericUserTokenAuth, db: Session = Depends(get_db)):
+    crud.update_jira_settings(db, s)
+    return {'message': 'OK'}
+
+
+@app.get('/api/settings/slack', response_model=schemas.SimpleTokenAuth)
+def get_slack_settings(db: Session = Depends(get_db)):
+    s = crud.get_platform_settings(db, PlatformEnum.SLACK)
+    return schemas.SimpleTokenAuth(token=s.token)
+
+
+@app.put('/api/settings/slack')
+def update_slack_settings(s: schemas.SimpleTokenAuth, db: Session = Depends(get_db)):
+    s = crud.update_slack_token(db, s.token)
+    return {'message': 'OK'}
+
+
+@app.get('/api/project', response_model=List[schemas.Project])
+def get_projects(db: Session = Depends(get_db)):
+    return crud.get_projects(db)
+
+
+@app.post('/api/project', response_model=schemas.Project)
+def create_project(project: schemas.Project, db: Session = Depends(get_db)):
+    return crud.create_project(db, project)
 
 
 @app.get('/api/testrun/{id}', response_model=schemas.TestRun)
@@ -121,7 +155,6 @@ def clear_results(sha: str):
     shutil.rmtree(rdir, ignore_errors=True)
     os.mkdir(rdir)
 
-# @requires(['authenticated'])
 
 @app.post('/api/start', response_model=schemas.TestRun)
 def start_testrun(params: TestRunParams, db: Session = Depends(get_db)):

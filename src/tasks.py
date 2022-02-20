@@ -9,6 +9,7 @@ import crud
 import jobs
 from build import clone_repos, get_specs, create_build
 from integration import get_bitbucket_details
+from models import PlatformEnum
 from settings import settings
 from utils import log
 
@@ -37,6 +38,8 @@ def clone_and_build(trid: int, parallelism: int = None,
         parallelism = 4
     with sessionmaker.context_session() as db:
 
+        bitbucket_auth = crud.get_platform_settings(db, PlatformEnum.BITBUCKET)
+
         logfile_name = os.path.join(settings.DIST_DIR, f'{trid}.log')
         logfile = open(logfile_name, 'w')
 
@@ -60,8 +63,11 @@ def clone_and_build(trid: int, parallelism: int = None,
 
             if specs is None:
                 # clone
-                logging.info(f"Logfile = {logfile.name}")
-                wdir = clone_repos(f'https://{settings.BITBUCKET_USERNAME}:{settings.BITBUCKET_PASSWORD}@bitbucket.org/{repos}.git', branch, logfile)
+                if bitbucket_auth:
+                    url = f'https://{bitbucket_auth.username}:{bitbucket_auth.token}@bitbucket.org/{repos}.git'
+                else:
+                    raise Exception("Only Bitbucket is supported at the moment")
+                wdir = clone_repos(url, branch, logfile)
                 # get the list of specs and create a testrun
                 specs = get_specs(wdir)
                 logfile.write(f"Found {len(specs)} spec files\n")
@@ -77,7 +83,11 @@ def clone_and_build(trid: int, parallelism: int = None,
             if not specs:
                 logfile.write("No specs - nothing to test\n")
                 return
-            info = get_bitbucket_details(repos, branch, sha)
+
+            if bitbucket_auth:
+                info = get_bitbucket_details(repos, branch, sha)
+            else:
+                info = {}
 
             crud.update_test_run(db, tr, specs, **info)
 

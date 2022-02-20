@@ -5,7 +5,7 @@ import requests
 from sqlalchemy.orm import Session
 
 import crud
-from integration import create_user_notification
+from integration import create_user_notification, slack_headers
 from schemas import Results
 from settings import settings
 
@@ -37,7 +37,7 @@ def send_slack_message_blocks(branch, slack_id, blocks, test_mode=True):
         channel = '#core-platform'
     slack_msg = dict(blocks=blocks, channel=channel)
 
-    resp = requests.post("https://slack.com/api/chat.postMessage", headers=settings.slack_headers,
+    resp = requests.post("https://slack.com/api/chat.postMessage", headers=slack_headers(),
                          data=json.dumps(slack_msg))
     if resp.status_code != 200:
         logging.error(f"Failed to post to Slack: {resp.json()}")

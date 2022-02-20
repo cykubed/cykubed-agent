@@ -6,9 +6,8 @@ from sqlalchemy import and_
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-import settings
-from models import TestRun, SpecFile, SettingsModel
-from schemas import Status
+from models import TestRun, SpecFile, PlatformEnum, PlatformSettingsModel, ProjectModel
+from schemas import Status, GenericUserTokenAuth
 from utils import now
 
 
@@ -20,28 +19,14 @@ class TestRunParams(BaseModel):
     spec_filter: Optional[str]
 
 
-def get_settings(db: Session) -> SettingsModel:
-    if settings.cached_settings:
-        return settings.cached_settings
-    s = db.query(SettingsModel).one_or_none()
-    if s:
-        settings.cached_settings = s
-    else:
-        s = SettingsModel()
-
-    return s
+def get_projects(db: Session):
+    return db.query(ProjectModel).all()
 
 
-def update_settings(db: Session, updated_settings: SettingsModel):
-    s = db.query(SettingsModel).one_or_none()
-    if not s:
-        s = updated_settings
-    else:
-        for k, v in updated_settings.items():
-            setattr(s, k, v)
-    db.add(s)
+def create_project(db: Session, project: ProjectModel):
+    db.add(project)
     db.commit()
-    settings.cached_settings = s
+    return project
 
 
 def count_test_runs(db: Session) -> int:
@@ -177,3 +162,35 @@ def apply_timeouts(db: Session, test_run_timeout: int, spec_file_timeout: int):
         db.add(spec)
     db.commit()
 
+
+def get_platform_settings(db: Session, platform_id: PlatformEnum) -> PlatformSettingsModel:
+    return db.query(PlatformSettingsModel).filter_by(platform_id=platform_id).one_or_none()
+
+
+def update_user_auth_platform_settings(db: Session, settings: GenericUserTokenAuth,
+                                       platform_id: PlatformEnum):
+    s = db.query(PlatformSettingsModel).filter_by(platform_id=platform_id).one_or_one()
+    if not s:
+        s = PlatformSettingsModel(platform_id=platform_id)
+    s.url = settings.url
+    s.username = settings.username
+    s.token = settings.token
+    db.add(s)
+    db.commit()
+
+
+def update_bitbucket_settings(db: Session, settings: GenericUserTokenAuth):
+    return update_user_auth_platform_settings(db, settings, PlatformEnum.BITBUCKET)
+
+
+def update_jira_settings(db: Session, settings: GenericUserTokenAuth):
+    return update_user_auth_platform_settings(db, settings, PlatformEnum.JIRA)
+
+
+def update_slack_token(db: Session, token: str):
+    s = db.query(PlatformSettingsModel).filter_by(platform_id=PlatformEnum.SLACK).one_or_one()
+    if not s:
+        s = PlatformSettingsModel(platform_id=PlatformEnum.SLACK)
+    s.token = token
+    db.add(s)
+    db.commit()

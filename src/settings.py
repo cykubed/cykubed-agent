@@ -4,11 +4,8 @@ from pydantic import BaseSettings
 # Most of this needs to move to the database
 #
 
-cached_settings = {}
-
 
 class AppSettings(BaseSettings):
-    BITBUCKET_WEBHOOK_TOKEN: str = None
     API_TOKEN: str = 'cykubeauth'
 
     TEST_RUN_TIMEOUT: int = 30 * 60
@@ -23,6 +20,8 @@ class AppSettings(BaseSettings):
 
     TEST_MODE: bool = True
     PARALLELISM: int = 1
+
+    HUB_URL: str = 'http://localhost:5000'
 
     RESULTS_UI_URL: str = 'http://cypresshub.kisanhub.com'
     # Public face to NGINX server for screenshots and videos

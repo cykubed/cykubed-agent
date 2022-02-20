@@ -3,20 +3,50 @@ import re
 from email.utils import parseaddr
 
 import requests
+from fastapi_utils.session import FastAPISessionMaker
 
-from models import TestRun
+import crud
+from models import TestRun, PlatformEnum
 from settings import settings
 
 JIRA_HEADERS = {'Content-Type': 'application/json',
                 'Accept': 'application/json; charset=utf8'}
 
+sessionmaker = FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)
 
-def get_slack_user_id(email):
+
+def jira_settings():
+    with sessionmaker.context_session() as db:
+        return crud.get_platform_settings(db, PlatformEnum.JIRA)
+
+
+def jira_auth():
+    s = jira_settings()
+    if s:
+        return s.username, s.token
+
+
+def slack_headers():
+    with sessionmaker.context_session() as db:
+        s = crud.get_platform_settings(db, PlatformEnum.SLACK)
+        if s:
+            return {'Authorization': f'Bearer {s.token}',
+                    'Content-Type': 'application/json; charset=utf8'}
+
+
+def bitbucket_auth():
+    with sessionmaker.context_session() as db:
+        s = crud.get_platform_settings(db, PlatformEnum.JIRA)
+        if s:
+            return s.username, s.token
+
+
+def get_slack_user_id(email, headers=None):
+    if not headers:
+        headers = slack_headers()
     resp = requests.get("https://slack.com/api/users.lookupByEmail",
-                        headers=settings.slack_headers,
-                 params={'email': email}).json()
+                        headers=headers, params={'email': email}).json()
     if not resp['ok']:
-        print(resp)
         logging.warning(f"Unknown slack user with {email} - returning email")
         return email
     return resp['user']['id']
@@ -28,30 +58,42 @@ def create_user_notification(userid):
 
 def get_bitbucket_commit_info(repos: str, sha: str):
     resp = requests.get(f'https://api.bitbucket.org/2.0/repositories/{repos}/commit/{sha}',
-                        auth=settings.bitbucket_auth)
+                        auth=bitbucket_auth())
     if resp.status_code != 200:
         raise Exception(f"Failed to fetch information from Bitbucket: {resp.status_code}: {resp.json()}")
     return resp.json()
 
 
 def get_jira_user_details(account_id):
-    resp = requests.get(f'{settings.JIRA_URL}/rest/api/3/user',
+    jira = jira_settings()
+    resp = requests.get(f'{jira.url}/rest/api/3/user',
                         {'accountId': account_id},
-                        auth=settings.jira_auth)
+                        auth=(jira.username, jira.token))
     if resp.status_code != 200:
         raise Exception(f"Failed to fetch information from JIRA: {resp.status_code}: {resp.json()}")
     return resp.json()
 
 
-def get_jira_ticket_link(message):
+def get_jira_ticket_link(message, jira=None):
+    if not jira:
+        jira = jira_settings()
+
     for issue_key in set(re.findall(r'([A-Z]{2,5}-[0-9]{1,5})', message)):
-        r = requests.get(f'{settings.JIRA_URL}/rest/api/3/issue/{issue_key}', auth=settings.jira_auth)
+        r = requests.get(f'{jira.url}/rest/api/3/issue/{issue_key}', auth=(jira.username, jira.token))
         if r.status_code == 200:
-            return f'{settings.JIRA_URL}/browse/{issue_key}'
+            return f'{jira.url}/browse/{issue_key}'
 
 
 def get_bitbucket_details(repos: str, branch: str, sha: str):
-    commit = get_bitbucket_commit_info(repos, sha)
+
+    bbauth = bitbucket_auth()
+    jira = jira_settings()
+
+    resp = requests.get(f'https://api.bitbucket.org/2.0/repositories/{repos}/commit/{sha}', auth=bbauth)
+    if resp.status_code != 200:
+        raise Exception(f"Failed to fetch information from Bitbucket: {resp.status_code}: {resp.json()}")
+    commit = resp.json()
+
     user = get_jira_user_details(commit['author']['user']['account_id'])
     ret = {
         'commit_summary': commit['summary']['raw'],
@@ -59,16 +101,17 @@ def get_bitbucket_details(repos: str, branch: str, sha: str):
         'avatar': user['avatarUrls']['48x48'],
         'author': user['displayName']
     }
-    # get the author name so we can find a Slack handle
+    # get the author name, so we can find a Slack handle
     name, email = parseaddr(commit['author']['raw'])
     if email:
-        ret['author_slack_id'] = get_slack_user_id(email)
+        slack = slack_headers()
+        if slack:
+            ret['author_slack_id'] = get_slack_user_id(email, slack)
 
     # look for open PRs
-    print(branch)
     resp = requests.get(f'https://api.bitbucket.org/2.0/repositories/{repos}/pullrequests',
                         params={'q': f'source.branch.name=\"{branch}\"', 'state': 'OPEN'},
-                        auth=settings.bitbucket_auth)
+                        auth=bbauth)
     pr_title = None
     if resp.status_code == 200:
         prdata = resp.json()
@@ -76,10 +119,10 @@ def get_bitbucket_details(repos: str, branch: str, sha: str):
             ret['pull_request_link'] = prdata['values'][0]['links']['html']['href']
             pr_title = prdata['values'][0]['title']
 
-    ticket_link = get_jira_ticket_link(branch)
+    ticket_link = get_jira_ticket_link(branch, jira)
     if not ticket_link and pr_title:
         # check PR title
-        ticket_link = get_jira_ticket_link(pr_title)
+        ticket_link = get_jira_ticket_link(pr_title, jira)
 
     if ticket_link:
         ret['jira_ticket'] = ticket_link
