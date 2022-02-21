@@ -17,6 +17,7 @@ mysqlclient = "*"
 google-cloud-container = "*"
 kubernetes = "*"
 uvicorn = {extras = ["standard"], version = "*"}
+aiohttp = {extras = ["speedups"], version = "*"}
 ujson = "*"
 fastapi = "*"
 fastapi-utils = "*"

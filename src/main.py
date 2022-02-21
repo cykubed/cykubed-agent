@@ -6,6 +6,8 @@ import tarfile
 from io import BytesIO
 from typing import List, Any, AnyStr, Dict
 
+import aiohttp
+from aiohttp import BasicAuth
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi_utils.session import FastAPISessionMaker
 from fastapi_utils.tasks import repeat_every
@@ -30,7 +32,8 @@ app = FastAPI()
 
 origins = [
     'http://localhost:4201',
-    'https://cypresshub.kisanhub.com'
+    'https://cypresshub.kisanhub.com',
+    'https://cypresskube.ddns.net'
 ]
 
 app.add_middleware(
@@ -81,9 +84,16 @@ def get_bitbucket_settings(db: Session = Depends(get_db)):
     return crud.get_platform_settings(db, PlatformEnum.BITBUCKET)
 
 
-@app.put('/api/settings/bitbucket')
-def update_bitbucket_settings(s: schemas.GenericUserTokenAuth, db: Session = Depends(get_db)):
-    crud.update_bitbucket_settings(db, s)
+@app.post('/api/settings/bitbucket/{code}')
+async def update_bitbucket_settings(code: str, db: Session = Depends(get_db)):
+    async with aiohttp.ClientSession() as session:
+        async with session.post('https://bitbucket.org/site/oauth2/access_token',
+                                data={'code': code,
+                                      'grant_type': 'authorization_code'},
+                                auth=BasicAuth(settings.BITBUCKET_CLIENT_ID, settings.BITBUCKET_SECRET)) as resp:
+            ret = (await resp.json())
+            print(ret)
+
     return {'message': 'OK'}
 
 

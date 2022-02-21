@@ -94,3 +94,11 @@ class PlatformSettingsModel(Base):
     url = Column(String(255), nullable=True)
     username = Column(String(64), nullable=True)
     token = Column(String(255), nullable=True)
+
+
+class OAuthToken(Base):
+    __tablename__ = 'oauth_token'
+    platform_id = Column(Enum(PlatformEnum), primary_key=True, unique=True)
+    access_token = Column(String(255))
+    refresh_token = Column(String(255))
+    expiry = Column(DateTime)

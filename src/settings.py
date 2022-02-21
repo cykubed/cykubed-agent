@@ -13,6 +13,9 @@ class AppSettings(BaseSettings):
     REDIS_HOST: str = 'localhost'
     CYPRESSHUB_DATABASE_URL: str = 'sqlite:///:memory:'
 
+    BITBUCKET_CLIENT_ID = '9ePNXdCRCdpcUjf4nz'
+    BITBUCKET_SECRET = 'fAxQcde2WEqGZL3Gjsda9HTn2GrWvsJh'
+
     BUILD_TIMEOUT: int = 900
     NPM_CACHE_DIR = '/var/lib/cypresshub/npm-cache'
     DIST_DIR = '/var/lib/cypresshub/dist-cache'
