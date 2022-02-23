@@ -3,6 +3,7 @@ import logging
 import os
 import shutil
 import tarfile
+from datetime import timedelta
 from io import BytesIO
 from typing import List, Any, AnyStr, Dict
 
@@ -14,7 +15,6 @@ from fastapi_utils.tasks import repeat_every
 from loguru import logger
 from sqlalchemy.orm import Session
 from starlette.middleware.cors import CORSMiddleware
-from starlette.responses import PlainTextResponse
 
 import crud
 import jobs
@@ -25,6 +25,7 @@ from crud import TestRunParams
 from models import get_db, TestRun, PlatformEnum
 from notify import notify
 from settings import settings
+from utils import now
 from worker import app as celeryapp
 
 sessionmaker = FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)
@@ -46,19 +47,19 @@ app.add_middleware(
 )
 
 
-@app.middleware('http')
-async def verify_auth_token(request: Request, call_next):
-    if request.url.path != '/hc' and not request.url.path.startswith('/testrun') and \
-            request.method != 'OPTIONS':
-        if "Authorization" not in request.headers:
-            return PlainTextResponse('Missing auth token', status_code=401)
-        auth = request.headers["Authorization"].split(' ')
-        if len(auth) != 2 or auth[0] != 'Token':
-            return PlainTextResponse('Invalid authorization header', status_code=401)
-        if auth[1] != settings.API_TOKEN:
-            return PlainTextResponse('Invalid token', status_code=401)
-
-    return await call_next(request)
+# @app.middleware('http')
+# async def verify_auth_token(request: Request, call_next):
+#     if request.url.path != '/hc' and not request.url.path.startswith('/testrun') and \
+#             request.method != 'OPTIONS':
+#         if "Authorization" not in request.headers:
+#             return PlainTextResponse('Missing auth token', status_code=401)
+#         auth = request.headers["Authorization"].split(' ')
+#         if len(auth) != 2 or auth[0] != 'Token':
+#             return PlainTextResponse('Invalid authorization header', status_code=401)
+#         if auth[1] != settings.API_TOKEN:
+#             return PlainTextResponse('Invalid token', status_code=401)
+#
+#     return await call_next(request)
 
 
 JSONObject = Dict[AnyStr, Any]
@@ -79,9 +80,14 @@ def get_all_settings(db: Session = Depends(get_db)):
     return crud.get_all_settings(db)
 
 
-@app.get('/api/settings/bitbucket', response_model=schemas.GenericUserTokenAuth)
+@app.get('/api/settings/bitbucket-connected', response_model=bool)
 def get_bitbucket_settings(db: Session = Depends(get_db)):
-    return crud.get_platform_settings(db, PlatformEnum.BITBUCKET)
+    return crud.is_connected_to_platform(db, PlatformEnum.BITBUCKET)
+
+
+@app.post('/api/settings/bitbucket/disconnect')
+def disconnect_bitbucket(db: Session = Depends(get_db)):
+    crud.remove_oauth_token(db, PlatformEnum.BITBUCKET)
 
 
 @app.post('/api/settings/bitbucket/{code}')
@@ -91,20 +97,16 @@ async def update_bitbucket_settings(code: str, db: Session = Depends(get_db)):
                                 data={'code': code,
                                       'grant_type': 'authorization_code'},
                                 auth=BasicAuth(settings.BITBUCKET_CLIENT_ID, settings.BITBUCKET_SECRET)) as resp:
+            if resp.status != 200:
+                raise HTTPException(status_code=400, detail=await resp.json())
             ret = (await resp.json())
-            print(ret)
+            expiry = now() + timedelta(minutes=ret['expires_in'])
+            crud.update_oauth_token(db,
+                                    PlatformEnum.BITBUCKET,
+                                    access_token=ret['access_token'],
+                                    refresh_token=ret['refresh_token'],
+                                    expiry=expiry)
 
-    return {'message': 'OK'}
-
-
-@app.get('/api/settings/jira', response_model=schemas.GenericUserTokenAuth)
-def get_bitbucket_settings(db: Session = Depends(get_db)):
-    return crud.get_platform_settings(db, PlatformEnum.JIRA)
-
-
-@app.put('/api/settings/jira')
-def update_bitbucket_settings(s: schemas.GenericUserTokenAuth, db: Session = Depends(get_db)):
-    crud.update_jira_settings(db, s)
     return {'message': 'OK'}
 
 

@@ -6,7 +6,7 @@ from sqlalchemy import and_
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from models import TestRun, SpecFile, PlatformEnum, PlatformSettingsModel, Project
+from models import TestRun, SpecFile, PlatformEnum, PlatformSettingsModel, Project, OAuthToken
 from schemas import Status, GenericUserTokenAuth, AllSettings
 from utils import now
 
@@ -184,9 +184,17 @@ def get_platform_settings(db: Session, platform_id: PlatformEnum) -> PlatformSet
     return db.query(PlatformSettingsModel).filter_by(platform_id=platform_id).one_or_none()
 
 
+def get_platform_oauth(db: Session, platform_id: PlatformEnum) -> OAuthToken:
+    return db.query(OAuthToken).filter_by(platform_id=platform_id).one_or_none();
+
+
+def is_connected_to_platform(db: Session, platform_id: PlatformEnum) -> bool:
+    return get_platform_oauth(db, platform_id) is not None
+
+
 def update_user_auth_platform_settings(db: Session, settings: GenericUserTokenAuth,
                                        platform_id: PlatformEnum):
-    s = db.query(PlatformSettingsModel).filter_by(platform_id=platform_id).one_or_one()
+    s = db.query(PlatformSettingsModel).filter_by(platform_id=platform_id).one_or_none()
     if not s:
         s = PlatformSettingsModel(platform_id=platform_id)
     s.url = settings.url
@@ -196,12 +204,24 @@ def update_user_auth_platform_settings(db: Session, settings: GenericUserTokenAu
     db.commit()
 
 
-def update_bitbucket_settings(db: Session, settings: GenericUserTokenAuth):
-    return update_user_auth_platform_settings(db, settings, PlatformEnum.BITBUCKET)
+def update_oauth_token(db: Session, platform: PlatformEnum,
+                       access_token: str, refresh_token: str, expiry: int) -> OAuthToken:
+    s = db.query(OAuthToken).filter_by(platform_id=platform).one_or_none()
+    if not s:
+        s = OAuthToken(platform_id=platform)
+    s.access_token = access_token
+    s.refresh_token = refresh_token
+    s.expiry = expiry
+    db.add(s)
+    db.commit()
+    return s
 
 
-def update_jira_settings(db: Session, settings: GenericUserTokenAuth):
-    return update_user_auth_platform_settings(db, settings, PlatformEnum.JIRA)
+def remove_oauth_token(db: Session, platform_id: PlatformEnum):
+    s = db.query(OAuthToken).filter_by(platform_id=platform_id).one_or_none()
+    if s:
+        db.delete(s)
+        db.commit()
 
 
 def update_slack_token(db: Session, token: str):

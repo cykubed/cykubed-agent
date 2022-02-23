@@ -1,5 +1,6 @@
 import logging
 import re
+from datetime import timedelta
 from email.utils import parseaddr
 
 import requests
@@ -8,11 +9,17 @@ from fastapi_utils.session import FastAPISessionMaker
 import crud
 from models import TestRun, PlatformEnum
 from settings import settings
+from utils import now
 
 JIRA_HEADERS = {'Content-Type': 'application/json',
                 'Accept': 'application/json; charset=utf8'}
 
+OAUTH_EXPIRY_BUFFER_MINUTES = 10
+
 sessionmaker = FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)
+
+class AuthException(Exception):
+    pass
 
 
 def jira_settings():
@@ -34,11 +41,27 @@ def slack_headers():
                     'Content-Type': 'application/json; charset=utf8'}
 
 
-def bitbucket_auth():
+def bitbucket_request(url, method='GET', **kwargs):
     with sessionmaker.context_session() as db:
-        s = crud.get_platform_settings(db, PlatformEnum.JIRA)
-        if s:
-            return s.username, s.token
+        auth = crud.get_platform_oauth(db, PlatformEnum.BITBUCKET)
+        if not auth:
+            raise AuthException("Bitbucket auth failed")
+        if auth.expiry < now() + timedelta(minutes=OAUTH_EXPIRY_BUFFER_MINUTES):
+            # expires in the next 10 minutes (or already expired): refresh it
+            resp = requests.post('https://bitbucket.org/site/oauth2/access_token',
+                                 data={'refresh_token': auth.refresh_token,
+                                       'grant_type': 'refresh_token'},
+                                 auth=(settings.BITBUCKET_CLIENT_ID, settings.BITBUCKET_SECRET))
+            if not resp.status_code == 200:
+                raise AuthException("Failed to refresh Bitbucket token")
+            ret = resp.json()
+            expiry = now() + timedelta(minutes=ret['expires_in'])
+            auth = crud.update_oauth_token(db,
+                                           PlatformEnum.BITBUCKET,
+                                           access_token=ret['access_token'],
+                                           refresh_token=ret['refresh_token'],
+                                           expiry=expiry)
+        return requests.request(method, url, headers={'Authorization': f'Bearer {auth.access_token}'}, **kwargs)
 
 
 def get_slack_user_id(email, headers=None):
@@ -57,8 +80,7 @@ def create_user_notification(userid):
 
 
 def get_bitbucket_commit_info(repos: str, sha: str):
-    resp = requests.get(f'https://api.bitbucket.org/2.0/repositories/{repos}/commit/{sha}',
-                        auth=bitbucket_auth())
+    resp = bitbucket_request(f'https://api.bitbucket.org/2.0/repositories/{repos}/commit/{sha}')
     if resp.status_code != 200:
         raise Exception(f"Failed to fetch information from Bitbucket: {resp.status_code}: {resp.json()}")
     return resp.json()
@@ -86,10 +108,9 @@ def get_jira_ticket_link(message, jira=None):
 
 def get_bitbucket_details(repos: str, branch: str, sha: str):
 
-    bbauth = bitbucket_auth()
     jira = jira_settings()
 
-    resp = requests.get(f'https://api.bitbucket.org/2.0/repositories/{repos}/commit/{sha}', auth=bbauth)
+    resp = bitbucket_request(f'https://api.bitbucket.org/2.0/repositories/{repos}/commit/{sha}')
     if resp.status_code != 200:
         raise Exception(f"Failed to fetch information from Bitbucket: {resp.status_code}: {resp.json()}")
     commit = resp.json()
@@ -109,9 +130,8 @@ def get_bitbucket_details(repos: str, branch: str, sha: str):
             ret['author_slack_id'] = get_slack_user_id(email, slack)
 
     # look for open PRs
-    resp = requests.get(f'https://api.bitbucket.org/2.0/repositories/{repos}/pullrequests',
-                        params={'q': f'source.branch.name=\"{branch}\"', 'state': 'OPEN'},
-                        auth=bbauth)
+    resp = bitbucket_request(f'https://api.bitbucket.org/2.0/repositories/{repos}/pullrequests',
+                             params={'q': f'source.branch.name=\"{branch}\"', 'state': 'OPEN'})
     pr_title = None
     if resp.status_code == 200:
         prdata = resp.json()
@@ -149,9 +169,10 @@ def set_bitbucket_build_status(tr: TestRun):
 
     if not state or description:
         raise ValueError("Invalid state/description")
-    requests.post(f'https://api.bitbucket.org/2.0/repositories/{tr.repos}/commit/{tr.sha}/statuses/build/',
-                  data={'key': 'Cypress tests',
-                        'state': state,
-                        'description': description,
-                        'url': f'{settings.HUB_URL}/results/{tr.id}'})
+    bitbucket_request(f'https://api.bitbucket.org/2.0/repositories/{tr.repos}/commit/{tr.sha}/statuses/build/',
+                      'POST',
+                      data={'key': 'Cypress tests',
+                            'state': state,
+                            'description': description,
+                            'url': f'{settings.HUB_URL}/results/{tr.id}'})
 
