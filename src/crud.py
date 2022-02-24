@@ -1,15 +1,18 @@
 from datetime import datetime, timedelta
 from typing import Optional
 
+from fastapi_utils.session import FastAPISessionMaker
 from pydantic import BaseModel
 from sqlalchemy import and_
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from models import TestRun, SpecFile, PlatformEnum, PlatformSettingsModel, Project, OAuthToken
-from schemas import Status, GenericUserTokenAuth, AllSettings
+from models import TestRun, SpecFile, PlatformEnum, Project, OAuthToken
+from schemas import Status
+from settings import settings
 from utils import now
 
+sessionmaker = FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)
 
 class TestRunParams(BaseModel):
     repos: str
@@ -163,52 +166,19 @@ def apply_timeouts(db: Session, test_run_timeout: int, spec_file_timeout: int):
     db.commit()
 
 
-def get_all_settings(db: Session) -> AllSettings:
-    s = AllSettings()
-    bb = get_platform_settings(db, PlatformEnum.BITBUCKET)
-    if bb:
-        s.bitbucket = bb
-
-    jira = get_platform_settings(db, PlatformEnum.JIRA)
-    if jira:
-        s.jira = jira
-
-    slack = get_platform_settings(db, PlatformEnum.SLACK)
-    if slack:
-        s.slack_token = slack.token
-
-    return s
+def get_platform_oauth(db: Session, platform: PlatformEnum) -> OAuthToken:
+    return db.query(OAuthToken).filter_by(platform=platform).one_or_none()
 
 
-def get_platform_settings(db: Session, platform_id: PlatformEnum) -> PlatformSettingsModel:
-    return db.query(PlatformSettingsModel).filter_by(platform_id=platform_id).one_or_none()
-
-
-def get_platform_oauth(db: Session, platform_id: PlatformEnum) -> OAuthToken:
-    return db.query(OAuthToken).filter_by(platform_id=platform_id).one_or_none();
-
-
-def is_connected_to_platform(db: Session, platform_id: PlatformEnum) -> bool:
-    return get_platform_oauth(db, platform_id) is not None
-
-
-def update_user_auth_platform_settings(db: Session, settings: GenericUserTokenAuth,
-                                       platform_id: PlatformEnum):
-    s = db.query(PlatformSettingsModel).filter_by(platform_id=platform_id).one_or_none()
-    if not s:
-        s = PlatformSettingsModel(platform_id=platform_id)
-    s.url = settings.url
-    s.username = settings.username
-    s.token = settings.token
-    db.add(s)
-    db.commit()
+def is_connected_to_platform(db: Session, platform: PlatformEnum) -> bool:
+    return get_platform_oauth(db, platform) is not None
 
 
 def update_oauth_token(db: Session, platform: PlatformEnum,
                        access_token: str, refresh_token: str, expiry: int) -> OAuthToken:
-    s = db.query(OAuthToken).filter_by(platform_id=platform).one_or_none()
+    s = db.query(OAuthToken).filter_by(platform=platform).one_or_none()
     if not s:
-        s = OAuthToken(platform_id=platform)
+        s = OAuthToken(platform=platform)
     s.access_token = access_token
     s.refresh_token = refresh_token
     s.expiry = expiry
@@ -217,17 +187,12 @@ def update_oauth_token(db: Session, platform: PlatformEnum,
     return s
 
 
-def remove_oauth_token(db: Session, platform_id: PlatformEnum):
-    s = db.query(OAuthToken).filter_by(platform_id=platform_id).one_or_none()
+def remove_oauth_token(db: Session, platform: PlatformEnum):
+    s = db.query(OAuthToken).filter_by(platform=platform).one_or_none()
     if s:
         db.delete(s)
         db.commit()
 
 
-def update_slack_token(db: Session, token: str):
-    s = db.query(PlatformSettingsModel).filter_by(platform_id=PlatformEnum.SLACK).one_or_one()
-    if not s:
-        s = PlatformSettingsModel(platform_id=PlatformEnum.SLACK)
-    s.token = token
-    db.add(s)
-    db.commit()
+def get_all_integrations(db: Session):
+    return db.query(OAuthToken).all()

@@ -102,8 +102,18 @@ class GenericUserTokenAuth(BaseModel):
         orm_mode = True
 
 
+class OAuthDetails(BaseModel):
+    platform: PlatformEnum
+    access_token: str
+    refresh_token: str
+
+    class Config:
+        orm_mode = True
+
+
 class Project(BaseModel):
     id: int
+    name: str
     platform: PlatformEnum
     url: str
 

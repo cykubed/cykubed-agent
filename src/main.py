@@ -22,6 +22,7 @@ import schemas
 import settings
 from build import delete_old_dists
 from crud import TestRunParams
+from integration import get_matching_repositories
 from models import get_db, TestRun, PlatformEnum
 from notify import notify
 from settings import settings
@@ -75,14 +76,15 @@ def health_check(db: Session = Depends(get_db)):
     return {'message': 'OK!'}
 
 
-@app.get('/api/settings', response_model=schemas.AllSettings)
-def get_all_settings(db: Session = Depends(get_db)):
-    return crud.get_all_settings(db)
+@app.get('/api/settings/integration', response_model=List[schemas.OAuthDetails])
+def get_all_intregations(db: Session = Depends(get_db)):
+    return crud.get_all_integrations(db)
 
 
-@app.get('/api/settings/bitbucket-connected', response_model=bool)
-def get_bitbucket_settings(db: Session = Depends(get_db)):
-    return crud.is_connected_to_platform(db, PlatformEnum.BITBUCKET)
+@app.get('/api/repositories/{platform}', response_model=List[str])
+def get_repositories(platform: PlatformEnum, q: str = ""):
+    # this will take a project ID shortly
+    return get_matching_repositories(platform, q)
 
 
 @app.post('/api/settings/bitbucket/disconnect')
@@ -107,18 +109,6 @@ async def update_bitbucket_settings(code: str, db: Session = Depends(get_db)):
                                     refresh_token=ret['refresh_token'],
                                     expiry=expiry)
 
-    return {'message': 'OK'}
-
-
-@app.get('/api/settings/slack', response_model=schemas.SimpleTokenAuth)
-def get_slack_settings(db: Session = Depends(get_db)):
-    s = crud.get_platform_settings(db, PlatformEnum.SLACK)
-    return schemas.SimpleTokenAuth(token=s.token)
-
-
-@app.put('/api/settings/slack')
-def update_slack_settings(s: schemas.SimpleTokenAuth, db: Session = Depends(get_db)):
-    s = crud.update_slack_token(db, s.token)
     return {'message': 'OK'}
 
 

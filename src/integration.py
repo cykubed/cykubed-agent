@@ -2,6 +2,7 @@ import logging
 import re
 from datetime import timedelta
 from email.utils import parseaddr
+from typing import List
 
 import requests
 from fastapi_utils.session import FastAPISessionMaker
@@ -148,6 +149,17 @@ def get_bitbucket_details(repos: str, branch: str, sha: str):
         ret['jira_ticket'] = ticket_link
 
     return ret
+
+
+def get_matching_repositories(platform: PlatformEnum, q: str) -> List[str]:
+    if platform == PlatformEnum.BITBUCKET:
+        resp = bitbucket_request('https://api.bitbucket.org/2.0/repositories/', params={
+            'q': f'full_name~"{q}"',
+            'fields': 'values.full_name',
+            'role': 'member'
+        })
+        return [x['full_name'] for x in resp.json()['values']]
+
 
 
 def set_bitbucket_build_status(tr: TestRun):

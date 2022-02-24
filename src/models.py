@@ -27,14 +27,15 @@ def _get_fastapi_sessionmaker() -> FastAPISessionMaker:
 
 
 class PlatformEnum(enum.Enum):
-    BITBUCKET = 1
-    JIRA = 2
-    SLACK = 3
+    BITBUCKET = 'bitbucket'
+    JIRA = 'jira'
+    SLACK = 'slack'
 
 
 class Project(Base):
     __tablename__ = 'project'
     id = Column(Integer, primary_key=True)
+    name = Column(String(255), nullable=True)
     url = Column(String(255), nullable=True)
     platform = Column(Enum(PlatformEnum))
 
@@ -88,17 +89,9 @@ class TestRun(Base):
         return self.project.url
 
 
-class PlatformSettingsModel(Base):
-    __tablename__ = 'platform_settings'
-    platform_id = Column(Enum(PlatformEnum), primary_key=True, unique=True)
-    url = Column(String(255), nullable=True)
-    username = Column(String(64), nullable=True)
-    token = Column(String(255), nullable=True)
-
-
 class OAuthToken(Base):
     __tablename__ = 'oauth_token'
-    platform_id = Column(Enum(PlatformEnum), primary_key=True, unique=True)
+    platform = Column(Enum(PlatformEnum), primary_key=True, unique=True)
     access_token = Column(String(255))
     refresh_token = Column(String(255))
     expiry = Column(DateTime)
