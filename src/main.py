@@ -87,9 +87,21 @@ def get_repositories(platform: PlatformEnum, q: str = ""):
     return get_matching_repositories(platform, q)
 
 
-@app.post('/api/settings/bitbucket/disconnect')
-def disconnect_bitbucket(db: Session = Depends(get_db)):
-    crud.remove_oauth_token(db, PlatformEnum.BITBUCKET)
+@app.post('/api/settings/:platform/disconnect')
+def disconnect_bitbucket(platform: PlatformEnum, db: Session = Depends(get_db)):
+    crud.remove_oauth_token(db, platform)
+
+
+async def update_oauth_token(platform: PlatformEnum, db: Session, resp):
+    if resp.status != 200:
+        raise HTTPException(status_code=400, detail=await resp.json())
+    ret = (await resp.json())
+    expiry = now() + timedelta(minutes=ret['expires_in'])
+    crud.update_oauth_token(db,
+                            platform,
+                            access_token=ret['access_token'],
+                            refresh_token=ret['refresh_token'],
+                            expiry=expiry)
 
 
 @app.post('/api/settings/bitbucket/{code}')
@@ -99,16 +111,21 @@ async def update_bitbucket_settings(code: str, db: Session = Depends(get_db)):
                                 data={'code': code,
                                       'grant_type': 'authorization_code'},
                                 auth=BasicAuth(settings.BITBUCKET_CLIENT_ID, settings.BITBUCKET_SECRET)) as resp:
-            if resp.status != 200:
-                raise HTTPException(status_code=400, detail=await resp.json())
-            ret = (await resp.json())
-            expiry = now() + timedelta(minutes=ret['expires_in'])
-            crud.update_oauth_token(db,
-                                    PlatformEnum.BITBUCKET,
-                                    access_token=ret['access_token'],
-                                    refresh_token=ret['refresh_token'],
-                                    expiry=expiry)
+            await update_oauth_token(PlatformEnum.BITBUCKET, db, resp)
 
+    return {'message': 'OK'}
+
+
+@app.post('/api/settings/jira/{code}')
+async def update_jira_settings(code: str, db: Session = Depends(get_db)):
+    async with aiohttp.ClientSession() as session:
+        async with session.post('https://auth.atlassian.com/oauth/token',
+                                data={'code': code,
+                                      'client_id': settings.JIRA_CLIENT_ID,
+                                      'client_secret': settings.JIRA_SECRET,
+                                      'redirect_uri': settings.CYKUBE_APP_URL,
+                                      'grant_type': 'authorization_code'}) as resp:
+            await update_oauth_token(PlatformEnum.JIRA, db, resp)
     return {'message': 'OK'}
 
 

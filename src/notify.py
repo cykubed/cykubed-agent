@@ -67,7 +67,7 @@ def notify_fixed(results: Results):
             "text": {
                 "type": "mrkdwn",
                 "text": PASSED.format(results=results,
-                                      hub_url=settings.RESULTS_UI_URL,
+                                      hub_url=settings.CYKUBE_APP_URL,
                                       testrun=results.testrun,
                                       user=create_user_notification(testrun.author_slack_id))
             },
@@ -86,7 +86,7 @@ def notify_failed(results: Results):
     testrun = results.testrun
     sha = testrun.sha
 
-    text = BUILD_FAIL.format(hub_url=settings.RESULTS_UI_URL,
+    text = BUILD_FAIL.format(hub_url=settings.CYKUBE_APP_URL,
                              results=results,
                              user=create_user_notification(testrun.author_slack_id),
                              short_sha=sha[:8],

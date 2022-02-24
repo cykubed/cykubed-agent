@@ -92,6 +92,6 @@ class TestRun(Base):
 class OAuthToken(Base):
     __tablename__ = 'oauth_token'
     platform = Column(Enum(PlatformEnum), primary_key=True, unique=True)
-    access_token = Column(String(255))
-    refresh_token = Column(String(255))
+    access_token = Column(String(1024))
+    refresh_token = Column(String(1024))
     expiry = Column(DateTime)
