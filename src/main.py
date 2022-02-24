@@ -129,6 +129,19 @@ async def update_jira_settings(code: str, db: Session = Depends(get_db)):
     return {'message': 'OK'}
 
 
+@app.post('/api/settings/slack/{code}')
+async def update_slack_settings(code: str, db: Session = Depends(get_db)):
+    async with aiohttp.ClientSession() as session:
+        async with session.post('https://slack.com/oauth/authorize',
+                                data={'code': code,
+                                      'client_id': settings.SLACK_CLIENT_ID,
+                                      'client_secret': settings.SLACK_SECRET,
+                                      'redirect_uri': settings.CYKUBE_APP_URL,
+                                      'grant_type': 'authorization_code'}) as resp:
+            await update_oauth_token(PlatformEnum.JIRA, db, resp)
+    return {'message': 'OK'}
+
+
 @app.get('/api/project', response_model=List[schemas.Project])
 def get_projects(db: Session = Depends(get_db)):
     return crud.get_projects(db)

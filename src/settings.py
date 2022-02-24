@@ -19,6 +19,9 @@ class AppSettings(BaseSettings):
     JIRA_CLIENT_ID = '2tR4DvNoAQejskUo6CeW0NKs95kkiDFm'
     JIRA_SECRET = 'ClBhi7ln8BcliVNxinZ2-Hp7bDM5fR3Et3MyOhMI2uKGbEZ20ZwnAVnzPuph-ajn'
 
+    SLACK_CLIENT_ID = '3153511369013.3158744655460'
+    SLACK_SECRET = '068e3008911d00d7ba83c3751feb72c0'
+
     BUILD_TIMEOUT: int = 900
     NPM_CACHE_DIR = '/var/lib/cypresshub/npm-cache'
     DIST_DIR = '/var/lib/cypresshub/dist-cache'
@@ -29,7 +32,8 @@ class AppSettings(BaseSettings):
 
     HUB_URL: str = 'http://localhost:5000'
 
-    CYKUBE_APP_URL: str = 'http://localhost:4201'
+    # CYKUBE_APP_URL: str = 'http://localhost:4201'
+    CYKUBE_APP_URL: str = 'https://cypresskube.ddns.net'
     # Public face to NGINX server for screenshots and videos
     RESULT_URL: str = 'http://192.168.49.2:32600/results'
     DIST_URL: str = 'http://cypresshub-external:5001/dist-cache'
