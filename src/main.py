@@ -15,6 +15,7 @@ from fastapi_utils.tasks import repeat_every
 from loguru import logger
 from sqlalchemy.orm import Session
 from starlette.middleware.cors import CORSMiddleware
+from starlette.responses import PlainTextResponse
 
 import crud
 import jobs
@@ -48,19 +49,19 @@ app.add_middleware(
 )
 
 
-# @app.middleware('http')
-# async def verify_auth_token(request: Request, call_next):
-#     if request.url.path != '/hc' and not request.url.path.startswith('/testrun') and \
-#             request.method != 'OPTIONS':
-#         if "Authorization" not in request.headers:
-#             return PlainTextResponse('Missing auth token', status_code=401)
-#         auth = request.headers["Authorization"].split(' ')
-#         if len(auth) != 2 or auth[0] != 'Token':
-#             return PlainTextResponse('Invalid authorization header', status_code=401)
-#         if auth[1] != settings.API_TOKEN:
-#             return PlainTextResponse('Invalid token', status_code=401)
-#
-#     return await call_next(request)
+@app.middleware('http')
+async def verify_auth_token(request: Request, call_next):
+    if request.url.path != '/hc' and not request.url.path.startswith('/testrun') and \
+            request.method != 'OPTIONS':
+        if "Authorization" not in request.headers:
+            return PlainTextResponse('Missing auth token', status_code=401)
+        auth = request.headers["Authorization"].split(' ')
+        if len(auth) != 2 or auth[0] != 'Token':
+            return PlainTextResponse('Invalid authorization header', status_code=401)
+        if auth[1] != settings.API_TOKEN:
+            return PlainTextResponse('Invalid token', status_code=401)
+
+    return await call_next(request)
 
 
 JSONObject = Dict[AnyStr, Any]
@@ -76,18 +77,18 @@ def health_check(db: Session = Depends(get_db)):
     return {'message': 'OK!'}
 
 
-@app.get('/api/settings/integration', response_model=List[schemas.OAuthDetails])
+@app.get('/hub/settings/integration', response_model=List[schemas.OAuthDetails])
 def get_all_intregations(db: Session = Depends(get_db)):
     return crud.get_all_integrations(db)
 
 
-@app.get('/api/repositories/{platform}', response_model=List[str])
+@app.get('/hub/repositories/{platform}', response_model=List[str])
 def get_repositories(platform: PlatformEnum, q: str = ""):
     # this will take a project ID shortly
     return get_matching_repositories(platform, q)
 
 
-@app.post('/api/settings/disconnect/{platform}')
+@app.post('/hub/settings/disconnect/{platform}')
 def disconnect_platform(platform: PlatformEnum, db: Session = Depends(get_db)):
     crud.remove_oauth_token(db, platform)
     return {'message': 'OK'}
@@ -105,7 +106,7 @@ async def update_oauth_token(platform: PlatformEnum, db: Session, resp):
                             expiry=expiry)
 
 
-@app.post('/api/settings/bitbucket/{code}')
+@app.post('/hub/settings/bitbucket/{code}')
 async def update_bitbucket_settings(code: str, db: Session = Depends(get_db)):
     async with aiohttp.ClientSession() as session:
         async with session.post('https://bitbucket.org/site/oauth2/access_token',
@@ -117,7 +118,7 @@ async def update_bitbucket_settings(code: str, db: Session = Depends(get_db)):
     return {'message': 'OK'}
 
 
-@app.post('/api/settings/jira/{code}')
+@app.post('/hub/settings/jira/{code}')
 async def update_jira_settings(code: str, db: Session = Depends(get_db)):
     async with aiohttp.ClientSession() as session:
         async with session.post('https://auth.atlassian.com/oauth/token',
@@ -130,10 +131,10 @@ async def update_jira_settings(code: str, db: Session = Depends(get_db)):
     return {'message': 'OK'}
 
 
-@app.post('/api/settings/slack/{code}')
+@app.post('/hub/settings/slack/{code}')
 async def update_slack_settings(code: str, db: Session = Depends(get_db)):
     async with aiohttp.ClientSession() as session:
-        async with session.post('https://slack.com/api/oauth.v2.access',
+        async with session.post('https://slack.com/hub/oauth.v2.access',
                                 data={'code': code,
                                       'client_id': settings.SLACK_CLIENT_ID,
                                       'client_secret': settings.SLACK_SECRET}) as resp:
@@ -141,29 +142,29 @@ async def update_slack_settings(code: str, db: Session = Depends(get_db)):
     return {'message': 'OK'}
 
 
-@app.get('/api/project', response_model=List[schemas.Project])
+@app.get('/hub/projects', response_model=List[schemas.Project])
 def get_projects(db: Session = Depends(get_db)):
     return crud.get_projects(db)
 
 
-@app.post('/api/project', response_model=schemas.Project)
+@app.post('/hub/project', response_model=schemas.Project)
 def create_project(project: schemas.Project, db: Session = Depends(get_db)):
     return crud.create_project(db, project)
 
 
-@app.get('/api/testrun/{id}', response_model=schemas.TestRun)
+@app.get('/hub/testrun/{id}', response_model=schemas.TestRun)
 def get_testrun(id: int,
                  db: Session = Depends(get_db)):
     return crud.get_testrun(db, id)
 
 
-@app.get('/api/testruns', response_model=List[schemas.TestRun])
+@app.get('/hub/testruns', response_model=List[schemas.TestRun])
 def get_testruns(page: int = 1, page_size: int = 50,
                 db: Session = Depends(get_db)):
     return crud.get_test_runs(db, page, page_size)
 
 
-@app.post('/api/bitbucket/webhook/{token}')
+@app.post('/hub/bitbucket/webhook/{token}')
 def bitbucket_webhook(token: str,
                       payload: JSONObject,
                       db: Session = Depends(get_db)):
@@ -192,7 +193,7 @@ def clear_results(sha: str):
     os.mkdir(rdir)
 
 
-@app.post('/api/start', response_model=schemas.TestRun)
+@app.post('/hub/start', response_model=schemas.TestRun)
 def start_testrun(params: TestRunParams, db: Session = Depends(get_db)):
     logger.info(f"Start test run {params.repos} {params.branch} {params.sha} {params.parallelism}")
     crud.cancel_previous_test_runs(db, params.sha, params.branch)
@@ -203,7 +204,7 @@ def start_testrun(params: TestRunParams, db: Session = Depends(get_db)):
     return tr
 
 
-@app.post('/api/cancel/{id}')
+@app.post('/hub/cancel/{id}')
 def cancel_testrun(id: int, db: Session = Depends(get_db)):
     tr = crud.get_testrun(db, id)
     if jobs.batchapi:
@@ -212,7 +213,7 @@ def cancel_testrun(id: int, db: Session = Depends(get_db)):
     return {'cancelled': 'OK'}
 
 
-@app.get('/api/testrun/{id}/logs')
+@app.get('/hub/testrun/{id}/logs')
 def get_testrun_logs(id: int,
                      offset: int = 0) -> str:
     logs = os.path.join(settings.DIST_DIR, f'{id}.log')
@@ -224,7 +225,7 @@ def get_testrun_logs(id: int,
         return f.read()
 
 
-@app.get('/api/testrun/{id}/result')
+@app.get('/hub/testrun/{id}/result')
 def get_testrun_result(id: int,
                        db: Session = Depends(get_db)
                        ) -> schemas.Results:
