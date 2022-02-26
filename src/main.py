@@ -87,9 +87,10 @@ def get_repositories(platform: PlatformEnum, q: str = ""):
     return get_matching_repositories(platform, q)
 
 
-@app.post('/api/settings/:platform/disconnect')
-def disconnect_bitbucket(platform: PlatformEnum, db: Session = Depends(get_db)):
+@app.post('/api/settings/disconnect/{platform}')
+def disconnect_platform(platform: PlatformEnum, db: Session = Depends(get_db)):
     crud.remove_oauth_token(db, platform)
+    return {'message': 'OK'}
 
 
 async def update_oauth_token(platform: PlatformEnum, db: Session, resp):
@@ -132,13 +133,11 @@ async def update_jira_settings(code: str, db: Session = Depends(get_db)):
 @app.post('/api/settings/slack/{code}')
 async def update_slack_settings(code: str, db: Session = Depends(get_db)):
     async with aiohttp.ClientSession() as session:
-        async with session.post('https://slack.com/oauth/authorize',
+        async with session.post('https://slack.com/api/oauth.v2.access',
                                 data={'code': code,
                                       'client_id': settings.SLACK_CLIENT_ID,
-                                      'client_secret': settings.SLACK_SECRET,
-                                      'redirect_uri': settings.CYKUBE_APP_URL,
-                                      'grant_type': 'authorization_code'}) as resp:
-            await update_oauth_token(PlatformEnum.JIRA, db, resp)
+                                      'client_secret': settings.SLACK_SECRET}) as resp:
+            await update_oauth_token(PlatformEnum.SLACK, db, resp)
     return {'message': 'OK'}
 
 
