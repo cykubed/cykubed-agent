@@ -7,8 +7,6 @@ from datetime import timedelta
 from io import BytesIO
 from typing import List, Any, AnyStr, Dict
 
-import aiohttp
-from aiohttp import BasicAuth
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi_utils.session import FastAPISessionMaker
 from fastapi_utils.tasks import repeat_every
@@ -23,7 +21,7 @@ import schemas
 import settings
 from build import delete_old_dists
 from crud import TestRunParams
-from integration import get_matching_repositories
+from integration import get_matching_repositories, fetch_settings_from_cykube
 from models import get_db, TestRun, PlatformEnum
 from notify import notify
 from settings import settings
@@ -47,6 +45,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Try to fetch latest settings
+fetch_settings_from_cykube()
 
 
 @app.middleware('http')
@@ -77,20 +78,15 @@ def health_check(db: Session = Depends(get_db)):
     return {'message': 'OK!'}
 
 
-@app.get('/hub/settings/integration', response_model=List[schemas.OAuthDetails])
-def get_all_intregations(db: Session = Depends(get_db)):
-    return crud.get_all_integrations(db)
-
-
-@app.get('/hub/repositories/{platform}', response_model=List[str])
+@app.get('/repositories/{platform}', response_model=List[str])
 def get_repositories(platform: PlatformEnum, q: str = ""):
     # this will take a project ID shortly
     return get_matching_repositories(platform, q)
 
 
-@app.post('/hub/settings/disconnect/{platform}')
-def disconnect_platform(platform: PlatformEnum, db: Session = Depends(get_db)):
-    crud.remove_oauth_token(db, platform)
+@app.post('/settings')
+def update_settings(s: schemas.SettingsModel, db: Session = Depends(get_db)):
+    crud.update_settings(db, s)
     return {'message': 'OK'}
 
 
@@ -106,65 +102,29 @@ async def update_oauth_token(platform: PlatformEnum, db: Session, resp):
                             expiry=expiry)
 
 
-@app.post('/hub/settings/bitbucket/{code}')
-async def update_bitbucket_settings(code: str, db: Session = Depends(get_db)):
-    async with aiohttp.ClientSession() as session:
-        async with session.post('https://bitbucket.org/site/oauth2/access_token',
-                                data={'code': code,
-                                      'grant_type': 'authorization_code'},
-                                auth=BasicAuth(settings.BITBUCKET_CLIENT_ID, settings.BITBUCKET_SECRET)) as resp:
-            await update_oauth_token(PlatformEnum.BITBUCKET, db, resp)
-
-    return {'message': 'OK'}
-
-
-@app.post('/hub/settings/jira/{code}')
-async def update_jira_settings(code: str, db: Session = Depends(get_db)):
-    async with aiohttp.ClientSession() as session:
-        async with session.post('https://auth.atlassian.com/oauth/token',
-                                data={'code': code,
-                                      'client_id': settings.JIRA_CLIENT_ID,
-                                      'client_secret': settings.JIRA_SECRET,
-                                      'redirect_uri': settings.CYKUBE_APP_URL,
-                                      'grant_type': 'authorization_code'}) as resp:
-            await update_oauth_token(PlatformEnum.JIRA, db, resp)
-    return {'message': 'OK'}
-
-
-@app.post('/hub/settings/slack/{code}')
-async def update_slack_settings(code: str, db: Session = Depends(get_db)):
-    async with aiohttp.ClientSession() as session:
-        async with session.post('https://slack.com/hub/oauth.v2.access',
-                                data={'code': code,
-                                      'client_id': settings.SLACK_CLIENT_ID,
-                                      'client_secret': settings.SLACK_SECRET}) as resp:
-            await update_oauth_token(PlatformEnum.SLACK, db, resp)
-    return {'message': 'OK'}
-
-
-@app.get('/hub/projects', response_model=List[schemas.Project])
+@app.get('/projects', response_model=List[schemas.ProjectModel])
 def get_projects(db: Session = Depends(get_db)):
     return crud.get_projects(db)
 
 
-@app.post('/hub/project', response_model=schemas.Project)
-def create_project(project: schemas.Project, db: Session = Depends(get_db)):
+@app.post('/project', response_model=schemas.ProjectModel)
+def create_project(project: schemas.ProjectModel, db: Session = Depends(get_db)):
     return crud.create_project(db, project)
 
 
-@app.get('/hub/testrun/{id}', response_model=schemas.TestRun)
+@app.get('/testrun/{id}', response_model=schemas.TestRun)
 def get_testrun(id: int,
                  db: Session = Depends(get_db)):
     return crud.get_testrun(db, id)
 
 
-@app.get('/hub/testruns', response_model=List[schemas.TestRun])
+@app.get('/testruns', response_model=List[schemas.TestRun])
 def get_testruns(page: int = 1, page_size: int = 50,
                 db: Session = Depends(get_db)):
     return crud.get_test_runs(db, page, page_size)
 
 
-@app.post('/hub/bitbucket/webhook/{token}')
+@app.post('/bitbucket/webhook/{token}')
 def bitbucket_webhook(token: str,
                       payload: JSONObject,
                       db: Session = Depends(get_db)):
@@ -193,7 +153,7 @@ def clear_results(sha: str):
     os.mkdir(rdir)
 
 
-@app.post('/hub/start', response_model=schemas.TestRun)
+@app.post('/start', response_model=schemas.TestRun)
 def start_testrun(params: TestRunParams, db: Session = Depends(get_db)):
     logger.info(f"Start test run {params.repos} {params.branch} {params.sha} {params.parallelism}")
     crud.cancel_previous_test_runs(db, params.sha, params.branch)
@@ -204,7 +164,7 @@ def start_testrun(params: TestRunParams, db: Session = Depends(get_db)):
     return tr
 
 
-@app.post('/hub/cancel/{id}')
+@app.post('/cancel/{id}')
 def cancel_testrun(id: int, db: Session = Depends(get_db)):
     tr = crud.get_testrun(db, id)
     if jobs.batchapi:
@@ -213,7 +173,7 @@ def cancel_testrun(id: int, db: Session = Depends(get_db)):
     return {'cancelled': 'OK'}
 
 
-@app.get('/hub/testrun/{id}/logs')
+@app.get('/testrun/{id}/logs')
 def get_testrun_logs(id: int,
                      offset: int = 0) -> str:
     logs = os.path.join(settings.DIST_DIR, f'{id}.log')
@@ -225,7 +185,7 @@ def get_testrun_logs(id: int,
         return f.read()
 
 
-@app.get('/hub/testrun/{id}/result')
+@app.get('/testrun/{id}/result')
 def get_testrun_result(id: int,
                        db: Session = Depends(get_db)
                        ) -> schemas.Results:

@@ -7,12 +7,14 @@ from sqlalchemy import and_
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+import schemas
 from models import TestRun, SpecFile, PlatformEnum, Project, OAuthToken
 from schemas import Status
 from settings import settings
 from utils import now
 
 sessionmaker = FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)
+
 
 class TestRunParams(BaseModel):
     repos: str
@@ -166,12 +168,16 @@ def apply_timeouts(db: Session, test_run_timeout: int, spec_file_timeout: int):
     db.commit()
 
 
-def get_platform_oauth(db: Session, platform: PlatformEnum) -> OAuthToken:
-    return db.query(OAuthToken).filter_by(platform=platform).one_or_none()
-
-
-def is_connected_to_platform(db: Session, platform: PlatformEnum) -> bool:
-    return get_platform_oauth(db, platform) is not None
+def update_standard_oauth_response(db: Session, resp, platform: PlatformEnum):
+    if not resp.status_code == 200:
+        raise Exception(f"Failed to refresh {platform} token")
+    ret = resp.json()
+    expiry = now() + timedelta(seconds=ret['expires_in'])
+    return update_oauth_token(db,
+                              platform,
+                              access_token=ret['access_token'],
+                              refresh_token=ret['refresh_token'],
+                              expiry=expiry)
 
 
 def update_oauth_token(db: Session, platform: PlatformEnum,
@@ -187,12 +193,28 @@ def update_oauth_token(db: Session, platform: PlatformEnum,
     return s
 
 
-def remove_oauth_token(db: Session, platform: PlatformEnum):
+def update_oauth(db: Session, platform: PlatformEnum, auth: schemas.OAuthDetailsModel):
     s = db.query(OAuthToken).filter_by(platform=platform).one_or_none()
-    if s:
-        db.delete(s)
-        db.commit()
+    if not auth:
+        if s:
+            db.delete(s)
+            db.commit()
+        return
+    if not s:
+        s = OAuthToken(platform=platform)
+    s.access_token = auth.access_token
+    s.refresh_token = auth.refresh_token
+    s.expiry = auth.expiry
+    db.add(s)
+    db.commit()
 
 
-def get_all_integrations(db: Session):
-    return db.query(OAuthToken).all()
+def update_settings(db: Session, s: schemas.SettingsModel):
+    update_oauth(db, PlatformEnum.BITBUCKET, s.bitbucket)
+    update_oauth(db, PlatformEnum.JIRA, s.jira)
+    update_oauth(db, PlatformEnum.SLACK, s.slack)
+
+
+def get_oauth(db: Session, platform: PlatformEnum) -> OAuthToken:
+    return db.query(OAuthToken).filter_by(platform=platform).one_or_none()
+

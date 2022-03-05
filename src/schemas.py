@@ -89,40 +89,26 @@ class Results(BaseModel):
     failures: int = 0
 
 
-class SimpleTokenAuth(BaseModel):
-    token: str
-
-
-class GenericUserTokenAuth(BaseModel):
-    url: str
-    username: str
-    token: str
-
-    class Config:
-        orm_mode = True
-
-
-class OAuthDetails(BaseModel):
-    platform: PlatformEnum
+class OAuthDetailsModel(BaseModel):
     access_token: str
     refresh_token: str
+    expiry: datetime
 
     class Config:
         orm_mode = True
 
 
-class Project(BaseModel):
-    id: int
-    name: str
+class ProjectModel(BaseModel):
     platform: PlatformEnum
+    name: str
     url: str
 
-
-class AllSettings(BaseModel):
-    bitbucket: Optional[GenericUserTokenAuth]
-    jira: Optional[GenericUserTokenAuth]
-    slack_token: Optional[str]
-
     class Config:
         orm_mode = True
+
+
+class SettingsModel(BaseModel):
+    bitbucket: Optional[OAuthDetailsModel]
+    jira: Optional[OAuthDetailsModel]
+    slack: Optional[OAuthDetailsModel]
 

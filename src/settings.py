@@ -1,9 +1,5 @@
 from pydantic import BaseSettings
 
-#
-# Most of this needs to move to the database
-#
-
 
 class AppSettings(BaseSettings):
     API_TOKEN: str = 'cykubeauth'
@@ -32,14 +28,15 @@ class AppSettings(BaseSettings):
 
     HUB_URL: str = 'http://localhost:5000'
 
-    # CYKUBE_APP_URL: str = 'http://localhost:4201'
-    CYKUBE_APP_URL: str = 'https://cypresskube.ddns.net'
+    CYKUBE_APP_URL: str = 'http://localhost:4201'
+    CYKUBE_MAIN_URL: str = 'http://localhost:5002'
+    # CYKUBE_APP_URL: str = 'https://cypresskube.ddns.net'
+
     # Public face to NGINX server for screenshots and videos
-    RESULT_URL: str = 'http://192.168.49.2:32600/results'
-    DIST_URL: str = 'http://cypresshub-external:5001/dist-cache'
+    RESULT_URL: str = 'http://localhost:5000/results'
+    DIST_URL: str = 'http://localhost:5000/dist-cache'
     CYPRESS_RUNNER_VERSION: str = '8.3.1-1.0'
     DIST_CACHE_TTL_HOURS: int = 365*24
 
 
 settings = AppSettings()
-

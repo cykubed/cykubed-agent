@@ -9,6 +9,7 @@ from fastapi_utils.session import FastAPISessionMaker
 
 import crud
 from models import TestRun, PlatformEnum
+from schemas import OAuthDetailsModel
 from settings import settings
 from utils import now
 
@@ -19,57 +20,87 @@ OAUTH_EXPIRY_BUFFER_MINUTES = 10
 
 sessionmaker = FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)
 
+
 class AuthException(Exception):
     pass
 
 
-def jira_settings():
-    with sessionmaker.context_session() as db:
-        return crud.get_platform_settings(db, PlatformEnum.JIRA)
-
-
-def jira_auth():
-    s = jira_settings()
-    if s:
-        return s.username, s.token
-
-
-def slack_headers():
-    with sessionmaker.context_session() as db:
-        s = crud.get_platform_settings(db, PlatformEnum.SLACK)
-        if s:
-            return {'Authorization': f'Bearer {s.token}',
-                    'Content-Type': 'application/json; charset=utf8'}
+def fetch_settings_from_cykube():
+    resp = requests.get(f'{settings.CYKUBE_MAIN_URL}/hub-settings',
+                        headers={'Authorization': f'Token {settings.API_TOKEN}'})
+    if resp.status_code != 200:
+        logging.error("Failed to contact cypresskube API server - cannot fetch settings")
+    else:
+        with sessionmaker.context_session() as db:
+            for platsettings in resp.json():
+                crud.update_oauth(db, platsettings['platform'],
+                                  OAuthDetailsModel(**platsettings))
 
 
 def bitbucket_request(url, method='GET', **kwargs):
     with sessionmaker.context_session() as db:
-        auth = crud.get_platform_oauth(db, PlatformEnum.BITBUCKET)
+        auth = crud.get_oauth(db, PlatformEnum.BITBUCKET)
         if not auth:
             raise AuthException("Bitbucket auth failed")
+
         if auth.expiry < now() + timedelta(minutes=OAUTH_EXPIRY_BUFFER_MINUTES):
             # expires in the next 10 minutes (or already expired): refresh it
             resp = requests.post('https://bitbucket.org/site/oauth2/access_token',
                                  data={'refresh_token': auth.refresh_token,
                                        'grant_type': 'refresh_token'},
                                  auth=(settings.BITBUCKET_CLIENT_ID, settings.BITBUCKET_SECRET))
-            if not resp.status_code == 200:
-                raise AuthException("Failed to refresh Bitbucket token")
-            ret = resp.json()
-            expiry = now() + timedelta(minutes=ret['expires_in'])
-            auth = crud.update_oauth_token(db,
-                                           PlatformEnum.BITBUCKET,
-                                           access_token=ret['access_token'],
-                                           refresh_token=ret['refresh_token'],
-                                           expiry=expiry)
-        return requests.request(method, url, headers={'Authorization': f'Bearer {auth.access_token}'}, **kwargs)
+            crud.update_standard_oauth_response(db, resp, PlatformEnum.BITBUCKET)
+        return requests.request(method, url, headers={
+            'Accept': 'application/json',
+            'Authorization': f'Bearer {auth.access_token}'}, **kwargs)
 
 
-def get_slack_user_id(email, headers=None):
-    if not headers:
-        headers = slack_headers()
-    resp = requests.get("https://slack.com/api/users.lookupByEmail",
-                        headers=headers, params={'email': email}).json()
+def slack_request(path, method='GET', **kwargs):
+    with sessionmaker.context_session() as db:
+        auth = crud.get_oauth(db, PlatformEnum.SLACK)
+        if not auth:
+            raise AuthException("Slack auth failed")
+
+        if auth.expiry < now() + timedelta(minutes=OAUTH_EXPIRY_BUFFER_MINUTES):
+            # expires in the next 10 minutes (or already expired): refresh it
+            resp = requests.post('https://slack.com/api/oauth.v2.exchange',
+                                 data={'client_id': settings.SLACK_CLIENT_ID,
+                                       'client_secret': settings.SLACK_SECRET,
+                                       'token': auth.refresh_token})
+            crud.update_standard_oauth_response(db, resp, PlatformEnum.SLACK)
+
+        return requests.request(method, f'https://slack.com/api/{path}',
+                                headers={
+                                    'Accept': 'application/json',
+                                    'Authorization': f'Bearer {auth.access_token}'}, **kwargs)
+
+
+def jira_request(path, method='GET', **kwargs):
+    with sessionmaker.context_session() as db:
+        auth = crud.get_oauth(db, PlatformEnum.JIRA)
+        if not auth:
+            raise AuthException("Jira auth failed")
+
+        if not auth.cloud_id:
+            raise AuthException("Jira needs a cloud_id")
+
+        if auth.expiry < now() + timedelta(minutes=OAUTH_EXPIRY_BUFFER_MINUTES):
+            # expires in the next 10 minutes (or already expired): refresh it
+            resp = requests.post('https://auth.atlassian.com/oauth/token',
+                                 data={'client_id': settings.JIRA_CLIENT_ID,
+                                       'client_secret': settings.JIRA_SECRET,
+                                       'refresh_token': auth.refresh_token})
+            crud.update_standard_oauth_response(db, resp, PlatformEnum.JIRA)
+
+        url = f'https://api.atlassian.com/ex/jira/{auth.cloud_id}/{path}'
+        return requests.request(method, url,
+                                headers={
+                                    'Accept': 'application/json',
+                                    'Authorization': f'Bearer {auth.access_token}'}, **kwargs)
+
+
+def get_slack_user_id(email):
+    resp = slack_request('users.lookupByEmail', params={'email': email}).json()
     if not resp['ok']:
         logging.warning(f"Unknown slack user with {email} - returning email")
         return email
@@ -88,22 +119,18 @@ def get_bitbucket_commit_info(repos: str, sha: str):
 
 
 def get_jira_user_details(account_id):
-    jira = jira_settings()
-    resp = requests.get(f'{jira.url}/rest/api/3/user',
-                        {'accountId': account_id},
-                        auth=(jira.username, jira.token))
+
+    resp = jira_request('/rest/api/3/user', params={'accountId': account_id})
     if resp.status_code != 200:
         raise Exception(f"Failed to fetch information from JIRA: {resp.status_code}: {resp.json()}")
     return resp.json()
 
 
-def get_jira_ticket_link(message, jira=None):
-    if not jira:
-        jira = jira_settings()
-
+def get_jira_ticket_link(message):
     for issue_key in set(re.findall(r'([A-Z]{2,5}-[0-9]{1,5})', message)):
-        r = requests.get(f'{jira.url}/rest/api/3/issue/{issue_key}', auth=(jira.username, jira.token))
+        r = jira_request(f'/rest/api/3/issue/{issue_key}')
         if r.status_code == 200:
+            #
             return f'{jira.url}/browse/{issue_key}'
 
 
@@ -126,9 +153,7 @@ def get_bitbucket_details(repos: str, branch: str, sha: str):
     # get the author name, so we can find a Slack handle
     name, email = parseaddr(commit['author']['raw'])
     if email:
-        slack = slack_headers()
-        if slack:
-            ret['author_slack_id'] = get_slack_user_id(email, slack)
+        ret['author_slack_id'] = get_slack_user_id(email)
 
     # look for open PRs
     resp = bitbucket_request(f'https://api.bitbucket.org/2.0/repositories/{repos}/pullrequests',
@@ -159,7 +184,6 @@ def get_matching_repositories(platform: PlatformEnum, q: str) -> List[str]:
             'role': 'member'
         })
         return [x['full_name'] for x in resp.json()['values']]
-
 
 
 def set_bitbucket_build_status(tr: TestRun):
