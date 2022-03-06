@@ -173,27 +173,15 @@ def update_standard_oauth_response(db: Session, resp, platform: PlatformEnum):
         raise Exception(f"Failed to refresh {platform} token")
     ret = resp.json()
     expiry = now() + timedelta(seconds=ret['expires_in'])
-    return update_oauth_token(db,
-                              platform,
-                              access_token=ret['access_token'],
-                              refresh_token=ret['refresh_token'],
-                              expiry=expiry)
+    return update_oauth(db,
+                        platform,
+                        OAuthToken(
+                            access_token=ret['access_token'],
+                            refresh_token=ret['refresh_token'],
+                            expiry=expiry))
 
 
-def update_oauth_token(db: Session, platform: PlatformEnum,
-                       access_token: str, refresh_token: str, expiry: int) -> OAuthToken:
-    s = db.query(OAuthToken).filter_by(platform=platform).one_or_none()
-    if not s:
-        s = OAuthToken(platform=platform)
-    s.access_token = access_token
-    s.refresh_token = refresh_token
-    s.expiry = expiry
-    db.add(s)
-    db.commit()
-    return s
-
-
-def update_oauth(db: Session, platform: PlatformEnum, auth: schemas.OAuthDetailsModel):
+def update_oauth(db: Session, platform: PlatformEnum, auth: schemas.OAuthDetailsModel = None):
     s = db.query(OAuthToken).filter_by(platform=platform).one_or_none()
     if not auth:
         if s:
@@ -205,6 +193,7 @@ def update_oauth(db: Session, platform: PlatformEnum, auth: schemas.OAuthDetails
     s.access_token = auth.access_token
     s.refresh_token = auth.refresh_token
     s.expiry = auth.expiry
+    s.url = auth.url
     db.add(s)
     db.commit()
 

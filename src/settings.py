@@ -9,6 +9,8 @@ class AppSettings(BaseSettings):
     REDIS_HOST: str = 'localhost'
     CYPRESSHUB_DATABASE_URL: str = 'sqlite:///:memory:'
 
+    OAUTH_EXPIRY_BUFFER_MINUTES = 5
+
     BITBUCKET_CLIENT_ID = '9ePNXdCRCdpcUjf4nz'
     BITBUCKET_SECRET = 'fAxQcde2WEqGZL3Gjsda9HTn2GrWvsJh'
 

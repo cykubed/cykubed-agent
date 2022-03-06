@@ -5,7 +5,7 @@ import requests
 from sqlalchemy.orm import Session
 
 import crud
-from integration import create_user_notification, slack_headers
+from integration.common import create_user_notification
 from schemas import Results
 from settings import settings
 

@@ -8,7 +8,7 @@ from fastapi_utils.session import FastAPISessionMaker
 import crud
 import jobs
 from build import clone_repos, get_specs, create_build
-from integration import get_bitbucket_details
+from integration.common import get_commit_details
 from models import PlatformEnum
 from settings import settings
 from utils import log
@@ -85,7 +85,7 @@ def clone_and_build(trid: int, parallelism: int = None,
                 return
 
             if bitbucket_auth:
-                info = get_bitbucket_details(repos, branch, sha)
+                info = get_commit_details(repos, branch, sha)
             else:
                 info = {}
 

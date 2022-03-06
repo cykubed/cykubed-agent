@@ -95,4 +95,7 @@ class OAuthToken(Base):
     access_token = Column(String(1024))
     refresh_token = Column(String(1024))
     expiry = Column(DateTime)
-    cloud_id = Column(String(1024), nullable=True)
+    url = Column(String(1024), nullable=True)
+
+
+sessionmaker = FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)

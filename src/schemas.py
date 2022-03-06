@@ -93,6 +93,7 @@ class OAuthDetailsModel(BaseModel):
     access_token: str
     refresh_token: str
     expiry: datetime
+    url: Optional[str]
 
     class Config:
         orm_mode = True

@@ -21,8 +21,9 @@ import schemas
 import settings
 from build import delete_old_dists
 from crud import TestRunParams
-from integration import get_matching_repositories, fetch_settings_from_cykube
-from models import get_db, TestRun, PlatformEnum
+from integration.bitbucket import get_matching_repositories
+from integration.common import fetch_settings_from_cykube
+from models import get_db, TestRun, PlatformEnum, OAuthToken
 from notify import notify
 from settings import settings
 from utils import now
@@ -95,11 +96,12 @@ async def update_oauth_token(platform: PlatformEnum, db: Session, resp):
         raise HTTPException(status_code=400, detail=await resp.json())
     ret = (await resp.json())
     expiry = now() + timedelta(minutes=ret['expires_in'])
-    crud.update_oauth_token(db,
-                            platform,
-                            access_token=ret['access_token'],
-                            refresh_token=ret['refresh_token'],
-                            expiry=expiry)
+    crud.update_oauth(db,
+                      platform,
+                      OAuthToken(
+                          access_token=ret['access_token'],
+                          refresh_token=ret['refresh_token'],
+                          expiry=expiry))
 
 
 @app.get('/projects', response_model=List[schemas.ProjectModel])
