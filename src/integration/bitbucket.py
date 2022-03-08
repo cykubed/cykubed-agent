@@ -1,5 +1,4 @@
 from datetime import timedelta
-from typing import List
 
 import requests
 
@@ -8,16 +7,6 @@ import integration.common
 from models import PlatformEnum, TestRun, sessionmaker
 from settings import settings
 from utils import now
-
-
-def get_matching_repositories(platform: PlatformEnum, q: str) -> List[str]:
-    if platform == PlatformEnum.BITBUCKET:
-        resp = bitbucket_request('https://api.bitbucket.org/2.0/repositories/', params={
-            'q': f'full_name~"{q}"',
-            'fields': 'values.full_name',
-            'role': 'member'
-        })
-        return [x['full_name'] for x in resp.json()['values']]
 
 
 def set_bitbucket_build_status(tr: TestRun):

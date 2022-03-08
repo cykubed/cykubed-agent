@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -14,6 +15,10 @@ from loguru import logger
 from sqlalchemy.orm import Session
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import PlainTextResponse
+from uvicorn.config import (
+    Config,
+)
+from uvicorn.server import Server, ServerState  # noqa: F401  # Used to be defined here.
 
 import crud
 import jobs
@@ -21,13 +26,13 @@ import schemas
 import settings
 from build import delete_old_dists
 from crud import TestRunParams
-from integration.bitbucket import get_matching_repositories
 from integration.common import fetch_settings_from_cykube
 from models import get_db, TestRun, PlatformEnum, OAuthToken
 from notify import notify
 from settings import settings
 from utils import now
 from worker import app as celeryapp
+from ws import connect_websocket
 
 sessionmaker = FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)
 app = FastAPI()
@@ -49,6 +54,9 @@ app.add_middleware(
 
 # Try to fetch latest settings
 fetch_settings_from_cykube()
+
+# connect to websocket
+connect_websocket()
 
 
 @app.middleware('http')
@@ -77,12 +85,6 @@ jobs.connect_k8()
 def health_check(db: Session = Depends(get_db)):
     crud.count_test_runs(db)
     return {'message': 'OK!'}
-
-
-@app.get('/repositories/{platform}', response_model=List[str])
-def get_repositories(platform: PlatformEnum, q: str = ""):
-    # this will take a project ID shortly
-    return get_matching_repositories(platform, q)
 
 
 @app.post('/settings')
@@ -316,12 +318,14 @@ def merge_results(testrun: TestRun) -> schemas.Results:
     return results
 
 
+
 @app.on_event("startup")
 @repeat_every(seconds=3000)
 def handle_timeouts():
     with sessionmaker.context_session() as db:
         crud.apply_timeouts(db, settings.TEST_RUN_TIMEOUT, settings.SPEC_FILE_TIMEOUT)
     delete_old_dists()
+
 
 #
 #
@@ -331,4 +335,28 @@ def handle_timeouts():
 #     create_report(key)
 #
 
+async def create_tasks():
+    config = Config(app, port=5000)
+    config.setup_event_loop()
+    server = Server(config=config)
+    t1 = asyncio.create_task(connect_websocket())
+    t2 = asyncio.create_task(server.serve())
+    await asyncio.gather(t1, t2)
 
+
+def run() -> None:
+    config = Config(app, port=5000)
+    server = Server(config=config)
+
+    config.setup_event_loop()
+    asyncio.run(server.serve())
+
+
+def run2():
+    asyncio.run(create_tasks())
+
+    # loop.run_forever()
+
+
+if __name__ == "__main__":
+    run2()
