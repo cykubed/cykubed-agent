@@ -7,8 +7,7 @@ from sqlalchemy import and_
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-import schemas
-from models import TestRun, SpecFile, PlatformEnum, Project, OAuthToken
+from models import TestRun, SpecFile
 from schemas import Status
 from settings import settings
 from utils import now
@@ -17,21 +16,11 @@ sessionmaker = FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)
 
 
 class TestRunParams(BaseModel):
-    repos: str
+    url: str
     sha: str
     branch: str
     parallelism: Optional[int]
     spec_filter: Optional[str]
-
-
-def get_projects(db: Session):
-    return db.query(Project).all()
-
-
-def create_project(db: Session, project: Project):
-    db.add(project)
-    db.commit()
-    return project
 
 
 def count_test_runs(db: Session) -> int:
@@ -51,17 +40,11 @@ def cancel_testrun(db: Session, tr: TestRun):
 
 def create_testrun(db: Session, params: TestRunParams, specs=None, **info) -> TestRun:
     tr = TestRun(started=now(),
-                 repos=params.repos,
+                 repos=params.url,
                  sha=params.sha,
                  active=True,
                  branch=params.branch,
-                 status=Status.building,
-                 commit_summary=info.get('commit_summary'),
-                 commit_link=info.get('commit_link'),
-                 avatar=info.get('avatar'),
-                 author=info.get('author'),
-                 author_slack_id=info.get('author_slack_id'),
-                 jira_ticket=info.get('jira_ticket'))
+                 status=Status.building)
     db.add(tr)
 
     if specs:
@@ -166,44 +149,3 @@ def apply_timeouts(db: Session, test_run_timeout: int, spec_file_timeout: int):
         spec.started = None
         db.add(spec)
     db.commit()
-
-
-def update_standard_oauth_response(db: Session, resp, platform: PlatformEnum):
-    if not resp.status_code == 200:
-        raise Exception(f"Failed to refresh {platform} token")
-    ret = resp.json()
-    expiry = now() + timedelta(seconds=ret['expires_in'])
-    return update_oauth(db,
-                        platform,
-                        OAuthToken(
-                            access_token=ret['access_token'],
-                            refresh_token=ret['refresh_token'],
-                            expiry=expiry))
-
-
-def update_oauth(db: Session, platform: PlatformEnum, auth: schemas.OAuthDetailsModel = None):
-    s = db.query(OAuthToken).filter_by(platform=platform).one_or_none()
-    if not auth:
-        if s:
-            db.delete(s)
-            db.commit()
-        return
-    if not s:
-        s = OAuthToken(platform=platform)
-    s.access_token = auth.access_token
-    s.refresh_token = auth.refresh_token
-    s.expiry = auth.expiry
-    s.url = auth.url
-    db.add(s)
-    db.commit()
-
-
-def update_settings(db: Session, s: schemas.SettingsModel):
-    update_oauth(db, PlatformEnum.BITBUCKET, s.bitbucket)
-    update_oauth(db, PlatformEnum.JIRA, s.jira)
-    update_oauth(db, PlatformEnum.SLACK, s.slack)
-
-
-def get_oauth(db: Session, platform: PlatformEnum) -> OAuthToken:
-    return db.query(OAuthToken).filter_by(platform=platform).one_or_none()
-

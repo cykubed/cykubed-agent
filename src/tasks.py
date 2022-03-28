@@ -8,8 +8,6 @@ from fastapi_utils.session import FastAPISessionMaker
 import crud
 import jobs
 from build import clone_repos, get_specs, create_build
-from integration.common import get_commit_details
-from models import PlatformEnum
 from settings import settings
 from utils import log
 
@@ -35,10 +33,8 @@ def clone_and_build(trid: int, parallelism: int = None,
     Clone and build (from Bitbucket)
     """
     if not parallelism:
-        parallelism = 4
+        parallelism = settings.PARALLELISM
     with sessionmaker.context_session() as db:
-
-        bitbucket_auth = crud.get_platform_settings(db, PlatformEnum.BITBUCKET)
 
         logfile_name = os.path.join(settings.DIST_DIR, f'{trid}.log')
         logfile = open(logfile_name, 'w')
@@ -63,11 +59,7 @@ def clone_and_build(trid: int, parallelism: int = None,
 
             if specs is None:
                 # clone
-                if bitbucket_auth:
-                    url = f'https://{bitbucket_auth.username}:{bitbucket_auth.token}@bitbucket.org/{repos}.git'
-                else:
-                    raise Exception("Only Bitbucket is supported at the moment")
-                wdir = clone_repos(url, branch, logfile)
+                wdir = clone_repos(tr.repos, branch, logfile)
                 # get the list of specs and create a testrun
                 specs = get_specs(wdir)
                 logfile.write(f"Found {len(specs)} spec files\n")
@@ -84,12 +76,7 @@ def clone_and_build(trid: int, parallelism: int = None,
                 logfile.write("No specs - nothing to test\n")
                 return
 
-            if bitbucket_auth:
-                info = get_commit_details(repos, branch, sha)
-            else:
-                info = {}
-
-            crud.update_test_run(db, tr, specs, **info)
+            crud.update_test_run(db, tr, specs)
 
             # start the runner jobs - that way the cluster has a head start on spinning up new nodes
             if jobs.batchapi:

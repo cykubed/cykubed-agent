@@ -9,17 +9,6 @@ class AppSettings(BaseSettings):
     REDIS_HOST: str = 'localhost'
     CYPRESSHUB_DATABASE_URL: str = 'sqlite:///:memory:'
 
-    OAUTH_EXPIRY_BUFFER_MINUTES = 5
-
-    BITBUCKET_CLIENT_ID = '9ePNXdCRCdpcUjf4nz'
-    BITBUCKET_SECRET = 'fAxQcde2WEqGZL3Gjsda9HTn2GrWvsJh'
-
-    JIRA_CLIENT_ID = '2tR4DvNoAQejskUo6CeW0NKs95kkiDFm'
-    JIRA_SECRET = 'ClBhi7ln8BcliVNxinZ2-Hp7bDM5fR3Et3MyOhMI2uKGbEZ20ZwnAVnzPuph-ajn'
-
-    SLACK_CLIENT_ID = '3153511369013.3158744655460'
-    SLACK_SECRET = '068e3008911d00d7ba83c3751feb72c0'
-
     BUILD_TIMEOUT: int = 900
     NPM_CACHE_DIR = '/var/lib/cypresshub/npm-cache'
     DIST_DIR = '/var/lib/cypresshub/dist-cache'

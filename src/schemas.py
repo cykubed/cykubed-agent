@@ -4,8 +4,6 @@ from typing import List, Optional
 
 from pydantic import BaseModel
 
-from models import PlatformEnum
-
 
 class SpecFile(BaseModel):
     file: str
@@ -14,6 +12,12 @@ class SpecFile(BaseModel):
 
     class Config:
         orm_mode = True
+
+
+class NewBuildDetails(BaseModel):
+    url: str
+    sha: str
+    branch: str
 
 
 class Status(str, Enum):
@@ -35,15 +39,6 @@ class TestRun(BaseModel):
     active: bool
     status: Status
     files: List[SpecFile]
-
-    commit_summary: Optional[str]
-    commit_link: Optional[str]
-    pull_request_link: Optional[str]
-
-    avatar: Optional[str]
-    author_slack_id: Optional[str]
-    author: Optional[str]
-    jira_ticket: Optional[str]
 
     class Config:
         orm_mode = True
@@ -87,29 +82,4 @@ class Results(BaseModel):
     skipped: int = 0
     passes: int = 0
     failures: int = 0
-
-
-class OAuthDetailsModel(BaseModel):
-    access_token: str
-    refresh_token: str
-    expiry: datetime
-    url: Optional[str]
-
-    class Config:
-        orm_mode = True
-
-
-class ProjectModel(BaseModel):
-    platform: PlatformEnum
-    name: str
-    url: str
-
-    class Config:
-        orm_mode = True
-
-
-class SettingsModel(BaseModel):
-    bitbucket: Optional[OAuthDetailsModel]
-    jira: Optional[OAuthDetailsModel]
-    slack: Optional[OAuthDetailsModel]
 

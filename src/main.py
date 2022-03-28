@@ -4,7 +4,6 @@ import logging
 import os
 import shutil
 import tarfile
-from datetime import timedelta
 from io import BytesIO
 from typing import List, Any, AnyStr, Dict
 
@@ -26,11 +25,9 @@ import schemas
 import settings
 from build import delete_old_dists
 from crud import TestRunParams
-from integration.common import fetch_settings_from_cykube
-from models import get_db, TestRun, PlatformEnum, OAuthToken
+from models import get_db, TestRun
 from notify import notify
 from settings import settings
-from utils import now
 from worker import app as celeryapp
 from ws import connect_websocket
 
@@ -52,14 +49,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Try to fetch latest settings
-fetch_settings_from_cykube()
 
 # connect to websocket
 connect_websocket()
 
 
-@app.middleware('http')
+# @app.middleware('http')
 async def verify_auth_token(request: Request, call_next):
     if request.url.path != '/hc' and not request.url.path.startswith('/testrun') and \
             request.method != 'OPTIONS':
@@ -87,35 +82,6 @@ def health_check(db: Session = Depends(get_db)):
     return {'message': 'OK!'}
 
 
-@app.post('/settings')
-def update_settings(s: schemas.SettingsModel, db: Session = Depends(get_db)):
-    crud.update_settings(db, s)
-    return {'message': 'OK'}
-
-
-async def update_oauth_token(platform: PlatformEnum, db: Session, resp):
-    if resp.status != 200:
-        raise HTTPException(status_code=400, detail=await resp.json())
-    ret = (await resp.json())
-    expiry = now() + timedelta(minutes=ret['expires_in'])
-    crud.update_oauth(db,
-                      platform,
-                      OAuthToken(
-                          access_token=ret['access_token'],
-                          refresh_token=ret['refresh_token'],
-                          expiry=expiry))
-
-
-@app.get('/projects', response_model=List[schemas.ProjectModel])
-def get_projects(db: Session = Depends(get_db)):
-    return crud.get_projects(db)
-
-
-@app.post('/project', response_model=schemas.ProjectModel)
-def create_project(project: schemas.ProjectModel, db: Session = Depends(get_db)):
-    return crud.create_project(db, project)
-
-
 @app.get('/testrun/{id}', response_model=schemas.TestRun)
 def get_testrun(id: int,
                  db: Session = Depends(get_db)):
@@ -128,28 +94,6 @@ def get_testruns(page: int = 1, page_size: int = 50,
     return crud.get_test_runs(db, page, page_size)
 
 
-@app.post('/bitbucket/webhook/{token}')
-def bitbucket_webhook(token: str,
-                      payload: JSONObject,
-                      db: Session = Depends(get_db)):
-    if token != settings.BITBUCKET_WEBHOOK_TOKEN:
-        raise HTTPException(status_code=403)
-
-    repos = payload[b'repository']['full_name']
-    change = payload[b'push']['changes'][0]['new']
-    if change['type'] != 'branch':
-        return "no content", 204
-    branch = change['name']
-    sha = change['target']['hash']
-
-    logging.info(f"Webhook received for {repos}: {branch} {sha}")
-    crud.cancel_previous_test_runs(db, sha, branch)
-    tr = crud.create_testrun(db, TestRunParams(repos=repos, sha=sha, branch=branch))
-    logging.info(f"Created new testrun {tr.id}")
-    celeryapp.send_task('clone_and_build', args=[tr.id])
-    return {'message': 'OK'}
-
-
 def clear_results(sha: str):
     rdir = os.path.join(settings.RESULTS_DIR, sha)
     os.makedirs(rdir, exist_ok=True)
@@ -157,18 +101,18 @@ def clear_results(sha: str):
     os.mkdir(rdir)
 
 
-@app.post('/start', response_model=schemas.TestRun)
+@app.post('/api/start', response_model=schemas.TestRun)
 def start_testrun(params: TestRunParams, db: Session = Depends(get_db)):
-    logger.info(f"Start test run {params.repos} {params.branch} {params.sha} {params.parallelism}")
+    logger.info(f"Start test run {params.url} {params.branch} {params.sha} {params.parallelism}")
     crud.cancel_previous_test_runs(db, params.sha, params.branch)
     clear_results(params.sha)
-    tr = crud.create_testrun(db, TestRunParams(repos=params.repos, sha=params.sha, branch=params.branch))
+    tr = crud.create_testrun(db, TestRunParams(repos=params.url, sha=params.sha, branch=params.branch))
     celeryapp.send_task('clone_and_build', args=[tr.id,
                                                  params.parallelism, params.spec_filter])
     return tr
 
 
-@app.post('/cancel/{id}')
+@app.post('/api/cancel/{id}')
 def cancel_testrun(id: int, db: Session = Depends(get_db)):
     tr = crud.get_testrun(db, id)
     if jobs.batchapi:
@@ -177,7 +121,7 @@ def cancel_testrun(id: int, db: Session = Depends(get_db)):
     return {'cancelled': 'OK'}
 
 
-@app.get('/testrun/{id}/logs')
+@app.get('/api/testrun/{id}/logs')
 def get_testrun_logs(id: int,
                      offset: int = 0) -> str:
     logs = os.path.join(settings.DIST_DIR, f'{id}.log')
@@ -188,18 +132,18 @@ def get_testrun_logs(id: int,
             f.seek(offset)
         return f.read()
 
-
-@app.get('/testrun/{id}/result')
-def get_testrun_result(id: int,
-                       db: Session = Depends(get_db)
-                       ) -> schemas.Results:
-    tr = crud.get_testrun(db, id)
-    json_result = os.path.join(settings.RESULTS_DIR, tr.sha, 'json', 'results.json')
-    if os.path.exists(json_result):
-        result: schemas.Results = schemas.Results.parse_file(json_result)
-        result.testrun = tr
-        return result
-    return schemas.Results(testrun=tr, specs=[])
+#
+# @app.get('/testrun/{id}/result')
+# def get_testrun_result(id: int,
+#                        db: Session = Depends(get_db)
+#                        ) -> schemas.Results:
+#     tr = crud.get_testrun(db, id)
+#     json_result = os.path.join(settings.RESULTS_DIR, tr.sha, 'json', 'results.json')
+#     if os.path.exists(json_result):
+#         result: schemas.Results = schemas.Results.parse_file(json_result)
+#         result.testrun = tr
+#         return result
+#     return schemas.Results(testrun=tr, specs=[])
 
 
 @app.get('/testrun/{sha}/status')
@@ -342,14 +286,6 @@ async def create_tasks():
     t1 = asyncio.create_task(connect_websocket())
     t2 = asyncio.create_task(server.serve())
     await asyncio.gather(t1, t2)
-
-
-def run() -> None:
-    config = Config(app, port=5000)
-    server = Server(config=config)
-
-    config.setup_event_loop()
-    asyncio.run(server.serve())
 
 
 def run2():
