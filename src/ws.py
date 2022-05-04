@@ -1,14 +1,20 @@
 import json
 from asyncio import sleep
-from pprint import pprint
 
 import websockets
 from websockets.exceptions import ConnectionClosedError
 
+import crud
+from crud import sessionmaker
 from settings import settings
-
-
 # TODO add better protection for connection failed
+from tasks import clone_and_build
+
+
+async def start_build(testrun):
+    with sessionmaker.context_session() as db:
+        tr = crud.create_testrun(db, testrun)
+        clone_and_build.delay(tr.id)
 
 
 async def connect_websocket():
@@ -22,8 +28,8 @@ async def connect_websocket():
                     data = json.loads(await ws.recv())
                     cmd = data['command']
                     if cmd == 'start':
-                        print("Start build")
-                        pprint(data['payload'], indent=4)
+                        await start_build(data['payload'])
+
         except ConnectionClosedError:
             await sleep(1)
 

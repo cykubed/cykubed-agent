@@ -16,6 +16,7 @@ sessionmaker = FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)
 
 
 class TestRunParams(BaseModel):
+    id: int
     url: str
     sha: str
     branch: str
@@ -39,7 +40,8 @@ def cancel_testrun(db: Session, tr: TestRun):
 
 
 def create_testrun(db: Session, params: TestRunParams, specs=None, **info) -> TestRun:
-    tr = TestRun(started=now(),
+    tr = TestRun(id=params.id,
+                 started=now(),
                  repos=params.url,
                  sha=params.sha,
                  active=True,

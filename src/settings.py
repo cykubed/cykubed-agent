@@ -6,6 +6,8 @@ class AppSettings(BaseSettings):
 
     TEST_RUN_TIMEOUT: int = 30 * 60
     SPEC_FILE_TIMEOUT: int = 5 * 60
+    LOG_UPDATE_PERIOD = 10
+
     REDIS_HOST: str = 'localhost'
     CYPRESSHUB_DATABASE_URL: str = 'sqlite:///:memory:'
 
@@ -19,13 +21,9 @@ class AppSettings(BaseSettings):
 
     HUB_URL: str = 'http://localhost:5000'
 
-    CYKUBE_APP_URL: str = 'http://localhost:4201'
-    CYKUBE_MAIN_URL: str = 'http://localhost:5002'
-    # CYKUBE_APP_URL: str = 'https://cypresskube.ddns.net'
+    CYKUBE_APP_URL: str = 'https://cykube.pagekite.me'
 
-    # Public face to NGINX server for screenshots and videos
-    RESULT_URL: str = 'http://localhost:5000/results'
-    DIST_URL: str = 'http://localhost:5000/dist-cache'
+
     CYPRESS_RUNNER_VERSION: str = '8.3.1-1.0'
     DIST_CACHE_TTL_HOURS: int = 365*24
 

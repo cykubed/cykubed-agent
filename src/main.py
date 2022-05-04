@@ -22,7 +22,6 @@ from uvicorn.server import Server, ServerState  # noqa: F401  # Used to be defin
 import crud
 import jobs
 import schemas
-import settings
 from build import delete_old_dists
 from crud import TestRunParams
 from models import get_db, TestRun

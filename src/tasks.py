@@ -3,6 +3,7 @@ import os
 import re
 import time
 
+import requests
 from fastapi_utils.session import FastAPISessionMaker
 
 import crud
@@ -26,6 +27,24 @@ def ping():
         logging.exception("Failed")
 
 
+@app.task(name='upload_log')
+def log_watcher(trid: int, path: str, offset=0):
+    with sessionmaker.context_session() as db:
+        tr = crud.get_testrun(db, trid)
+        if tr.active:
+            with open(path) as f:
+                if offset:
+                    f.seek(offset)
+                logs = f.read()
+                if logs:
+                    offset += len(logs)
+                    r = requests.post(f'{settings.CYKUBE_APP_URL}/hub/logs/{trid}', data=logs)
+                    if r.status_code != 200:
+                        logging.error(f"Failed to push logs: {r.json()}")
+                # schedule another task
+                log_watcher.apply_async(args=(trid, path), countdown=settings.LOG_UPDATE_PERIOD)
+
+
 @app.task(name='clone_and_build')
 def clone_and_build(trid: int, parallelism: int = None,
                     spec_filter: str = None):
@@ -39,10 +58,12 @@ def clone_and_build(trid: int, parallelism: int = None,
         logfile_name = os.path.join(settings.DIST_DIR, f'{trid}.log')
         logfile = open(logfile_name, 'w')
 
+        # start a log watcher
+        log_watcher.delay(trid, logfile)
+
         tr = crud.get_testrun(db, trid)
         sha = tr.sha
         branch = tr.branch
-        repos = tr.repos
 
         t = time.time()
         os.makedirs(settings.DIST_DIR, exist_ok=True)
