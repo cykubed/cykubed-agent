@@ -4,17 +4,17 @@ from asyncio import sleep
 import websockets
 from websockets.exceptions import ConnectionClosedError
 
+# TODO add better protection for connection failed
+import clone
 import crud
 from crud import sessionmaker
 from settings import settings
-# TODO add better protection for connection failed
-from tasks import clone_and_build
 
 
 async def start_build(testrun):
     with sessionmaker.context_session() as db:
         tr = crud.create_testrun(db, testrun)
-        clone_and_build.delay(tr.id)
+        clone.start_run(tr.id)
 
 
 async def connect_websocket():

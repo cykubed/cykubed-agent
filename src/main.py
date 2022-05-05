@@ -27,7 +27,6 @@ from crud import TestRunParams
 from models import get_db, TestRun
 from notify import notify
 from settings import settings
-from worker import app as celeryapp
 from ws import connect_websocket
 
 sessionmaker = FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)
@@ -106,8 +105,6 @@ def start_testrun(params: TestRunParams, db: Session = Depends(get_db)):
     crud.cancel_previous_test_runs(db, params.sha, params.branch)
     clear_results(params.sha)
     tr = crud.create_testrun(db, TestRunParams(repos=params.url, sha=params.sha, branch=params.branch))
-    celeryapp.send_task('clone_and_build', args=[tr.id,
-                                                 params.parallelism, params.spec_filter])
     return tr
 
 
@@ -179,6 +176,7 @@ async def runner_completed(id: int, request: Request, db: Session = Depends(get_
     logger.info(f"mark_completed {id}")
     spec = crud.mark_completed(db, id)
     # the body will be a tar of the results
+    # TODO plus images
     tf = tarfile.TarFile(fileobj=BytesIO(await request.body()))
     tf.extractall(os.path.join(settings.RESULTS_DIR, spec.testrun.sha))
 

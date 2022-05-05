@@ -1,6 +1,7 @@
 import subprocess
 from datetime import datetime
 from json.encoder import JSONEncoder
+from sys import stdout
 
 
 class CustomJSONEncoder(JSONEncoder):
@@ -20,7 +21,9 @@ def now():
     return datetime.now()
 
 
-def runcmd(cmd: str, logfile):
+def runcmd(cmd: str, logfile=None):
+    if not logfile:
+        logfile = stdout
     logfile.write(cmd+'\n')
     subprocess.check_call(cmd, shell=True, stderr=logfile, stdout=logfile)
 

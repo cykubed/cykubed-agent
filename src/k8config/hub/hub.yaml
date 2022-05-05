@@ -116,21 +116,7 @@ spec:
             - containerPort: 5001
               name: nginx-port
               protocol: TCP
-        #
-        # Worker
-        #
-        - name: worker
-          image: nickbrookdocker/cypresshub:1.2
-          imagePullPolicy: IfNotPresent
-          volumeMounts:
-            - name: cypresshub-persistent-storage
-              mountPath: /var/lib/cypresshub
-          command: ["celery", "-A", "tasks", "worker", "-B"]
-          envFrom:
-          - configMapRef:
-              name: cypresshub-config
-          - secretRef:
-              name: cypresshub-secrets
+
       volumes:
         - name: cypresshub-persistent-storage
           persistentVolumeClaim:

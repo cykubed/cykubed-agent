@@ -24,7 +24,6 @@ fastapi-utils = "*"
 alembic = "*"
 ipython = "*"
 pytest-mock = "*"
-celery = {extras = ["redis"], version = "*"}
 loguru = "*"
 click = "*"
 pydantic-to-typescript = "*"

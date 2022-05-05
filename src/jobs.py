@@ -109,11 +109,36 @@ def delete_jobs_for_branch(branch: str, logfile=None):
             # batchapi.delete_namespaced_job(job.metadata.name, namespace)
 
 
-def start_job(branch, commit_sha, logfile, parallelism=None):
+def start_job(cfg, logfile=None):
+    k8cfg = tempfile.NamedTemporaryFile('w', suffix='.yaml', delete=False)
+    k8cfg.write(cfg)
+    k8cfg.flush()
+    runcmd(f'kubectl apply -f {k8cfg.name}', logfile=logfile)
+    k8cfg.close()
+
+
+def start_clone_job(trid, logfile, parallelism=None):
+    """
+    Start a clone job
+    :param trid:
+    :param logfile:
+    :param parallelism:
+    :return:
+    """
+    args = f'{trid}'
+    if parallelism:
+        args += f' --parallelism={parallelism}'
+
+    with open(os.path.join(RUNNER_CONFIG_DIR, 'clone.yaml')) as f:
+        cfg = f.read().format(ARGS=args)
+        start_job(cfg, logfile)
+    logfile.write('Created clone job\n')
+
+
+def start_runner_job(branch, commit_sha, logfile, parallelism=None):
     """
     Start a cypress-runner Job
     """
-    namespace = os.environ.get('NAMESPACE', 'default')
 
     # delete any job already running
     delete_jobs_for_branch(branch, logfile)
@@ -124,14 +149,6 @@ def start_job(branch, commit_sha, logfile, parallelism=None):
                               BRANCH=branch, HUB_URL=settings.HUB_URL,
                               DIST_URL=settings.DIST_URL,
                               CYPRESS_RUNNER_VERSION=settings.CYPRESS_RUNNER_VERSION)
-    k8cfg = tempfile.NamedTemporaryFile('w', suffix='.yaml', delete=False)
-    k8cfg.write(cfg)
-    k8cfg.flush()
-    runcmd(f'kubectl apply -f {k8cfg.name}', logfile=logfile)
-    k8cfg.close()
-    logfile.write('Created jobs\n')
+        start_job(cfg, logfile)
+    logfile.write('Created runner jobs\n')
 
-
-if __name__ == '__main__':
-    connect_k8()
-    start_job('master', '724b47ce1a25fe5393fb16a2e4f62a375e08dcec')

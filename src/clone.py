@@ -1,37 +1,30 @@
 import logging
 import os
-import re
+import threading
 import time
 
+import click
 import requests
 from fastapi_utils.session import FastAPISessionMaker
 
 import crud
 import jobs
 from build import clone_repos, get_specs, create_build
+from notify import notify
+from schemas import Results
 from settings import settings
-from utils import log
+from utils import log, now
 
 sessionmaker = FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)
-
-from worker import app
-
-
-@app.task(name='ping')
-def ping():
-    logging.info("ping called")
-    try:
-        with sessionmaker.context_session() as db:
-            logging.info(f'{crud.count_test_runs(db)} test runs')
-    except:
-        logging.exception("Failed")
+jobs.connect_k8()
+os.makedirs(settings.DIST_DIR, exist_ok=True)
+os.makedirs(settings.NPM_CACHE_DIR, exist_ok=True)
+os.makedirs(settings.RESULTS_DIR, exist_ok=True)
 
 
-@app.task(name='upload_log')
 def log_watcher(trid: int, path: str, offset=0):
     with sessionmaker.context_session() as db:
-        tr = crud.get_testrun(db, trid)
-        if tr.active:
+        while True:
             with open(path) as f:
                 if offset:
                     f.seek(offset)
@@ -41,25 +34,31 @@ def log_watcher(trid: int, path: str, offset=0):
                     r = requests.post(f'{settings.CYKUBE_APP_URL}/hub/logs/{trid}', data=logs)
                     if r.status_code != 200:
                         logging.error(f"Failed to push logs: {r.json()}")
-                # schedule another task
-                log_watcher.apply_async(args=(trid, path), countdown=settings.LOG_UPDATE_PERIOD)
+            tr = crud.get_testrun(db, trid)
+            if not tr.active:
+                return
+            time.sleep(settings.LOG_UPDATE_PERIOD)
 
 
-@app.task(name='clone_and_build')
-def clone_and_build(trid: int, parallelism: int = None,
-                    spec_filter: str = None):
+@click.command()
+@click.argument('trid', help='Test run ID')
+@click.option('--parallelism', default=None, help="Parallelism override")
+def clone_and_build(trid: int,
+                    parallelism: int = None):
     """
     Clone and build (from Bitbucket)
     """
     if not parallelism:
         parallelism = settings.PARALLELISM
+
     with sessionmaker.context_session() as db:
 
         logfile_name = os.path.join(settings.DIST_DIR, f'{trid}.log')
         logfile = open(logfile_name, 'w')
 
-        # start a log watcher
-        log_watcher.delay(trid, logfile)
+        # start log thread
+        t = threading.Thread(target=log_watcher, args=(trid, logfile_name))
+        t.start()
 
         tr = crud.get_testrun(db, trid)
         sha = tr.sha
@@ -85,24 +84,24 @@ def clone_and_build(trid: int, parallelism: int = None,
                 specs = get_specs(wdir)
                 logfile.write(f"Found {len(specs)} spec files\n")
 
-            # filter the specs through the glob
-            if spec_filter:
-                try:
-                    filter_compiled = re.compile(spec_filter)
-                    specs = [spec for spec in specs if filter_compiled.match(spec)]
-                except re.error:
-                    logfile.write(f"Invalid filter {spec_filter}: ignoring")
-
             if not specs:
                 logfile.write("No specs - nothing to test\n")
-                return
+                tr.status = 'passed'
+                tr.active = False
+                tr.finished = now()
 
             crud.update_test_run(db, tr, specs)
+
+            if not specs:
+                notify(Results(tr), db)
+                return
 
             # start the runner jobs - that way the cluster has a head start on spinning up new nodes
             if jobs.batchapi:
                 log(logfile, f"Starting {parallelism} Jobs")
-                jobs.start_job(branch, sha, logfile, parallelism=parallelism)
+                jobs.start_runner_job(branch, sha, logfile, parallelism=parallelism)
+            else:
+                log(logfile, f"Test mode: sha={sha}")
 
             # build the distro
             if not os.path.exists(dist):
@@ -117,3 +116,16 @@ def clone_and_build(trid: int, parallelism: int = None,
             logging.exception("Failed to create build")
             logfile.close()
 
+
+def start_run(trid: int,
+              parallelism: int = None):
+    # TODO start Job or run inline
+    if jobs.batchapi:
+        # fire in Job
+        jobs.start_clone_job(trid)
+    else:
+        clone_and_build(trid, parallelism)
+
+
+if __name__ == '__main__':
+    clone_and_build()
