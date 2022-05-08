@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 import os
 import shutil
@@ -8,8 +7,6 @@ from io import BytesIO
 from typing import List, Any, AnyStr, Dict
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi_utils.session import FastAPISessionMaker
-from fastapi_utils.tasks import repeat_every
 from loguru import logger
 from sqlalchemy.orm import Session
 from starlette.middleware.cors import CORSMiddleware
@@ -22,14 +19,12 @@ from uvicorn.server import Server, ServerState  # noqa: F401  # Used to be defin
 import crud
 import jobs
 import schemas
-from build import delete_old_dists
 from crud import TestRunParams
-from models import get_db, TestRun
-from notify import notify
+from cykube import notify
+from models import get_db
 from settings import settings
 from ws import connect_websocket
 
-sessionmaker = FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)
 app = FastAPI()
 
 origins = [
@@ -168,15 +163,14 @@ def get_next_spec(sha: str, db: Session = Depends(get_db)):
     raise HTTPException(204)
 
 
-@app.post('/testrun/{id}/completed')
-async def runner_completed(id: int, request: Request, db: Session = Depends(get_db)):
+@app.post('/testrun/{specid}/completed')
+async def runner_completed(specid: int, request: Request, db: Session = Depends(get_db)):
     """
     Private API - called within the cluster by cypress-runner when a test spec has completed
     """
-    logger.info(f"mark_completed {id}")
+    logger.info(f"mark spec completed {specid}")
     spec = crud.mark_completed(db, id)
     # the body will be a tar of the results
-    # TODO plus images
     tf = tarfile.TarFile(fileobj=BytesIO(await request.body()))
     tf.extractall(os.path.join(settings.RESULTS_DIR, spec.testrun.sha))
 
@@ -186,9 +180,7 @@ async def runner_completed(id: int, request: Request, db: Session = Depends(get_
     if not remaining:
         logging.info(f"Creating report for {testrun.sha}")
 
-        stats = merge_results(testrun)
-        crud.mark_complete(db, testrun, stats.failures)
-        notify(stats, db)
+        notify(testrun)
 
     return "OK"
 
@@ -198,74 +190,12 @@ def create_file_path(sha: str, path: str) -> str:
     return f'{settings.RESULT_URL}/{sha}/{path[i+14:]}'
 
 
-def merge_results(testrun: TestRun) -> schemas.Results:
-    """
-    Merge the results and screenshots into a single directory
-    """
-    sha = testrun.sha
-    results_root = os.path.join(settings.RESULTS_DIR, sha)
-    json_root = os.path.join(results_root, 'json')
-
-    results = schemas.Results(testrun=testrun, specs=[])
-
-    for subd in os.listdir(json_root):
-        with open(os.path.join(json_root, subd, 'result.json')) as f:
-            report = json.loads(f.read())
-            run = report['runs'][-1]
-            spec_result = schemas.SpecResult(file=run['spec']['name'], results=[])
-            results.specs.append(spec_result)
-            for test in run['tests']:
-                results.total += 1
-                attempt = test['attempts'][-1]
-
-                if test['state'] == 'pending':
-                    results.skipped += 1
-                    startedAt = None
-                    duration = None
-                else:
-                    startedAt = test['attempts'][0]['startedAt']
-                    duration = attempt['duration']
-                test_result = schemas.TestResult(title=test['title'][1],
-                                                 failed=(test['state'] == 'failed'),
-                                                 body=test['body'],
-                                                 display_error=test['displayError'],
-                                                 duration=duration,
-                                                 num_attempts=len(test['attempts']),
-                                                 started_at=startedAt)
-                spec_result.results.append(test_result)
-
-                if not test_result.failed:
-                    results.passes += 1
-                else:
-                    results.failures += 1
-                    err = attempt['error']
-                    frame = err['codeFrame']
-                    code_frame = schemas.CodeFrame(line=frame['line'],
-                                                   file=frame['relativeFile'],
-                                                   column=frame['column'],
-                                                   frame=frame['frame'])
-
-                    test_result.error = schemas.TestResultError(
-                        name=err['name'],
-                        message=err['message'],
-                        stack=err['stack'],
-                        screenshots=[create_file_path(sha, ss['path']) for ss in attempt.get('screenshots', [])],
-                        videos=[create_file_path(sha, ss['path']) for ss in attempt.get('videos', [])],
-                        code_frame=code_frame)
-
-    with open(os.path.join(json_root, 'results.json'), 'w') as f:
-        f.write(results.json(indent=4))
-
-    return results
-
-
-
-@app.on_event("startup")
-@repeat_every(seconds=3000)
-def handle_timeouts():
-    with sessionmaker.context_session() as db:
-        crud.apply_timeouts(db, settings.TEST_RUN_TIMEOUT, settings.SPEC_FILE_TIMEOUT)
-    delete_old_dists()
+# @app.on_event("startup")
+# @repeat_every(seconds=3000)
+# def handle_timeouts():
+#     with sessionmaker.context_session() as db:
+#         crud.apply_timeouts(db, settings.TEST_RUN_TIMEOUT, settings.SPEC_FILE_TIMEOUT)
+#     delete_old_dists()
 
 
 #

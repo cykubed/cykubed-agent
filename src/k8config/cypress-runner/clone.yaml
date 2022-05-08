@@ -21,6 +21,6 @@ spec:
         resources:
           limits:
             cpu: 2
-            memory: 1G
+            memory: 4G
       restartPolicy: Never
 

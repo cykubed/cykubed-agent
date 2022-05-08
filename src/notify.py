@@ -1,9 +1,5 @@
 import logging
 
-from sqlalchemy.orm import Session
-
-from schemas import Results
-
 logging.basicConfig(level=logging.INFO)
 #
 # # FIXME and move this into the database
@@ -105,10 +101,10 @@ logging.basicConfig(level=logging.INFO)
 #     ]
 #     send_slack_message_blocks(testrun.branch, testrun.author_slack_id, blocks, settings.TEST_MODE)
 
-
-def notify(results: Results, db: Session):
-    # TODO notify cykube-main
-    pass
+#
+# def notify(results: Results, db: Session):
+#     # TODO notify cykube-main
+#     pass
 
 #
 # if __name__ == '__main__':

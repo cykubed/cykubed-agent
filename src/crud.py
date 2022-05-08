@@ -1,7 +1,6 @@
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi_utils.session import FastAPISessionMaker
 from pydantic import BaseModel
 from sqlalchemy import and_
 from sqlalchemy import func
@@ -9,10 +8,7 @@ from sqlalchemy.orm import Session
 
 from models import TestRun, SpecFile
 from schemas import Status
-from settings import settings
 from utils import now
-
-sessionmaker = FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)
 
 
 class TestRunParams(BaseModel):

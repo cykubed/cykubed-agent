@@ -5,17 +5,15 @@ import time
 
 import click
 import requests
-from fastapi_utils.session import FastAPISessionMaker
 
 import crud
 import jobs
 from build import clone_repos, get_specs, create_build
-from notify import notify
-from schemas import Results
+from cykube import notify
+from models import sessionmaker
 from settings import settings
 from utils import log, now
 
-sessionmaker = FastAPISessionMaker(settings.CYPRESSHUB_DATABASE_URL)
 jobs.connect_k8()
 os.makedirs(settings.DIST_DIR, exist_ok=True)
 os.makedirs(settings.NPM_CACHE_DIR, exist_ok=True)
@@ -93,7 +91,7 @@ def clone_and_build(trid: int,
             crud.update_test_run(db, tr, specs)
 
             if not specs:
-                notify(Results(tr), db)
+                notify(tr)
                 return
 
             # start the runner jobs - that way the cluster has a head start on spinning up new nodes

@@ -76,7 +76,7 @@ class SpecResult(BaseModel):
 
 
 class Results(BaseModel):
-    testrun: TestRun
+    testrun_id: int
     specs: List[SpecResult]
     total: int = 0
     skipped: int = 0
