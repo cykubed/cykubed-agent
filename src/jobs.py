@@ -117,22 +117,20 @@ def start_job(cfg, logfile=None):
     k8cfg.close()
 
 
-def start_clone_job(trid, logfile, parallelism=None):
+def start_clone_job(trid, url, sha, branch,
+                    parallelism=None):
     """
     Start a clone job
-    :param trid:
-    :param logfile:
-    :param parallelism:
-    :return:
     """
-    args = f'{trid}'
+    args = f'{trid} {url} {sha} {branch}'
     if parallelism:
         args += f' --parallelism={parallelism}'
 
     with open(os.path.join(RUNNER_CONFIG_DIR, 'clone.yaml')) as f:
         cfg = f.read().format(ARGS=args)
-        start_job(cfg, logfile)
-    logfile.write('Created clone job\n')
+        # TODO handle log upload
+        start_job(cfg)
+    # logfile.write('Created clone job\n')
 
 
 def start_runner_job(branch, commit_sha, logfile, parallelism=None):

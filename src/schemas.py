@@ -5,19 +5,17 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 
+class NewTestRun(BaseModel):
+    id: int
+    url: str
+    sha: str
+    branch: str
+
+
 class SpecFile(BaseModel):
     file: str
     started: Optional[datetime] = None
     finished: Optional[datetime] = None
-
-    class Config:
-        orm_mode = True
-
-
-class NewBuildDetails(BaseModel):
-    url: str
-    sha: str
-    branch: str
 
 
 class Status(str, Enum):

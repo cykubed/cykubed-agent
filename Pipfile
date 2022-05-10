@@ -12,8 +12,6 @@ google-cloud-storage = "*"
 python-jose = "*"
 six = "*"
 google-cloud-logging = "*"
-sqlalchemy = "*"
-mysqlclient = "*"
 google-cloud-container = "*"
 kubernetes = "*"
 uvicorn = {extras = ["standard"], version = "*"}

@@ -6,15 +6,7 @@ from websockets.exceptions import ConnectionClosedError
 
 # TODO add better protection for connection failed
 import clone
-import crud
-from crud import sessionmaker
 from settings import settings
-
-
-async def start_build(testrun):
-    with sessionmaker.context_session() as db:
-        tr = crud.create_testrun(db, testrun)
-        clone.start_run(tr.id)
 
 
 async def connect_websocket():
@@ -28,7 +20,7 @@ async def connect_websocket():
                     data = json.loads(await ws.recv())
                     cmd = data['command']
                     if cmd == 'start':
-                        await start_build(data['payload'])
+                        await clone.start_run(data['payload'])
 
         except ConnectionClosedError:
             await sleep(1)
