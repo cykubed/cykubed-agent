@@ -8,21 +8,15 @@ import requests
 
 import jobs
 from build import clone_repos, get_specs, create_build
-from schemas import NewTestRun
 from settings import settings
 from utils import log
 
-jobs.connect_k8()
-os.makedirs(settings.DIST_DIR, exist_ok=True)
-os.makedirs(settings.NPM_CACHE_DIR, exist_ok=True)
-os.makedirs(settings.RESULTS_DIR, exist_ok=True)
-
-
-testrun_to_specs = dict()
+running = False
 
 
 def log_watcher(trid: int, path: str, offset=0):
-    while True:
+    global running
+    while running:
         with open(path) as f:
             if offset:
                 f.seek(offset)
@@ -32,9 +26,6 @@ def log_watcher(trid: int, path: str, offset=0):
                 r = requests.post(f'{settings.CYKUBE_APP_URL}/hub/logs/{trid}', data=logs)
                 if r.status_code != 200:
                     logging.error(f"Failed to push logs: {r.json()}")
-        tr = testrun_to_specs.get(trid)
-        if not tr:
-            return
         time.sleep(settings.LOG_UPDATE_PERIOD)
 
 
@@ -55,9 +46,9 @@ def clone_and_build(trid, url, sha, branch,
     logfile_name = os.path.join(settings.DIST_DIR, f'{trid}.log')
     logfile = open(logfile_name, 'w')
 
-    testrun_to_specs[trid] = []
-
     # start log thread
+    global running
+    running = True
     t = threading.Thread(target=log_watcher, args=(trid, logfile_name))
     t.start()
 
@@ -102,14 +93,8 @@ def clone_and_build(trid, url, sha, branch,
         logfile.close()
 
 
-def start_run(testrun: NewTestRun,
-              parallelism: int = None):
+def start_run(**args):
     # TODO start Job or run inline
-    args = dict(trid=testrun.id,
-                sha=testrun.sha,
-                url=testrun.url,
-                branch=testrun.branch,
-                parallelism=parallelism)
     if jobs.batchapi:
         # fire in Job
         jobs.start_clone_job(**args)

@@ -6,10 +6,8 @@ import tempfile
 import aiohttp
 import requests
 
-import crud
 import schemas
 from main import create_file_path
-from models import TestRun, sessionmaker
 from settings import settings
 
 cykube_headers = {'Authorization': f'Bearer {settings.API_TOKEN}'}
