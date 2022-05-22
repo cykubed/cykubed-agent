@@ -1,9 +1,10 @@
 import asyncio
-from typing import Any, AnyStr, Dict
+import os
+import shutil
+from typing import Any, AnyStr, Dict, List
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile
 from loguru import logger
-from sqlalchemy.orm import Session
 from starlette.middleware.cors import CORSMiddleware
 from uvicorn.config import (
     Config,
@@ -11,6 +12,7 @@ from uvicorn.config import (
 from uvicorn.server import Server, ServerState  # noqa: F401  # Used to be defined here.
 
 import jobs
+import testruns
 from settings import settings
 from ws import connect_websocket
 
@@ -47,30 +49,42 @@ def health_check():
     return {'message': 'OK!'}
 
 
-@app.get('/testrun/{sha}/status')
-def get_status(sha: str):
+@app.get('/testrun/{id}/status')
+def get_status(id: int):
     """
     Private API - called within the cluster by cypress-runner to get the testrun status
     """
     # return 204 if we're still building - the runners can wait
-    # FIXME get status
-    if not status:
+
+    tr = testruns.get_run(id)
+    if not tr:
         raise HTTPException(404)
 
-    logger.info(f"status={status}")
-    return {'status': status}
+    return {'status': tr.status}
 
 
-@app.get('/testrun/{sha}/next')
-def get_next_spec(sha: str, db: Session = Depends(get_db)):
+@app.put('/testrun/{id}/specs')
+def update_testrun(id: int, files: List[str]):
+    testruns.set_specs(id, files)
+
+
+@app.get('/testrun/{id}/next')
+def get_next_spec(id: int):
     """
     Private API - called within the cluster by cypress-runner to get the next file to test
     """
-    spec = crud.get_next_spec_file(db, sha)
+    spec = testruns.get_next_spec(id)
     if spec:
-        logger.info(f"Returning spec {spec.file} for {sha}")
-        return {"spec": spec.file, "id": spec.id}
+        logger.info(f"Returning spec {spec.file}")
+        return {"spec": spec.file}
     raise HTTPException(204)
+
+
+@app.post('/node_cache')
+def upload_node_cache(file: UploadFile):
+    path = os.path.join(settings.NPM_CACHE_DIR, file.filename)
+    if not os.path.exists(path):
+        shutil.copy(file.filename, path)
 
 
 # @app.post('/testrun/{specid}/completed')

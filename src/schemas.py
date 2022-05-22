@@ -10,6 +10,7 @@ class NewTestRun(BaseModel):
     url: str
     sha: str
     branch: str
+    parallelism: Optional[int]
 
 
 class SpecFile(BaseModel):
@@ -27,57 +28,15 @@ class Status(str, Enum):
     passed = 'passed'
 
 
-class TestRun(BaseModel):
-    id: int
+class TestRun(NewTestRun):
     started: datetime
     finished: Optional[datetime] = None
-    repos: str
-    sha: str
-    branch: str
     active: bool
     status: Status
     files: List[SpecFile]
+    remaining: List[SpecFile]
 
     class Config:
         orm_mode = True
 
-
-class CodeFrame(BaseModel):
-    line: int
-    column: int
-    file: str
-    frame: str
-
-
-class TestResultError(BaseModel):
-    name: str
-    message: str
-    stack: str
-    code_frame: CodeFrame
-    screenshots: List[str]
-    videos: List[str]
-
-
-class TestResult(BaseModel):
-    title: str
-    failed: bool
-    body: str
-    num_attempts: int
-    duration: Optional[int]; display_error: Optional[str]
-    started_at: Optional[datetime]
-    error: Optional[TestResultError]
-
-
-class SpecResult(BaseModel):
-    file: str
-    results: List[TestResult]
-
-
-class Results(BaseModel):
-    testrun_id: int
-    specs: List[SpecResult]
-    total: int = 0
-    skipped: int = 0
-    passes: int = 0
-    failures: int = 0
 

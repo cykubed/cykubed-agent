@@ -6,6 +6,7 @@ import tempfile
 from kubernetes import client, config
 from kubernetes.client import ApiException
 
+from schemas import NewTestRun
 from settings import settings
 from utils import runcmd
 
@@ -117,20 +118,14 @@ def start_job(cfg, logfile=None):
     k8cfg.close()
 
 
-def start_clone_job(trid, url, sha, branch,
-                    parallelism=None):
+def start_clone_job(newrun: NewTestRun):
     """
     Start a clone job
     """
-    args = f'{trid} {url} {sha} {branch}'
-    if parallelism:
-        args += f' --parallelism={parallelism}'
-
     with open(os.path.join(RUNNER_CONFIG_DIR, 'clone.yaml')) as f:
-        cfg = f.read().format(ARGS=args)
+        cfg = f.read().format(ARGS=newrun.dict())
         # TODO handle log upload
         start_job(cfg)
-    # logfile.write('Created clone job\n')
 
 
 def start_runner_job(branch, commit_sha, logfile, parallelism=None):

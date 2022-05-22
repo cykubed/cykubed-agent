@@ -5,6 +5,8 @@ import subprocess
 import tempfile
 from datetime import datetime, timedelta
 
+import requests
+
 from settings import settings
 from utils import runcmd
 
@@ -37,8 +39,13 @@ def create_build(branch: str, sha: str, builddir: str, logfile):
     logfile.write(f"Creating build distribution for branch {branch} in dir {builddir}\n")
     os.chdir(builddir)
     lockhash = get_lock_hash(builddir)
-    cache_dir = settings.NPM_CACHE_DIR
-    os.makedirs(cache_dir, exist_ok=True)
+
+    r = requests.get(os.path.join(settings.HUB_URL, 'npm-cache', lockhash))
+    if r.status_code == 200:
+        # TODO fetch cache and unpack it into a tempdir
+    else:
+        # TODO build cache in a tempdir and upload it
+
 
     cached_node_modules_dir = os.path.join(cache_dir, lockhash)
     cache_exists = os.path.exists(cached_node_modules_dir)

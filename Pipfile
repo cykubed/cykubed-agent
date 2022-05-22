@@ -21,14 +21,13 @@ fastapi = "*"
 fastapi-utils = "*"
 alembic = "*"
 ipython = "*"
-pytest-mock = "*"
 loguru = "*"
 click = "*"
 pydantic-to-typescript = "*"
 ecdsa = "*"
 jwt = "*"
 websockets = "*"
-
+python-multipart = "*"
 
 [requires]
 python_version = "3.8"

@@ -6,8 +6,8 @@ import tempfile
 import aiohttp
 import requests
 
-import schemas
 from main import create_file_path
+from schemas import TestRun
 from settings import settings
 
 cykube_headers = {'Authorization': f'Bearer {settings.API_TOKEN}'}
@@ -28,8 +28,6 @@ def notify(testrun: TestRun):
     """
 
     stats = merge_results(testrun)
-    with sessionmaker.context_session() as db:
-        crud.mark_complete(db, testrun, stats.failures)
 
     rootdir = os.path.join(settings.RESULTS_DIR, testrun.sha)
     # tar the results directory

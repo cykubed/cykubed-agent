@@ -15,7 +15,7 @@ async def connect_websocket():
             domain = settings.CYKUBE_MAIN_URL[settings.CYKUBE_MAIN_URL.find('//')+2:]
             print(domain)
             async with websockets.connect(f'ws://{domain}/ws',
-                  extra_headers={'Authorization': f'Token {settings.API_TOKEN}'}) as ws:
+                  extra_headers={'Authorization': f'Bearer {settings.API_TOKEN}'}) as ws:
                 while True:
                     data = json.loads(await ws.recv())
                     cmd = data['command']
