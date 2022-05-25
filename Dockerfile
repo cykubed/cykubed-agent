@@ -13,8 +13,6 @@ RUN curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -
     chmod +x ./kubectl && mv kubectl /usr/local/bin/kubectl
 
 COPY src /app/app
-COPY alembic /app/alembic
-COPY alembic.ini /app/
 
 ENV PYTHONPATH app
 

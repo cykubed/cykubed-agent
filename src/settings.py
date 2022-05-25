@@ -9,9 +9,9 @@ class AppSettings(BaseSettings):
     LOG_UPDATE_PERIOD = 10
 
     BUILD_TIMEOUT: int = 900
-    NPM_CACHE_DIR = '/var/lib/cypresshub/npm-cache'
-    DIST_DIR = '/var/lib/cypresshub/dist-cache'
-    RESULTS_DIR = '/var/lib/cypresshub/results'
+    NPM_CACHE_DIR = 'npm-cache'
+    DIST_DIR = 'dist-cache'
+    RESULTS_DIR = 'results'
 
     TEST_MODE: bool = True
     PARALLELISM: int = 1

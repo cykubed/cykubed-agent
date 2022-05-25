@@ -80,9 +80,9 @@ def get_next_spec(id: int):
     raise HTTPException(204)
 
 
-@app.post('/node_cache')
-def upload_node_cache(file: UploadFile):
-    path = os.path.join(settings.NPM_CACHE_DIR, file.filename)
+@app.post('/upload/{type}/')
+def upload(file: UploadFile):
+    path = os.path.join(settings.NPM_CACHE_DIR, type, file.filename)
     if not os.path.exists(path):
         shutil.copy(file.filename, path)
 

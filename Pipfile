@@ -19,7 +19,6 @@ aiohttp = {extras = ["speedups"], version = "*"}
 ujson = "*"
 fastapi = "*"
 fastapi-utils = "*"
-alembic = "*"
 ipython = "*"
 loguru = "*"
 click = "*"

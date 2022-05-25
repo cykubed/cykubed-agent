@@ -3,7 +3,9 @@ import logging
 import os
 import subprocess
 import tempfile
+import urllib.request
 from datetime import datetime, timedelta
+from shutil import copyfileobj
 
 import requests
 
@@ -40,25 +42,26 @@ def create_build(branch: str, sha: str, builddir: str, logfile):
     os.chdir(builddir)
     lockhash = get_lock_hash(builddir)
 
-    r = requests.get(os.path.join(settings.HUB_URL, 'npm-cache', lockhash))
-    if r.status_code == 200:
-        # TODO fetch cache and unpack it into a tempdir
-    else:
-        # TODO build cache in a tempdir and upload it
-
-
-    cached_node_modules_dir = os.path.join(cache_dir, lockhash)
-    cache_exists = os.path.exists(cached_node_modules_dir)
-    if cache_exists:
-        logfile.write("Using npm cache\n")
-        subprocess.check_call(f'cp -ar {cached_node_modules_dir} node_modules', shell=True, stdout=logfile,
-                              stderr=logfile)
-    else:
-        # build node_modules
-        logfile.write("Build new npm cache\n")
-        runcmd('npm ci', logfile=logfile)
-        # the test runner will need some deps
-        runcmd('npm i node-fetch walk-sync uuid sleep-promise mime-types', logfile=logfile)
+    with requests.get(os.path.join(settings.HUB_URL, 'cache', 'npm', lockhash), stream=True) as resp:
+        if resp.status_code == 200:
+            with tempfile.NamedTemporaryFile() as fdst:
+                copyfileobj(resp.raw, fdst)
+                # unpack
+                logfile.write("Fetching npm cache\n")
+                subprocess.check_call(f'tar xf {fdst.name}')
+        else:
+            # build node_modules
+            logfile.write("Build new npm cache\n")
+            runcmd('npm ci', logfile=logfile)
+            # the test runner will need some deps
+            runcmd('npm i node-fetch walk-sync uuid sleep-promise mime-types', logfile=logfile)
+            with tempfile.NamedTemporaryFile() as fdst:
+                subprocess.check_call(f'tar zcf {fdst.name} node_modules')
+                # upload
+                r = requests.post(os.path.join(settings.HUB_URL, 'upload', 'npm'), files={
+                    'file': (f'{lockhash}.tgz', fdst, 'application/octet-stream')
+                })
+                r.raise_for_status()
 
     # build the app
     logfile.write(f"Building {branch}\n")
@@ -68,16 +71,12 @@ def create_build(branch: str, sha: str, builddir: str, logfile):
     distdir = settings.DIST_DIR
     os.makedirs(distdir, exist_ok=True)
     logfile.write("Create distribution and cleanup\n")
-    # tarball everything - we're running in gigabit ethernet
+    # tarball everything
     subprocess.check_call(f'tar zcf {distdir}/{sha}.tgz ./node_modules ./dist ./src ./cypress *.json *.js', shell=True)
 
-    # TODO tell cykube we're running
+    # and upload
 
-    # update the node cache
-    if not cache_exists:
-        # store in the cache
-        logging.info("Updating cache")
-        runcmd(f'cp -fr ./node_modules {cached_node_modules_dir}', logfile)
+
 
     # clean up the build, but leave the distribution
     subprocess.check_call(f'rm -fr {builddir}', shell=True, stdout=logfile, stderr=logfile)
