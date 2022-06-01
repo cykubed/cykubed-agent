@@ -1,9 +1,7 @@
 import hashlib
-import logging
 import os
 import subprocess
 import tempfile
-import urllib.request
 from datetime import datetime, timedelta
 from shutil import copyfileobj
 
@@ -42,7 +40,7 @@ def create_build(branch: str, sha: str, builddir: str, logfile):
     os.chdir(builddir)
     lockhash = get_lock_hash(builddir)
 
-    with requests.get(os.path.join(settings.HUB_URL, 'cache', 'npm', lockhash), stream=True) as resp:
+    with requests.get(os.path.join(settings.HUB_URL, 'cache', lockhash), stream=True) as resp:
         if resp.status_code == 200:
             with tempfile.NamedTemporaryFile() as fdst:
                 copyfileobj(resp.raw, fdst)
@@ -58,7 +56,7 @@ def create_build(branch: str, sha: str, builddir: str, logfile):
             with tempfile.NamedTemporaryFile() as fdst:
                 subprocess.check_call(f'tar zcf {fdst.name} node_modules')
                 # upload
-                r = requests.post(os.path.join(settings.HUB_URL, 'upload', 'npm'), files={
+                r = requests.post(os.path.join(settings.HUB_URL, 'cache'), files={
                     'file': (f'{lockhash}.tgz', fdst, 'application/octet-stream')
                 })
                 r.raise_for_status()

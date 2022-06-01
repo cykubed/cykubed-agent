@@ -33,10 +33,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# connect to websocket
-connect_websocket()
-
 JSONObject = Dict[AnyStr, Any]
 
 logger.info("** Started server **")
@@ -80,7 +76,7 @@ def get_next_spec(id: int):
     raise HTTPException(204)
 
 
-@app.post('/upload/{type}/')
+@app.post('/cache')
 def upload(file: UploadFile):
     path = os.path.join(settings.NPM_CACHE_DIR, type, file.filename)
     if not os.path.exists(path):

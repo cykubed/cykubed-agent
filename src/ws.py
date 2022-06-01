@@ -13,7 +13,6 @@ async def connect_websocket():
     while True:
         try:
             domain = settings.CYKUBE_MAIN_URL[settings.CYKUBE_MAIN_URL.find('//')+2:]
-            print(domain)
             async with websockets.connect(f'ws://{domain}/ws',
                   extra_headers={'Authorization': f'Bearer {settings.API_TOKEN}'}) as ws:
                 while True:
@@ -24,6 +23,5 @@ async def connect_websocket():
 
         except ConnectionClosedError:
             await sleep(1)
-
-
-# asyncio.get_event_loop().run_until_complete(connect_websocket())
+        except ConnectionRefusedError:
+            await sleep(60)
