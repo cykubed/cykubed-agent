@@ -40,7 +40,8 @@ def create_build(branch: str, sha: str, builddir: str, logfile):
     os.chdir(builddir)
     lockhash = get_lock_hash(builddir)
 
-    with requests.get(os.path.join(settings.HUB_URL, 'cache', lockhash), stream=True) as resp:
+    cache_filename = f'{lockhash}.tar.lz4'
+    with requests.get(os.path.join(settings.HUB_URL, 'cache', cache_filename), stream=True) as resp:
         if resp.status_code == 200:
             with tempfile.NamedTemporaryFile() as fdst:
                 copyfileobj(resp.raw, fdst)
@@ -53,11 +54,11 @@ def create_build(branch: str, sha: str, builddir: str, logfile):
             runcmd('npm ci', logfile=logfile)
             # the test runner will need some deps
             runcmd('npm i node-fetch walk-sync uuid sleep-promise mime-types', logfile=logfile)
-            with tempfile.NamedTemporaryFile() as fdst:
-                subprocess.check_call(f'tar zcf {fdst.name} node_modules')
+            with tempfile.NamedTemporaryFile(suffix='.tar.lz4') as fdst:
+                subprocess.check_call(f'tar cf {fdst.name} -I lz4 node_modules')
                 # upload
-                r = requests.post(os.path.join(settings.HUB_URL, 'cache'), files={
-                    'file': (f'{lockhash}.tgz', fdst, 'application/octet-stream')
+                r = requests.post(os.path.join(settings.HUB_URL, 'upload', 'cache'), files={
+                    'file': (cache_filename, fdst, 'application/octet-stream')
                 })
                 r.raise_for_status()
 
@@ -70,7 +71,7 @@ def create_build(branch: str, sha: str, builddir: str, logfile):
     os.makedirs(distdir, exist_ok=True)
     logfile.write("Create distribution and cleanup\n")
     # tarball everything
-    subprocess.check_call(f'tar zcf {distdir}/{sha}.tgz ./node_modules ./dist ./src ./cypress *.json *.js', shell=True)
+    subprocess.check_call(f'tar cf {distdir}/{sha}.tar.l4z ./node_modules ./dist ./src ./cypress *.json *.js -I lz4', shell=True)
 
     # and upload
 
