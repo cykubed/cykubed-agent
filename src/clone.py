@@ -59,9 +59,6 @@ def clone_and_build(testrun: NewTestRun):
     t.start()
 
     t = time.time()
-    os.makedirs(settings.DIST_DIR, exist_ok=True)
-    os.makedirs(settings.RESULTS_DIR, exist_ok=True)
-    os.makedirs(settings.NPM_CACHE_DIR, exist_ok=True)
     try:
         # check for existing dist (for a rerun)
         dist = os.path.join(settings.DIST_DIR, f'{testrun.sha}.tgz')

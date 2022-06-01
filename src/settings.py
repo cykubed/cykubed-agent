@@ -9,7 +9,7 @@ class AppSettings(BaseSettings):
     LOG_UPDATE_PERIOD = 10
 
     BUILD_TIMEOUT: int = 900
-    NPM_CACHE_DIR = 'npm-cache'
+    CACHE_DIR = 'cache'
     DIST_DIR = 'dist-cache'
     RESULTS_DIR = 'results'
 

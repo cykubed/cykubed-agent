@@ -78,9 +78,15 @@ def get_next_spec(id: int):
 
 @app.post('/cache')
 def upload(file: UploadFile):
-    path = os.path.join(settings.NPM_CACHE_DIR, type, file.filename)
-    if not os.path.exists(path):
-        shutil.copy(file.filename, path)
+    path = os.path.join(settings.CACHE_DIR, file.filename)
+    if os.path.exists(path):
+        return {"message": "Exists"}
+    try:
+        with open(path, "wb") as dest:
+            shutil.copyfileobj(file.file, dest)
+    finally:
+        file.file.close()
+    return {"message": "OK"}
 
 
 # @app.post('/testrun/{specid}/completed')
