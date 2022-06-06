@@ -1,13 +1,17 @@
 import logging
 import os
+import tempfile
 import threading
 import time
+from typing import TextIO
 
 import click
 import requests
 
 import jobs
+import schemas
 from build import clone_repos, get_specs, create_build
+from cykube import cykube_headers
 from schemas import NewTestRun
 from settings import settings
 from utils import log
@@ -15,19 +19,20 @@ from utils import log
 running = False
 
 
-def log_watcher(trid: int, path: str, offset=0):
+def log_watcher(trid: int, logfile: TextIO, offset=0):
     global running
     while running:
-        with open(path) as f:
-            if offset:
-                f.seek(offset)
-            logs = f.read()
-            if logs:
-                offset += len(logs)
-                r = requests.post(f'{settings.CYKUBE_APP_URL}/hub/logs/{trid}', data=logs)
-                if r.status_code != 200:
-                    logging.error(f"Failed to push logs: {r.json()}")
+        if offset:
+            logfile.seek(offset)
+        logs = logfile.read()
+        if logs:
+            offset += len(logs)
+            r = requests.post(f'{settings.CYKUBE_APP_URL}/hub/logs/{trid}', data=logs,
+                              headers=cykube_headers)
+            if r.status_code != 200:
+                logging.error(f"Failed to push logs: {r.json()}")
         time.sleep(settings.LOG_UPDATE_PERIOD)
+    logfile.close()
 
 
 @click.command()
@@ -43,22 +48,26 @@ def main(id, url, sha, branch, parallelism=None):
     clone_and_build(tr)
 
 
+def post_status(testrun: NewTestRun, status: schemas.Status):
+    requests.post(f'{settings.HUB_URL}/testrun/{testrun.id}/status/{status}')
+
+
 def clone_and_build(testrun: NewTestRun):
     """
     Clone and build (from Bitbucket)
     """
     parallelism = testrun.parallelism or settings.PARALLELISM
 
-    logfile_name = os.path.join(settings.DIST_DIR, f'{id}.log')
-    logfile = open(logfile_name, 'w')
+    logfile = tempfile.NamedTemporaryFile(suffix='.log', mode='w')
 
     # start log thread
     global running
     running = True
-    t = threading.Thread(target=log_watcher, args=(id, logfile_name))
-    t.start()
+    logthread = threading.Thread(target=log_watcher, args=(id, logfile))
+    logthread.start()
 
     t = time.time()
+    post_status(testrun, schemas.Status.building)
     try:
         # check for existing dist (for a rerun)
         dist = os.path.join(settings.DIST_DIR, f'{testrun.sha}.tgz')
@@ -74,25 +83,32 @@ def clone_and_build(testrun: NewTestRun):
 
         if not specs:
             logfile.write("No specs - nothing to test\n")
-            # TODO tell cykube
-            return
-
-        # start the runner jobs - that way the cluster has a head start on spinning up new nodes
-        if jobs.batchapi:
-            log(logfile, f"Starting {parallelism} Jobs")
-            jobs.start_runner_job(testrun.branch, testrun.sha, logfile,
-                                  parallelism=parallelism)
+            post_status(testrun, schemas.Status.passed)
         else:
-            log(logfile, f"Test mode: sha={testrun.sha}")
+            requests.put(f'{settings.HUB_URL}/testrun/{testrun.id}/specs',
+                            json=specs)
 
-        # build the distro
-        create_build(testrun.branch, testrun.sha, wdir, logfile)
-        t = time.time() - t
-        logfile.write(f"Distribution created in {t:.1f}s\n")
+            # start the runner jobs - that way the cluster has a head start on spinning
+            # up new nodes
+            if jobs.batchapi:
+                log(logfile, f"Starting {parallelism} Jobs")
+                jobs.start_runner_job(testrun.branch, testrun.sha, logfile,
+                                      parallelism=parallelism)
+            else:
+                log(logfile, f"Test mode: sha={testrun.sha}")
+
+            # build the distro
+            create_build(testrun.branch, testrun.sha, wdir, logfile)
+            post_status(testrun, schemas.Status.running)
+            t = time.time() - t
+            logfile.write(f"Distribution created in {t:.1f}s\n")
 
     except Exception as ex:
         logfile.write(f"BUILD FAILED: {str(ex)}\n")
         logging.exception("Failed to create build")
+    finally:
+        running = False
+        logthread.join()
         logfile.close()
 
 

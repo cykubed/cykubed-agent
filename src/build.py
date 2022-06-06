@@ -2,16 +2,12 @@ import hashlib
 import os
 import subprocess
 import tempfile
-from datetime import datetime, timedelta
 from shutil import copyfileobj
 
 import requests
 
 from settings import settings
 from utils import runcmd
-
-FILES_TO_COPY = ['.npmrc', 'package.json', 'package-lock.json']
-ROOT_DIR = os.path.join(os.path.dirname(__file__), '..')
 
 
 def clone_repos(url: str, branch: str, logfile) -> str:
@@ -67,20 +63,17 @@ def create_build(branch: str, sha: str, builddir: str, logfile):
     runcmd('./node_modules/.bin/ng build -c ci --output-path=dist', logfile=logfile)
 
     # tar it up
-    distdir = settings.DIST_DIR
-    os.makedirs(distdir, exist_ok=True)
-    logfile.write("Create distribution and cleanup\n")
-    # tarball everything
-    subprocess.check_call(f'tar cf {distdir}/{sha}.tar.l4z ./node_modules ./dist ./src ./cypress *.json *.js -I lz4', shell=True)
-
-    # and upload
-
-
-
-    # clean up the build, but leave the distribution
-    subprocess.check_call(f'rm -fr {builddir}', shell=True, stdout=logfile, stderr=logfile)
-
-    return os.path.join(distdir, f'{sha}.tgz')
+    with tempfile.NamedTemporaryFile(suffix='.tar.lz4') as fdst:
+        logfile.write("Create distribution and cleanup\n")
+        # tarball everything
+        subprocess.check_call(f'tar cf {fdst.name} ./node_modules ./dist ./src ./cypress *.json *.js -I lz4',
+                              shell=True)
+        # and upload
+        cache_filename = f'{sha}.tar.lz4'
+        r = requests.post(os.path.join(settings.HUB_URL, 'upload', 'cache'), files={
+            'file': (cache_filename, fdst, 'application/octet-stream')
+        })
+        r.raise_for_status()
 
 
 def get_specs(wdir):
@@ -92,22 +85,3 @@ def get_specs(wdir):
                 specs.append(p)
     return specs
 
-
-def delete_old_dists(threshold_hours: int = settings.DIST_CACHE_TTL_HOURS):
-    # delete old runs and distributions (along with log files)
-    threshold = datetime.utcnow() - timedelta(hours=threshold_hours)
-    distdir = settings.DIST_DIR
-    for f in os.listdir(distdir):
-        path = os.path.join(distdir, f)
-        dt = datetime.fromtimestamp(os.stat(path).st_atime)
-        if dt < threshold:
-            os.remove(path)
-#
-# if __name__ == '__main__':
-#     logs.init()
-#     t = time.time()
-#     d = clone_repos('git@bitbucket.org:kisanhubcore/kisanhub-webapp.git', 'cypress-runner')
-#     dist = create_build('542ae1980c462fee9a2c21ec20f00c6def1359c3', d, 'cypress-runner')
-#     t = time.time()-t
-#     print(f"Took {t} secs: {dist}")
-#
