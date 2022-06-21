@@ -6,9 +6,8 @@ from pydantic import BaseModel
 
 
 class NewTestRun(BaseModel):
-    id: int
-    url: str
     sha: str
+    url: str
     branch: str
     parallelism: Optional[int]
 
@@ -72,7 +71,7 @@ class SpecResult(BaseModel):
 
 
 class Results(BaseModel):
-    testrun_id: int
+    testrun: TestRun
     specs: List[SpecResult]
     total: int = 0
     skipped: int = 0

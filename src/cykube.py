@@ -7,9 +7,9 @@ import aiohttp
 import requests
 
 import schemas
-from main import create_file_path
 from schemas import TestRun
 from settings import settings
+from utils import create_file_path
 
 cykube_headers = {'Authorization': f'Bearer {settings.API_TOKEN}'}
 
@@ -20,7 +20,11 @@ async def post_logs(trid: int, log: str):
     await session.post(f'{settings.CYKUBE_APP_URL}/hub/logs/{trid}', data=log)
 
 
-def notify(testrun: TestRun):
+def notify_status(testrun: TestRun):
+    requests.post(f'{settings.CYKUBE_APP_URL}/hub/testrun/{testrun.sha}/status', data=testrun.json())
+
+
+def notify_run_completed(testrun: TestRun):
     """
     Merge results, create a tar file of screenshots and notify cykube app
     Then clean up
@@ -36,7 +40,7 @@ def notify(testrun: TestRun):
     shutil.make_archive(f.name, 'tar',
                         root_dir=rootdir)
 
-    requests.post(f'{settings.CYKUBE_APP_URL}/hub/results/{testrun.id}',
+    requests.post(f'{settings.CYKUBE_APP_URL}/hub/results/{testrun.sha}',
                   data=stats.json(),
                   headers=cykube_headers,
                   files=[f])
@@ -53,7 +57,7 @@ def merge_results(testrun: TestRun) -> schemas.Results:
     results_root = os.path.join(settings.RESULTS_DIR, sha)
     json_root = os.path.join(results_root, 'json')
 
-    results = schemas.Results(testrun_id=testrun.id, specs=[])
+    results = schemas.Results(testrun=testrun, specs=[])
 
     for subd in os.listdir(json_root):
         with open(os.path.join(json_root, subd, 'result.json')) as f:
@@ -67,10 +71,10 @@ def merge_results(testrun: TestRun) -> schemas.Results:
 
                 if test['state'] == 'pending':
                     results.skipped += 1
-                    startedAt = None
+                    started_at = None
                     duration = None
                 else:
-                    startedAt = test['attempts'][0]['startedAt']
+                    started_at = test['attempts'][0]['startedAt']
                     duration = attempt['duration']
                 test_result = schemas.TestResult(title=test['title'][1],
                                                  failed=(test['state'] == 'failed'),
@@ -78,7 +82,7 @@ def merge_results(testrun: TestRun) -> schemas.Results:
                                                  display_error=test['displayError'],
                                                  duration=duration,
                                                  num_attempts=len(test['attempts']),
-                                                 started_at=startedAt)
+                                                 started_at=started_at)
                 spec_result.results.append(test_result)
 
                 if not test_result.failed:
@@ -99,6 +103,10 @@ def merge_results(testrun: TestRun) -> schemas.Results:
                         screenshots=[create_file_path(sha, ss['path']) for ss in attempt.get('screenshots', [])],
                         videos=[create_file_path(sha, ss['path']) for ss in attempt.get('videos', [])],
                         code_frame=code_frame)
+        if results.failures:
+            testrun.status = schemas.Status.failed
+        else:
+            testrun.status = schemas.Status.passed
 
     with open(os.path.join(json_root, 'results.json'), 'w') as f:
         f.write(results.json(indent=4))

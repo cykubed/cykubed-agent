@@ -1,5 +1,6 @@
 import logging
 import os
+import subprocess
 import tempfile
 import threading
 import time
@@ -10,6 +11,7 @@ import requests
 
 import jobs
 import schemas
+import testruns
 from build import clone_repos, get_specs, create_build
 from cykube import cykube_headers
 from schemas import NewTestRun
@@ -36,20 +38,19 @@ def log_watcher(trid: int, logfile: TextIO, offset=0):
 
 
 @click.command()
-@click.option('--id', required=True, type=int, help='TestRun ID')
 @click.option('--url', type=str, required=True, help='Clone URL')
 @click.option('--sha', type=str, required=True, help='SHA')
 @click.option('--branch', type=str, required=True, help='Branch')
 @click.option('--parallelism', type=int, default=None, help="Parallelism override")
-def main(id, url, sha, branch, parallelism=None):
+def main(url, sha, branch, parallelism=None):
     if not parallelism:
         parallelism = settings.PARALLELISM
-    tr = NewTestRun(id=id, url=url, sha=sha, branch=branch, parallelism=parallelism)
+    tr = NewTestRun(url=url, sha=sha, branch=branch, parallelism=parallelism)
     clone_and_build(tr)
 
 
 def post_status(testrun: NewTestRun, status: schemas.Status):
-    requests.post(f'{settings.HUB_URL}/testrun/{testrun.id}/status/{status}')
+    requests.post(f'{settings.HUB_URL}/testrun/{testrun.sha}/status/{status}')
 
 
 def clone_and_build(testrun: NewTestRun):
@@ -85,7 +86,7 @@ def clone_and_build(testrun: NewTestRun):
             logfile.write("No specs - nothing to test\n")
             post_status(testrun, schemas.Status.passed)
         else:
-            requests.put(f'{settings.HUB_URL}/testrun/{testrun.id}/specs',
+            requests.put(f'{settings.HUB_URL}/testrun/{testrun.sha}/specs',
                             json=specs)
 
             # start the runner jobs - that way the cluster has a head start on spinning
@@ -113,12 +114,20 @@ def clone_and_build(testrun: NewTestRun):
 
 
 def start_run(newrun: NewTestRun):
-    # TODO start Job or run inline
+    testruns.add_run(newrun)
+
     if jobs.batchapi:
         # fire in Job
         jobs.start_clone_job(newrun)
     else:
-        clone_and_build(newrun)
+        # test mode - fire off a process
+        with os.chdir(os.path.dirname(__file__)):
+            args = ["--url", newrun.url,
+                    "--sha", newrun.sha,
+                    "--branch", newrun.branch]
+            if newrun.parallelism:
+                args += ["--parallelism", newrun.parallelism]
+            subprocess.run(args)
 
 
 if __name__ == '__main__':

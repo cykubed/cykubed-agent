@@ -3,6 +3,8 @@ from datetime import datetime
 from json.encoder import JSONEncoder
 from sys import stdout
 
+from settings import settings
+
 
 class CustomJSONEncoder(JSONEncoder):
     def default(self, obj):
@@ -32,3 +34,7 @@ def log(logfile, msg):
     logfile.write(msg+"\n")
     logfile.flush()
 
+
+def create_file_path(sha: str, path: str) -> str:
+    i = path.find('build/results/')
+    return f'{settings.RESULT_URL}/{sha}/{path[i+14:]}'

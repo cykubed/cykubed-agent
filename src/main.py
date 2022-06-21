@@ -1,19 +1,24 @@
 import asyncio
 import os
 import shutil
+import tarfile
+from io import BytesIO
 from typing import Any, AnyStr, Dict, List
 
 from fastapi import FastAPI, HTTPException, UploadFile
 from loguru import logger
 from starlette.middleware.cors import CORSMiddleware
+from starlette.requests import Request
 from uvicorn.config import (
     Config,
 )
 from uvicorn.server import Server, ServerState  # noqa: F401  # Used to be defined here.
 
+import clone
 import jobs
 import schemas
 import testruns
+from cykube import notify_run_completed, notify_status
 from settings import settings
 from ws import connect_websocket
 
@@ -21,8 +26,7 @@ app = FastAPI()
 
 origins = [
     'http://localhost:4201',
-    'https://cypresshub.kisanhub.com',
-    'https://cypresskube.ddns.net'
+    'http://localhost:5000'
 ]
 
 app.add_middleware(
@@ -46,45 +50,52 @@ def health_check():
     return {'message': 'OK!'}
 
 
-@app.get('/testrun/{id}/status')
-def get_status(id: int):
+@app.get('/testrun/{sha}/status')
+def get_status(sha: str):
     """
     Private API - called within the cluster by cypress-runner to get the testrun status
     """
     # return 204 if we're still building - the runners can wait
 
-    tr = testruns.get_run(id)
+    tr = testruns.get_run(sha)
     if not tr:
         raise HTTPException(404)
 
     return {'status': tr.status}
 
 
-@app.post('/testrun/{id}/status/{status}')
-def get_status(id: int, status: schemas.Status):
-    tr = testruns.get_run(id)
+@app.post('/testrun/start')
+def start_testrun(testrun: schemas.NewTestRun):
+    clone.start_run(testrun)
+
+
+@app.post('/testrun/{sha}/status/{status}')
+def get_status(sha: str, status: schemas.Status):
+    tr = testruns.get_run(sha)
     if tr:
         tr.status = status
-    # TODO tell cykube-main
+    notify_status(tr)
     return {"message": "OK"}
 
 
-@app.put('/testrun/{id}/specs')
-def update_testrun(id: int, files: List[str]):
-    testruns.set_specs(id, files)
-    # TODO tell cykube-main
+@app.put('/testrun/{sha}/specs')
+def update_testrun(sha: str, files: List[str]):
+    tr = testruns.set_specs(sha, files)
+    notify_status(tr)
     return {"message": "OK"}
 
 
-@app.get('/testrun/{id}/next')
-def get_next_spec(id: int):
+@app.get('/testrun/{sha}/next')
+def get_next_spec(sha: str):
     """
     Private API - called within the cluster by cypress-runner to get the next file to test
     """
-    spec = testruns.get_next_spec(id)
-    if spec:
-        logger.info(f"Returning spec {spec.file}")
-        return {"spec": spec.file}
+    tr = testruns.get_run(sha)
+    if len(tr.files) > 0 and tr.status == schemas.Status.running:
+        return {"spec": tr.remaining.pop()}
+
+    notify_status(tr)
+
     raise HTTPException(204)
 
 
@@ -101,31 +112,20 @@ def upload(file: UploadFile):
     return {"message": "OK"}
 
 
-# @app.post('/testrun/{specid}/completed')
-# async def runner_completed(specid: int, request: Request, db: Session = Depends(get_db)):
-#     """
-#     Private API - called within the cluster by cypress-runner when a test spec has completed
-#     """
-#     logger.info(f"mark spec completed {specid}")
-#     spec = crud.mark_completed(db, id)
-#     # the body will be a tar of the results
-#     tf = tarfile.TarFile(fileobj=BytesIO(await request.body()))
-#     tf.extractall(os.path.join(settings.RESULTS_DIR, spec.testrun.sha))
-#
-#     testrun = spec.testrun
-#     remaining = crud.get_remaining(db, testrun)
-#     # has the entire run finished?
-#     if not remaining:
-#         logging.info(f"Creating report for {testrun.sha}")
-#
-#         notify(testrun)
-#
-#     return "OK"
+@app.post('/testrun/{sha}/{file}/completed')
+async def runner_completed(sha: str, file: str, request: Request):
+    tr = testruns.get_run(sha)
+    if not tr or tr.status != schemas.Status.running:
+        raise HTTPException(204)
+    # the body will be a tar of the results
+    tf = tarfile.TarFile(fileobj=BytesIO(await request.body()))
+    tf.extractall(os.path.join(settings.RESULTS_DIR, sha))
 
-
-def create_file_path(sha: str, path: str) -> str:
-    i = path.find('build/results/')
-    return f'{settings.RESULT_URL}/{sha}/{path[i+14:]}'
+    # remove file from list
+    tr.remaining = [x for x in tr.remaining if x.file != file]
+    if not tr.remaining:
+        notify_run_completed(tr)
+    return "OK"
 
 
 # @app.on_event("startup")
