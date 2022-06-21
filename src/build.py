@@ -57,7 +57,7 @@ def create_build(branch: str, sha: str, builddir: str, logfile):
             with tempfile.NamedTemporaryFile(suffix='.tar.lz4') as fdst:
                 subprocess.check_call(f'tar cf {fdst.name} -I lz4 node_modules')
                 # upload
-                r = requests.post(os.path.join(settings.HUB_URL, 'upload', 'cache'), files={
+                r = requests.post(os.path.join(settings.HUB_URL, 'cache'), files={
                     'file': (cache_filename, fdst, 'application/octet-stream')
                 })
                 r.raise_for_status()
@@ -74,9 +74,11 @@ def create_build(branch: str, sha: str, builddir: str, logfile):
     subprocess.check_call(f'tar cf {distdir}/{sha}.tar.l4z ./node_modules ./dist ./src ./cypress *.json *.js -I lz4', shell=True)
 
     # and upload
-
-
-
+    r = requests.post(os.path.join(settings.HUB_URL, 'dist'), files={
+        'file': (cache_filename, fdst, 'application/octet-stream')
+    })
+    r.raise_for_status()
+    
     # clean up the build, but leave the distribution
     subprocess.check_call(f'rm -fr {builddir}', shell=True, stdout=logfile, stderr=logfile)
 
