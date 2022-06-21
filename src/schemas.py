@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 
 class NewTestRun(BaseModel):
+    id: int
     sha: str
     url: str
     branch: str

@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from schemas import TestRun, SpecFile, NewTestRun, Status
 from utils import now
 
-testruns_by_sha: Dict[str, TestRun] = {}
+testruns_by_id: Dict[int, TestRun] = {}
 
 
 class HubException(Exception):
@@ -15,22 +15,22 @@ class HubException(Exception):
 
 def add_run(testrun: NewTestRun) -> TestRun:
     # cancel any previous run on the same branch
-    for tr in testruns_by_sha.values():
+    for tr in testruns_by_id.values():
         if tr.status == Status.running and tr.branch == testrun.branch:
             tr.status = Status.cancelled
     # and create a new one
     tr = TestRun(**testrun.dict(), started=now(), active=True, status=Status.building)
-    testruns_by_sha[tr.sha] = tr
+    testruns_by_id[tr.id] = tr
     return tr
 
 
-def get_run(sha: str) -> TestRun:
-    return testruns_by_sha.get(sha)
+def get_run(id: int) -> TestRun:
+    return testruns_by_id.get(id)
 
 
-def set_specs(sha: str, files: List[str]) -> TestRun:
+def set_specs(id: int, files: List[str]) -> TestRun:
     specs = [SpecFile(file=s) for s in files]
-    tr = testruns_by_sha[sha]
+    tr = get_run(id)
     if not tr:
         # no test run
         raise HTTPException(status_code=400, detail="No testrun in memory - was the hub restarted?")

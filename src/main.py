@@ -50,14 +50,14 @@ def health_check():
     return {'message': 'OK!'}
 
 
-@app.get('/testrun/{sha}/status')
-def get_status(sha: str):
+@app.get('/testrun/{id}/status')
+def get_status(id: int):
     """
     Private API - called within the cluster by cypress-runner to get the testrun status
     """
     # return 204 if we're still building - the runners can wait
 
-    tr = testruns.get_run(sha)
+    tr = testruns.get_run(id)
     if not tr:
         raise HTTPException(404)
 
@@ -69,28 +69,28 @@ def start_testrun(testrun: schemas.NewTestRun):
     clone.start_run(testrun)
 
 
-@app.post('/testrun/{sha}/status/{status}')
-def get_status(sha: str, status: schemas.Status):
-    tr = testruns.get_run(sha)
+@app.post('/testrun/{id}/status/{status}')
+def get_status(id: int, status: schemas.Status):
+    tr = testruns.get_run(id)
     if tr:
         tr.status = status
     notify_status(tr)
     return {"message": "OK"}
 
 
-@app.put('/testrun/{sha}/specs')
-def update_testrun(sha: str, files: List[str]):
-    tr = testruns.set_specs(sha, files)
+@app.put('/testrun/{id}/specs')
+def update_testrun(id: int, files: List[str]):
+    tr = testruns.set_specs(id, files)
     notify_status(tr)
     return {"message": "OK"}
 
 
-@app.get('/testrun/{sha}/next')
-def get_next_spec(sha: str):
+@app.get('/testrun/{id}/next')
+def get_next_spec(id: int):
     """
     Private API - called within the cluster by cypress-runner to get the next file to test
     """
-    tr = testruns.get_run(sha)
+    tr = testruns.get_run(id)
     if len(tr.files) > 0 and tr.status == schemas.Status.running:
         return {"spec": tr.remaining.pop()}
 
@@ -112,14 +112,14 @@ def upload(file: UploadFile):
     return {"message": "OK"}
 
 
-@app.post('/testrun/{sha}/{file}/completed')
-async def runner_completed(sha: str, file: str, request: Request):
-    tr = testruns.get_run(sha)
+@app.post('/testrun/{id}/{file}/completed')
+async def runner_completed(id: int, file: str, request: Request):
+    tr = testruns.get_run(id)
     if not tr or tr.status != schemas.Status.running:
         raise HTTPException(204)
     # the body will be a tar of the results
     tf = tarfile.TarFile(fileobj=BytesIO(await request.body()))
-    tf.extractall(os.path.join(settings.RESULTS_DIR, sha))
+    tf.extractall(os.path.join(settings.RESULTS_DIR, str(id)))
 
     # remove file from list
     tr.remaining = [x for x in tr.remaining if x.file != file]

@@ -38,19 +38,20 @@ def log_watcher(trid: int, logfile: TextIO, offset=0):
 
 
 @click.command()
+@click.option('--id', type=int, required=True, help='Testrun ID')
 @click.option('--url', type=str, required=True, help='Clone URL')
 @click.option('--sha', type=str, required=True, help='SHA')
 @click.option('--branch', type=str, required=True, help='Branch')
 @click.option('--parallelism', type=int, default=None, help="Parallelism override")
-def main(url, sha, branch, parallelism=None):
+def main(id, url, sha, branch, parallelism=None):
     if not parallelism:
         parallelism = settings.PARALLELISM
-    tr = NewTestRun(url=url, sha=sha, branch=branch, parallelism=parallelism)
+    tr = NewTestRun(id=id, url=url, sha=sha, branch=branch, parallelism=parallelism)
     clone_and_build(tr)
 
 
 def post_status(testrun: NewTestRun, status: schemas.Status):
-    requests.post(f'{settings.HUB_URL}/testrun/{testrun.sha}/status/{status}')
+    requests.post(f'{settings.HUB_URL}/testrun/{testrun.id}/status/{status}')
 
 
 def clone_and_build(testrun: NewTestRun):
@@ -122,7 +123,8 @@ def start_run(newrun: NewTestRun):
     else:
         # test mode - fire off a process
         with os.chdir(os.path.dirname(__file__)):
-            args = ["--url", newrun.url,
+            args = ["--id", newrun.id,
+                    "--url", newrun.url,
                     "--sha", newrun.sha,
                     "--branch", newrun.branch]
             if newrun.parallelism:
