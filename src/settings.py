@@ -9,9 +9,6 @@ class AppSettings(BaseSettings):
     LOG_UPDATE_PERIOD = 10
 
     BUILD_TIMEOUT: int = 900
-    CACHE_DIR = 'cache'
-    DIST_DIR = 'dist-cache'
-    RESULTS_DIR = 'results'
 
     TEST_MODE: bool = True
     PARALLELISM: int = 1
@@ -19,8 +16,7 @@ class AppSettings(BaseSettings):
     HUB_URL: str = 'http://localhost:5000'
 
     CYKUBE_MAIN_URL = 'http://localhost:5002'
-    # CYKUBE_MAIN_URL: str = 'https://cykube.pagekite.me'
-
+    CYKUBE_APP_URL: str = 'https://cykube.pagekite.me'
 
     CYPRESS_RUNNER_VERSION: str = '8.3.1-1.0'
     DIST_CACHE_TTL_HOURS: int = 365*24

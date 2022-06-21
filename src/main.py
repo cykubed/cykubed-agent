@@ -12,6 +12,7 @@ from uvicorn.config import (
 from uvicorn.server import Server, ServerState  # noqa: F401  # Used to be defined here.
 
 import jobs
+import schemas
 import testruns
 from settings import settings
 from ws import connect_websocket
@@ -59,9 +60,20 @@ def get_status(id: int):
     return {'status': tr.status}
 
 
+@app.post('/testrun/{id}/status/{status}')
+def get_status(id: int, status: schemas.Status):
+    tr = testruns.get_run(id)
+    if tr:
+        tr.status = status
+    # TODO tell cykube-main
+    return {"message": "OK"}
+
+
 @app.put('/testrun/{id}/specs')
 def update_testrun(id: int, files: List[str]):
     testruns.set_specs(id, files)
+    # TODO tell cykube-main
+    return {"message": "OK"}
 
 
 @app.get('/testrun/{id}/next')
@@ -76,7 +88,7 @@ def get_next_spec(id: int):
     raise HTTPException(204)
 
 
-@app.post('/cache')
+@app.post('/upload/cache')
 def upload(file: UploadFile):
     path = os.path.join(settings.CACHE_DIR, file.filename)
     if os.path.exists(path):

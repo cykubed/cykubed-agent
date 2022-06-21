@@ -6,6 +6,7 @@ import tempfile
 import aiohttp
 import requests
 
+import schemas
 from main import create_file_path
 from schemas import TestRun
 from settings import settings
@@ -42,7 +43,6 @@ def notify(testrun: TestRun):
 
     f.close()
     shutil.rmtree(rootdir)
-
 
 
 def merge_results(testrun: TestRun) -> schemas.Results:

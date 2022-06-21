@@ -15,7 +15,7 @@ class HubException(Exception):
 
 def get_next_spec(id: int) -> SpecFile:
     tr = testruns_by_id.get(id)
-    if tr and len(tr.files) > 0:
+    if tr and len(tr.files) > 0 and tr.status == Status.running:
         return tr.files.pop()
 
 
