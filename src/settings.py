@@ -13,10 +13,11 @@ class AppSettings(BaseSettings):
     TEST_MODE: bool = True
     PARALLELISM: int = 1
 
-    HUB_URL: str = 'http://localhost:5000'
+    HUB_URL: str = 'http://127.0.0.1:5000'
+    CACHE_URL: str = 'http://127.0.0.1:5020/cache'
 
-    CYKUBE_MAIN_URL = 'http://localhost:5002'
-    CYKUBE_APP_URL: str = 'https://cykube.pagekite.me'
+    CYKUBE_APP_URL: str = 'http://localhost:5002'
+    CACHE_DIR: str = 'cache'
 
     CYPRESS_RUNNER_VERSION: str = '8.3.1-1.0'
     DIST_CACHE_TTL_HOURS: int = 365*24

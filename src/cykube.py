@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import shutil
 import tempfile
@@ -13,15 +14,22 @@ from utils import create_file_path
 
 cykube_headers = {'Authorization': f'Bearer {settings.API_TOKEN}'}
 
-session = aiohttp.ClientSession(headers=cykube_headers)
-
 
 async def post_logs(trid: int, log: str):
-    await session.post(f'{settings.CYKUBE_APP_URL}/hub/logs/{trid}', data=log)
+    async with aiohttp.ClientSession(headers=cykube_headers) as session:
+        r = await session.post(f'{settings.CYKUBE_APP_URL}/hub/logs/{trid}', data=log)
+        if r.status != 200:
+            logging.error("Failed to contact cykube app")
 
 
-def notify_status(testrun: TestRun):
-    requests.post(f'{settings.CYKUBE_APP_URL}/hub/testrun/{testrun.sha}/status', data=testrun.json())
+async def notify_status(testrun: TestRun):
+    async with aiohttp.ClientSession(headers=cykube_headers) as session:
+        payload = schemas.TestRunUpdate(started=testrun.started,
+                                        finished=testrun.finished,
+                                        status=testrun.status)
+        r = await session.put(f'{settings.CYKUBE_APP_URL}/hub/testrun/{testrun.id}', data=payload.json())
+        if r.status != 200:
+            logging.error("Failed to contact cykube app")
 
 
 def notify_run_completed(testrun: TestRun):

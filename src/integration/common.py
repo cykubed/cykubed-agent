@@ -55,17 +55,5 @@ def get_commit_details(repos: str, branch: str, sha: str):
 OAUTH_EXPIRY_BUFFER_MINUTES = 10
 
 
-def fetch_settings_from_cykube():
-    resp = requests.get(f'{settings.CYKUBE_MAIN_URL}/hub-settings',
-                        headers={'Authorization': f'Token {settings.API_TOKEN}'})
-    if resp.status_code != 200:
-        logging.error("Failed to contact cypresskube API server - cannot fetch settings")
-    else:
-        with sessionmaker.context_session() as db:
-            for platsettings in resp.json():
-                crud.update_oauth(db, platsettings['platform'],
-                                  OAuthDetailsModel(**platsettings))
-
-
 def create_user_notification(userid):
     return f"<@{userid}>"

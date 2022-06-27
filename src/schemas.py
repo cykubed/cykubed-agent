@@ -10,6 +10,7 @@ class NewTestRun(BaseModel):
     sha: str
     url: str
     branch: str
+    build_cmd = 'ng build --output-path=dist'
     parallelism: Optional[int]
 
 
@@ -33,8 +34,8 @@ class TestRun(NewTestRun):
     finished: Optional[datetime] = None
     active: bool
     status: Status
-    files: List[SpecFile]
-    remaining: List[SpecFile]
+    files: List[SpecFile] = []
+    remaining: List[SpecFile] = []
 
     class Config:
         orm_mode = True
@@ -78,3 +79,9 @@ class Results(BaseModel):
     skipped: int = 0
     passes: int = 0
     failures: int = 0
+
+
+class TestRunUpdate(BaseModel):
+    started: datetime
+    finished: Optional[datetime] = None
+    status: Status

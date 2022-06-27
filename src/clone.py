@@ -21,20 +21,17 @@ from utils import log
 running = False
 
 
-def log_watcher(trid: int, logfile: TextIO, offset=0):
-    global running
-    while running:
-        if offset:
-            logfile.seek(offset)
-        logs = logfile.read()
-        if logs:
-            offset += len(logs)
-            r = requests.post(f'{settings.CYKUBE_APP_URL}/hub/logs/{trid}', data=logs,
-                              headers=cykube_headers)
-            if r.status_code != 200:
-                logging.error(f"Failed to push logs: {r.json()}")
-        time.sleep(settings.LOG_UPDATE_PERIOD)
-    logfile.close()
+def log_watcher(trid: int, fname: str):
+    with open(fname, 'r') as logfile:
+        global running
+        while running:
+            logs = logfile.read().encode('utf8')
+            if logs:
+                r = requests.post(f'{settings.CYKUBE_APP_URL}/hub/logs/{trid}', data=logs,
+                                  headers=cykube_headers)
+                if r.status_code != 200:
+                    logging.error(f"Failed to push logs: {r.json()}")
+            time.sleep(settings.LOG_UPDATE_PERIOD)
 
 
 @click.command()
@@ -42,16 +39,20 @@ def log_watcher(trid: int, logfile: TextIO, offset=0):
 @click.option('--url', type=str, required=True, help='Clone URL')
 @click.option('--sha', type=str, required=True, help='SHA')
 @click.option('--branch', type=str, required=True, help='Branch')
+@click.option('--build_cmd', type=str, default='ng build --output-path=dist', help='NPM build command')
 @click.option('--parallelism', type=int, default=None, help="Parallelism override")
-def main(id, url, sha, branch, parallelism=None):
+def main(id, url, sha, branch, build_cmd, parallelism=None):
     if not parallelism:
         parallelism = settings.PARALLELISM
-    tr = NewTestRun(id=id, url=url, sha=sha, branch=branch, parallelism=parallelism)
+    tr = NewTestRun(id=id, url=url, sha=sha, branch=branch, parallelism=parallelism, build_cmd=build_cmd)
     clone_and_build(tr)
 
 
 def post_status(testrun: NewTestRun, status: schemas.Status):
-    requests.post(f'{settings.HUB_URL}/testrun/{testrun.id}/status/{status}')
+    r = requests.post(f'{settings.HUB_URL}/testrun/{testrun.id}/status/{status}',
+                      timeout=10)
+    if r.status_code != 200:
+        logging.error(f"Failed to contact hub to update status for run {testrun.id}")
 
 
 def clone_and_build(testrun: NewTestRun):
@@ -65,18 +66,12 @@ def clone_and_build(testrun: NewTestRun):
     # start log thread
     global running
     running = True
-    logthread = threading.Thread(target=log_watcher, args=(id, logfile))
+    logthread = threading.Thread(target=log_watcher, args=(testrun.id, logfile.name))
     logthread.start()
 
     t = time.time()
     post_status(testrun, schemas.Status.building)
     try:
-        # check for existing dist (for a rerun)
-        dist = os.path.join(settings.DIST_DIR, f'{testrun.sha}.tgz')
-        if os.path.exists(dist):
-            # remove it
-            os.remove(dist)
-
         # clone
         wdir = clone_repos(testrun.url, testrun.branch, logfile)
         # get the list of specs and create a testrun
@@ -87,7 +82,7 @@ def clone_and_build(testrun: NewTestRun):
             logfile.write("No specs - nothing to test\n")
             post_status(testrun, schemas.Status.passed)
         else:
-            requests.put(f'{settings.HUB_URL}/testrun/{testrun.sha}/specs',
+            requests.put(f'{settings.HUB_URL}/testrun/{testrun.id}/specs',
                             json=specs)
 
             # start the runner jobs - that way the cluster has a head start on spinning
@@ -100,7 +95,7 @@ def clone_and_build(testrun: NewTestRun):
                 log(logfile, f"Test mode: sha={testrun.sha}")
 
             # build the distro
-            create_build(testrun.branch, testrun.sha, wdir, logfile)
+            create_build(testrun, wdir, logfile)
             post_status(testrun, schemas.Status.running)
             t = time.time() - t
             logfile.write(f"Distribution created in {t:.1f}s\n")
@@ -121,15 +116,9 @@ def start_run(newrun: NewTestRun):
         # fire in Job
         jobs.start_clone_job(newrun)
     else:
-        # test mode - fire off a process
-        with os.chdir(os.path.dirname(__file__)):
-            args = ["--id", newrun.id,
-                    "--url", newrun.url,
-                    "--sha", newrun.sha,
-                    "--branch", newrun.branch]
-            if newrun.parallelism:
-                args += ["--parallelism", newrun.parallelism]
-            subprocess.run(args)
+        # test mode - use a thread
+        clone_thread = threading.Thread(target=clone_and_build, args=(newrun,))
+        clone_thread.start()
 
 
 if __name__ == '__main__':

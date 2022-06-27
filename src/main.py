@@ -70,23 +70,23 @@ def start_testrun(testrun: schemas.NewTestRun):
 
 
 @app.post('/testrun/{id}/status/{status}')
-def get_status(id: int, status: schemas.Status):
+async def get_status(id: int, status: schemas.Status):
     tr = testruns.get_run(id)
     if tr:
         tr.status = status
-    notify_status(tr)
+    await notify_status(tr)
     return {"message": "OK"}
 
 
 @app.put('/testrun/{id}/specs')
-def update_testrun(id: int, files: List[str]):
+async def update_testrun(id: int, files: List[str]):
     tr = testruns.set_specs(id, files)
-    notify_status(tr)
+    await notify_status(tr)
     return {"message": "OK"}
 
 
 @app.get('/testrun/{id}/next')
-def get_next_spec(id: int):
+async def get_next_spec(id: int):
     """
     Private API - called within the cluster by cypress-runner to get the next file to test
     """
@@ -94,13 +94,14 @@ def get_next_spec(id: int):
     if len(tr.files) > 0 and tr.status == schemas.Status.running:
         return {"spec": tr.remaining.pop()}
 
-    notify_status(tr)
+    await notify_status(tr)
 
     raise HTTPException(204)
 
 
 @app.post('/upload/cache')
 def upload(file: UploadFile):
+    os.makedirs(settings.CACHE_DIR, exist_ok=True)
     path = os.path.join(settings.CACHE_DIR, file.filename)
     if os.path.exists(path):
         return {"message": "Exists"}
