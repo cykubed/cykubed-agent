@@ -1,13 +1,12 @@
-[[source]]
-name = "pypi"
-url = "https://pypi.org/simple"
-verify_ssl = true
+[tool.poetry]
+name = "cykube-hub"
+version = "0.1.0"
+description = ""
+authors = ["nick <nickbrook72@gmail.com>"]
+readme = "README.md"
 
-[dev-packages]
-pytest = "*"
-pytest-mock = "*"
-
-[packages]
+[tool.poetry.dependencies]
+python = "^3.10"
 google-cloud-storage = "*"
 python-jose = "*"
 six = "*"
@@ -28,5 +27,6 @@ jwt = "*"
 websockets = "*"
 python-multipart = "*"
 
-[requires]
-python_version = "3.8"
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

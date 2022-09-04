@@ -15,6 +15,7 @@ from uvicorn.config import (
 from uvicorn.server import Server, ServerState  # noqa: F401  # Used to be defined here.
 
 import clone
+import enums
 import jobs
 import schemas
 import testruns
@@ -70,7 +71,7 @@ def start_testrun(testrun: schemas.NewTestRun):
 
 
 @app.post('/testrun/{id}/status/{status}')
-async def get_status(id: int, status: schemas.Status):
+async def get_status(id: int, status: enums.Status):
     tr = testruns.get_run(id)
     if tr:
         tr.status = status
@@ -91,7 +92,7 @@ async def get_next_spec(id: int):
     Private API - called within the cluster by cypress-runner to get the next file to test
     """
     tr = testruns.get_run(id)
-    if len(tr.files) > 0 and tr.status == schemas.Status.running:
+    if len(tr.files) > 0 and tr.status == enums.Status.running:
         return {"spec": tr.remaining.pop()}
 
     await notify_status(tr)
@@ -116,7 +117,7 @@ def upload(file: UploadFile):
 @app.post('/testrun/{id}/{file}/completed')
 async def runner_completed(id: int, file: str, request: Request):
     tr = testruns.get_run(id)
-    if not tr or tr.status != schemas.Status.running:
+    if not tr or tr.status != enums.Status.running:
         raise HTTPException(204)
     # the body will be a tar of the results
     tf = tarfile.TarFile(fileobj=BytesIO(await request.body()))

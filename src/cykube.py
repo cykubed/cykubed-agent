@@ -48,7 +48,8 @@ def notify_run_completed(testrun: TestRun):
     shutil.make_archive(f.name, 'tar',
                         root_dir=rootdir)
 
-    requests.post(f'{settings.CYKUBE_APP_URL}/hub/results/{testrun.sha}',
+    # maybe go straight to storage here?
+    requests.post(f'{settings.CYKUBE_APP_URL}/hub/results/{testrun.id}',
                   data=stats.json(),
                   headers=cykube_headers,
                   files=[f])
