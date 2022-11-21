@@ -3,7 +3,7 @@ from typing import Dict, List
 
 from fastapi import HTTPException
 
-from schemas import TestRun, SpecFile, NewTestRun, Status
+from common.schemas import TestRun, SpecFile, NewTestRun, Status
 from utils import now
 
 testruns_by_id: Dict[int, TestRun] = {}

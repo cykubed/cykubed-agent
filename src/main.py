@@ -15,10 +15,9 @@ from uvicorn.config import (
 from uvicorn.server import Server, ServerState  # noqa: F401  # Used to be defined here.
 
 import clone
-import enums
 import jobs
-import schemas
 import testruns
+from common import enums, schemas
 from cykube import notify_run_completed, notify_status
 from settings import settings
 from ws import connect_websocket
@@ -51,18 +50,16 @@ def health_check():
     return {'message': 'OK!'}
 
 
-@app.get('/testrun/{id}/status')
-def get_status(id: int):
+@app.get('/testrun/{id}', response_model=schemas.TestRun)
+def get_testrun(id: int):
     """
     Private API - called within the cluster by cypress-runner to get the testrun status
     """
-    # return 204 if we're still building - the runners can wait
-
     tr = testruns.get_run(id)
     if not tr:
         raise HTTPException(404)
 
-    return {'status': tr.status}
+    return tr
 
 
 @app.post('/testrun/start')

@@ -1,12 +1,11 @@
 import hashlib
 import os
-import subprocess
 import tempfile
 from shutil import copyfileobj
 
 import requests
-
 from schemas import NewTestRun
+
 from settings import settings
 from utils import runcmd
 
@@ -58,9 +57,12 @@ def create_build(testrun: NewTestRun, builddir: str, logfile):
         else:
             # build node_modules
             logfile.write("Build new npm cache\n")
-            runcmd('npm ci', logfile=logfile)
-            # the test runner will need some deps
-            runcmd('npm i node-fetch walk-sync uuid sleep-promise mime-types', logfile=logfile)
+            if os.path.exists('yarn.lock'):
+                runcmd('yarn install --pure-lockfile', logfile=logfile)
+            else:
+                runcmd('npm ci', logfile=logfile)
+
+            # tar up and store
             with tempfile.NamedTemporaryFile(suffix='.tar.lz4') as fdst:
                 runcmd(f'tar cf {fdst.name} -I lz4 node_modules', logfile=logfile)
                 # upload

@@ -7,8 +7,8 @@ import tempfile
 import aiohttp
 import requests
 
-import schemas
-from schemas import TestRun
+from common import schemas
+from common.schemas import TestRun
 from settings import settings
 from utils import create_file_path
 
@@ -24,9 +24,9 @@ async def post_logs(trid: int, log: str):
 
 async def notify_status(testrun: TestRun):
     async with aiohttp.ClientSession(headers=cykube_headers) as session:
-        payload = schemas.TestRunUpdate(started=testrun.started,
-                                        finished=testrun.finished,
-                                        status=testrun.status)
+        payload = schemas.TestRun(started=testrun.started,
+                                  finished=testrun.finished,
+                                  status=testrun.status)
         r = await session.put(f'{settings.CYKUBE_APP_URL}/hub/testrun/{testrun.id}', data=payload.json())
         if r.status != 200:
             logging.error("Failed to contact cykube app")

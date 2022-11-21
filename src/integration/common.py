@@ -1,15 +1,8 @@
-import logging
 from email.utils import parseaddr
 
-import requests
-
-import crud
 from integration.bitbucket import bitbucket_request
 from integration.jira import get_jira_user_details, get_jira_ticket_link
 from integration.slack import get_slack_user_id
-from models import sessionmaker
-from schemas import OAuthDetailsModel
-from settings import settings
 
 
 def get_commit_details(repos: str, branch: str, sha: str):

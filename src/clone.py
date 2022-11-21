@@ -1,20 +1,17 @@
 import logging
-import os
-import subprocess
 import tempfile
 import threading
 import time
-from typing import TextIO
 
 import click
 import requests
 
 import jobs
-import schemas
 import testruns
 from build import clone_repos, get_specs, create_build
+from common import schemas
+from common.schemas import NewTestRun
 from cykube import cykube_headers
-from schemas import NewTestRun
 from settings import settings
 from utils import log
 
