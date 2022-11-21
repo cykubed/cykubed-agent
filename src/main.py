@@ -83,14 +83,14 @@ async def update_testrun(id: int, files: List[str]):
     return {"message": "OK"}
 
 
-@app.get('/testrun/{id}/next')
-async def get_next_spec(id: int):
+@app.get('/testrun/{id}/next', response_model=schemas.SpecFile)
+async def get_next_spec(id: int) -> schemas.SpecFile:
     """
     Private API - called within the cluster by cypress-runner to get the next file to test
     """
     tr = testruns.get_run(id)
     if len(tr.files) > 0 and tr.status == enums.Status.running:
-        return {"spec": tr.remaining.pop()}
+        return {"file": tr.remaining.pop()}
 
     await notify_status(tr)
 
