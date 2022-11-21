@@ -4,8 +4,8 @@ import tempfile
 from shutil import copyfileobj
 
 import requests
-from schemas import NewTestRun
 
+from common.schemas import NewTestRun
 from settings import settings
 from utils import runcmd
 
