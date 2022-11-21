@@ -24,5 +24,7 @@ async def connect_websocket():
 
         except ConnectionClosedError:
             await sleep(1)
+        except TimeoutError:
+            await sleep(1)
         except ConnectionRefusedError:
             await sleep(60)
