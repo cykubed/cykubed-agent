@@ -68,7 +68,7 @@ def start_testrun(testrun: schemas.NewTestRun):
 
 
 @app.post('/testrun/{id}/status/{status}')
-async def get_status(id: int, status: enums.Status):
+async def update_status(id: int, status: enums.Status):
     tr = testruns.get_run(id)
     if tr:
         tr.status = status
@@ -90,7 +90,7 @@ async def get_next_spec(id: int) -> schemas.SpecFile:
     """
     tr = testruns.get_run(id)
     if len(tr.files) > 0 and tr.status == enums.Status.running:
-        return {"file": tr.remaining.pop()}
+        return schemas.SpecFile(file=tr.remaining.pop())
 
     await notify_status(tr)
 
