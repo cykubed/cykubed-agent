@@ -76,27 +76,6 @@ async def update_status(id: int, status: enums.Status):
     return {"message": "OK"}
 
 
-@app.put('/testrun/{id}/specs')
-async def update_testrun(id: int, files: List[str]):
-    tr = testruns.set_specs(id, files)
-    await notify_status(tr)
-    return {"message": "OK"}
-
-
-@app.get('/testrun/{id}/next', response_model=schemas.SpecFile)
-async def get_next_spec(id: int) -> schemas.SpecFile:
-    """
-    Private API - called within the cluster by cypress-runner to get the next file to test
-    """
-    tr = testruns.get_run(id)
-    if len(tr.files) > 0 and tr.status == enums.Status.running:
-        return schemas.SpecFile(file=tr.remaining.pop())
-
-    await notify_status(tr)
-
-    raise HTTPException(204)
-
-
 @app.post('/upload/cache')
 def upload(file: UploadFile):
     os.makedirs(settings.CACHE_DIR, exist_ok=True)
