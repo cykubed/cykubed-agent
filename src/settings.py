@@ -1,8 +1,18 @@
+import enum
+
 from pydantic import BaseSettings
+
+
+class JobMode(str, enum.Enum):
+    K8 = 'k8'
+    inline = 'inline'
+    thread = 'thread'
 
 
 class AppSettings(BaseSettings):
     API_TOKEN: str = 'cykubeauth'
+
+    JOB_MODE: JobMode = 'inline'
 
     TEST_RUN_TIMEOUT: int = 30 * 60
     SPEC_FILE_TIMEOUT: int = 5 * 60
@@ -14,12 +24,12 @@ class AppSettings(BaseSettings):
     PARALLELISM: int = 1
 
     HUB_URL: str = 'http://127.0.0.1:5000'
-    CACHE_URL: str = 'http://127.0.0.1:5020/cache'
+    CACHE_URL: str = 'http://127.0.0.1:5020'
 
-    CYKUBE_APP_URL: str = 'http://localhost:5002'
+    CYKUBE_APP_URL: str = 'https://app.cykube.net'
     CACHE_DIR: str = 'cache'
 
-    CYPRESS_RUNNER_VERSION: str = '8.3.1-1.0'
+    CYPRESS_RUNNER_VERSION: str = 'latest'
     DIST_CACHE_TTL_HOURS: int = 365*24
 
 

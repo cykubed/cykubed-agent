@@ -1,33 +1,21 @@
 import asyncio
 import os
 import shutil
-import tarfile
-from io import BytesIO
-from typing import Any, AnyStr, Dict, List
+from typing import Any, AnyStr, Dict
 
-from fastapi import FastAPI, HTTPException, UploadFile
+from fastapi import FastAPI, UploadFile
 from loguru import logger
 from starlette.middleware.cors import CORSMiddleware
-from starlette.requests import Request
 from uvicorn.config import (
     Config,
 )
 from uvicorn.server import Server, ServerState  # noqa: F401  # Used to be defined here.
 
-import clone
 import jobs
-import testruns
-from common import enums, schemas
-from cykube import notify_run_completed, notify_status
 from settings import settings
 from ws import connect_websocket
 
 app = FastAPI()
-
-origins = [
-    'http://localhost:4201',
-    'http://localhost:5000'
-]
 
 app.add_middleware(
     CORSMiddleware,
@@ -50,33 +38,7 @@ def health_check():
     return {'message': 'OK!'}
 
 
-@app.get('/testrun/{id}', response_model=schemas.TestRun)
-def get_testrun(id: int):
-    """
-    Private API - called within the cluster by cypress-runner to get the testrun status
-    """
-    tr = testruns.get_run(id)
-    if not tr:
-        raise HTTPException(404)
-
-    return tr
-
-
-@app.post('/testrun/start')
-def start_testrun(testrun: schemas.NewTestRun):
-    clone.start_run(testrun)
-
-
-@app.post('/testrun/{id}/status/{status}')
-async def update_status(id: int, status: enums.Status):
-    tr = testruns.get_run(id)
-    if tr:
-        tr.status = status
-    await notify_status(tr)
-    return {"message": "OK"}
-
-
-@app.post('/upload/cache')
+@app.post('/upload')
 def upload(file: UploadFile):
     os.makedirs(settings.CACHE_DIR, exist_ok=True)
     path = os.path.join(settings.CACHE_DIR, file.filename)
@@ -89,38 +51,6 @@ def upload(file: UploadFile):
         file.file.close()
     return {"message": "OK"}
 
-
-@app.post('/testrun/{id}/{file}/completed')
-async def runner_completed(id: int, file: str, request: Request):
-    tr = testruns.get_run(id)
-    if not tr or tr.status != enums.Status.running:
-        raise HTTPException(204)
-    # the body will be a tar of the results
-    tf = tarfile.TarFile(fileobj=BytesIO(await request.body()))
-    tf.extractall(os.path.join(settings.RESULTS_DIR, str(id)))
-
-    # remove file from list
-    tr.remaining = [x for x in tr.remaining if x.file != file]
-    if not tr.remaining:
-        notify_run_completed(tr)
-    return "OK"
-
-
-# @app.on_event("startup")
-# @repeat_every(seconds=3000)
-# def handle_timeouts():
-#     with sessionmaker.context_session() as db:
-#         crud.apply_timeouts(db, settings.TEST_RUN_TIMEOUT, settings.SPEC_FILE_TIMEOUT)
-#     delete_old_dists()
-
-
-#
-#
-# @app.route('/testrun/<key>/create_report', methods=['POST'])
-# def report(key):
-#     logging.info(f"Create report for {key}")
-#     create_report(key)
-#
 
 async def create_tasks():
     config = Config(app, port=5000)

@@ -6,6 +6,7 @@ from shutil import copyfileobj
 import requests
 
 from common.schemas import NewTestRun
+from exceptions import BuildFailedException
 from settings import settings
 from utils import runcmd
 
@@ -22,6 +23,12 @@ def clone_repos(url: str, branch: str, logfile) -> str:
 def get_lock_hash(build_dir):
     m = hashlib.sha256()
     lockfile = os.path.join(build_dir, 'package-lock.json')
+    if not os.path.exists(lockfile):
+        lockfile = os.path.join(build_dir, 'yarn.lock')
+
+    if not os.path.exists(lockfile):
+        raise BuildFailedException("No lock file")
+
     # hash the lock
     with open(lockfile, 'rb') as f:
         m.update(f.read())
@@ -29,7 +36,7 @@ def get_lock_hash(build_dir):
 
 
 def upload_to_cache(filename, file):
-    r = requests.post(os.path.join(settings.HUB_URL, 'upload', 'cache'), files={
+    r = requests.post(os.path.join(settings.HUB_URL, 'upload'), files={
         'file': (filename, file, 'application/octet-stream')
     })
     r.raise_for_status()
@@ -76,7 +83,7 @@ def create_build(testrun: NewTestRun, builddir: str, logfile):
     with tempfile.NamedTemporaryFile(suffix='.tar.lz4') as fdst:
         logfile.write("Create distribution and cleanup\n")
         # tarball everything
-        runcmd(f'tar cf {fdst.name} ./node_modules ./dist ./src ./cypress *.json *.js -I lz4', logfile=logfile)
+        runcmd(f'tar cf {fdst.name} . -I lz4', logfile=logfile)
         # and upload
         upload_to_cache(f'{sha}.tar.lz4', fdst)
 
