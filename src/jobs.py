@@ -6,7 +6,7 @@ import tempfile
 from kubernetes import client, config
 from kubernetes.client import ApiException
 
-from schemas import NewTestRun
+from common.schemas import NewTestRun
 from settings import settings
 from utils import runcmd
 
