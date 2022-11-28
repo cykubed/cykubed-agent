@@ -2,7 +2,7 @@ import json
 from asyncio import sleep
 
 import websockets
-from websockets.exceptions import ConnectionClosedError
+from websockets.exceptions import ConnectionClosedError, InvalidStatusCode
 
 # TODO add better protection for connection failed
 import clone
@@ -14,7 +14,7 @@ async def connect_websocket():
     while True:
         try:
             domain = settings.CYKUBE_APP_URL[settings.CYKUBE_APP_URL.find('//')+2:]
-            async with websockets.connect(f'wss://{domain}/hub/ws',
+            async with websockets.connect(f'wss://{domain}/api/hub/ws',
                   extra_headers={'Authorization': f'Bearer {settings.API_TOKEN}'}) as ws:
                 while True:
                     data = json.loads(await ws.recv())
@@ -28,3 +28,5 @@ async def connect_websocket():
             await sleep(1)
         except ConnectionRefusedError:
             await sleep(60)
+        except InvalidStatusCode:
+            await sleep(10)

@@ -6,7 +6,7 @@ authors = ["nick <nickbrook72@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.11"
 google-cloud-storage = "*"
 python-jose = "*"
 six = "*"
@@ -15,10 +15,8 @@ google-cloud-container = "*"
 kubernetes = "*"
 uvicorn = {extras = ["standard"], version = "*"}
 aiohttp = {extras = ["speedups"], version = "*"}
-ujson = "*"
-fastapi = "*"
+fastapi = "^0.87"
 fastapi-utils = "*"
-ipython = "*"
 loguru = "*"
 click = "*"
 pydantic-to-typescript = "*"

@@ -77,7 +77,7 @@ def create_build(testrun: NewTestRun, builddir: str, logfile):
 
     # build the app
     logfile.write(f"Building {branch}\n")
-    runcmd(f'./node_modules/.bin/{testrun.build_cmd}', logfile=logfile)
+    runcmd(f'./node_modules/.bin/{testrun.project.build_cmd}', logfile=logfile)
 
     # tar it up
     with tempfile.NamedTemporaryFile(suffix='.tar.lz4') as fdst:

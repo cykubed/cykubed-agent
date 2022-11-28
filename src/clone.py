@@ -1,4 +1,5 @@
 import logging
+import subprocess
 import tempfile
 import threading
 import time
@@ -43,7 +44,7 @@ def clone_and_build(testrun: NewTestRun):
     """
     Clone and build
     """
-    parallelism = testrun.parallelism or settings.PARALLELISM
+    parallelism = testrun.project.parallelism or settings.PARALLELISM
 
     logfile = tempfile.NamedTemporaryFile(suffix='.log', mode='w')
 
@@ -57,7 +58,7 @@ def clone_and_build(testrun: NewTestRun):
     post_status(testrun, schemas.Status.building)
     try:
         # clone
-        wdir = clone_repos(testrun.url, testrun.branch, logfile)
+        wdir = clone_repos(testrun.project.url, testrun.branch, logfile)
         # get the list of specs and create a testrun
         specs = get_specs(wdir)
         logfile.write(f"Found {len(specs)} spec files\n")
@@ -66,10 +67,13 @@ def clone_and_build(testrun: NewTestRun):
             logfile.write("No specs - nothing to test\n")
             post_status(testrun, schemas.Status.passed)
         else:
+            if not testrun.sha:
+                testrun.sha = subprocess.check_output(f"git rev-parse {testrun.branch}", cwd=wdir)
+
             # tell cykube
             requests.put(f'{settings.CYKUBE_APP_URL}/testrun/{testrun.id}/specs',
                          headers=cykube_headers,
-                         json={'specs': specs})
+                         json={'specs': specs, 'sha': testrun.sha})
 
             # start the runner jobs - that way the cluster has a head start on spinning
             # up new nodes
