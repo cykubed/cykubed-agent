@@ -16,7 +16,8 @@ from settings import settings
 from utils import log
 
 running = False
-cykube_headers = {'Authorization': f'Bearer {settings.API_TOKEN}'}
+cykube_headers = {'Authorization': f'Bearer {settings.API_TOKEN}',
+                  'Accept': 'application/json'}
 
 
 def log_watcher(trid: int, fname: str):
@@ -25,17 +26,17 @@ def log_watcher(trid: int, fname: str):
         while running:
             logs = logfile.read().encode('utf8')
             if logs:
-                r = requests.post(f'{settings.CYKUBE_APP_URL}/hub/logs/{trid}', data=logs,
+                r = requests.post(f'{settings.CYKUBE_API_URL}/hub/logs/{trid}', data=logs,
                                   headers=cykube_headers)
                 if r.status_code != 200:
-                    logging.error(f"Failed to push logs: {r.json()}")
+                    logging.error(f"Failed to push logs")
             time.sleep(settings.LOG_UPDATE_PERIOD)
 
 
 def post_status(testrun: NewTestRun, status: schemas.Status):
-    r = requests.post(f'{settings.CYKUBE_APP_URL}/hub/testrun/{testrun.id}/status/{status}',
+    r = requests.put(f'{settings.CYKUBE_API_URL}/hub/testrun/{testrun.id}/status',
                       headers=cykube_headers,
-                      timeout=10)
+                      timeout=10, json={'status': status.name})
     if r.status_code != 200:
         logging.error(f"Failed to contact CyKube to update status for run {testrun.id}")
 
@@ -68,12 +69,16 @@ def clone_and_build(testrun: NewTestRun):
             post_status(testrun, schemas.Status.passed)
         else:
             if not testrun.sha:
-                testrun.sha = subprocess.check_output(f"git rev-parse {testrun.branch}", cwd=wdir)
+                testrun.sha = subprocess.check_output(['git', 'rev-parse',  testrun.branch], cwd=wdir,
+                                                      text=True).strip('\n')
 
             # tell cykube
-            requests.put(f'{settings.CYKUBE_APP_URL}/testrun/{testrun.id}/specs',
-                         headers=cykube_headers,
-                         json={'specs': specs, 'sha': testrun.sha})
+            r = requests.put(f'{settings.CYKUBE_API_URL}/hub/testrun/{testrun.id}/specs',
+                             headers=cykube_headers,
+                             json={'specs': specs, 'sha': testrun.sha})
+            if not r.status_code == 200:
+                logfile.write("Failed to update cykube with list of specs - bailing out")
+                return
 
             # start the runner jobs - that way the cluster has a head start on spinning
             # up new nodes

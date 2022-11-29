@@ -44,7 +44,7 @@ def upload_to_cache(filename, file):
 
 def create_build(testrun: NewTestRun, builddir: str, logfile):
     """
-    Build the Angular app. Uses a cache for node_modules
+    Build the app. Uses a cache for node_modules
     """
     branch = testrun.branch
     sha = testrun.sha

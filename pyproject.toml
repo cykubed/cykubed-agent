@@ -6,7 +6,7 @@ authors = ["nick <nickbrook72@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "^3.10"
 google-cloud-storage = "*"
 python-jose = "*"
 six = "*"

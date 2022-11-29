@@ -24,9 +24,9 @@ class AppSettings(BaseSettings):
     PARALLELISM: int = 1
 
     HUB_URL: str = 'http://127.0.0.1:5000'
-    CACHE_URL: str = 'http://127.0.0.1:5020'
+    CACHE_URL: str = 'http://127.0.0.1:5001/cache'
 
-    CYKUBE_APP_URL: str = 'https://app.cykube.net'
+    CYKUBE_API_URL: str = 'https://app.cykube.net/api'
     CACHE_DIR: str = 'cache'
 
     CYPRESS_RUNNER_VERSION: str = 'latest'
