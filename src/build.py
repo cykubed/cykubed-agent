@@ -1,4 +1,3 @@
-import glob
 import hashlib
 import json
 import os
@@ -93,24 +92,24 @@ def create_build(testrun: NewTestRun, builddir: str, logfile):
 
 
 def get_specs(wdir):
-    specs = []
     cyjson = os.path.join(wdir, 'cypress.json')
 
-    include_globs = []
-    exclude_globs = []
+    compiled = None
 
     if os.path.exists(cyjson):
-        with open(cyjson, 'r') as f:
-            config = json.loads(f.read())
-            if 'integrationFolder' in config:
-                folder = config['integrationFolder']
-            else:
-                folder = 'cypress/integration'
-            test_files = config.get('testFiles', '**/*.*')
-            include_globs.append(os.path.join(folder, test_files))
+        # TODO handle legacy JSON format
+        pass
+        # with open(cyjson, 'r') as f:
+        #     config = json.loads(f.read())
+        #     if 'integrationFolder' in config:
+        #         folder = config['integrationFolder']
+        #     else:
+        #         folder = 'cypress/integration'
+        #     test_files = config.get('testFiles', '**/*.*')
+        #     include_globs.append(os.path.join(folder, test_files))
     else:
         cfg = os.path.join(wdir, 'cypress.config.js')
-        compiled = None
+
         if not os.path.exists(cfg):
             cfg = os.path.join(wdir, 'cypress.config.ts')
             if not os.path.exists(cfg):
@@ -119,25 +118,14 @@ def get_specs(wdir):
             subprocess.check_call(['npx', 'tsc',
                                    'cypress.config.ts'], cwd=wdir)
             compiled = os.path.join(wdir, 'cypress.config.js')
-        # extract paths
-        shutil.copy(os.path.join(os.path.dirname(__file__), '../extractconfig.mjs'),
-                        wdir)
-        result = subprocess.run(['/usr/bin/node', 'extractconfig.mjs'], capture_output=True, check=True, cwd=wdir)
 
-        # merge e2e and component together for now
-        specs = json.loads(result.stdout.decode())
-        print(specs)
-        if compiled:
-            os.remove(compiled)
-        os.remove(os.path.join(wdir, 'extractconfig.mjs'))
-
-        include_globs += [specs['e2e_include'], specs['component_include']]
-        if specs['e2e_exclude']:
-            exclude_globs.append(specs['e2e_exclude'])
-
-    # fetch files
-    for globrule in include_globs:
-        for f in glob.glob(globrule, recursive=True, root_dir=wdir):
-            specs.append(f)
+    # extract paths
+    shutil.copy(os.path.join(os.path.dirname(__file__), '../get_specs.mjs'),
+                wdir)
+    proc = subprocess.run(['/usr/bin/node', 'get_specs.mjs'], check=True, cwd=wdir, capture_output=True)
+    specs = json.loads(proc.stdout.decode())
+    if compiled:
+        os.remove(compiled)
+    os.remove(os.path.join(wdir, 'get_specs.mjs'))
     return specs
 
