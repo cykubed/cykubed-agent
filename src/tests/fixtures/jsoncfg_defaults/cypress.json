@@ -1,0 +1,8 @@
+{
+  "video": false,
+  "baseUrl": "http://localhost:4200",
+  "projectId": "dummyui",
+  "viewportWidth": 1024,
+  "viewportHeight": 900,
+  "chromeWebSecurity": false
+}
