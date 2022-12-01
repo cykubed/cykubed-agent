@@ -1,4 +1,4 @@
-import(process.argv[2]+"/cypress.config.js").then(cfg => {
+import(process.argv[2]+"/cypress.config.mjs").then(cfg => {
   const config = cfg.default.default;
   const specconfig = {
     e2e_include: config?.e2e?.specPattern || 'cypress/e2e/**/*.cy.{js,jsx,ts,tsx}',

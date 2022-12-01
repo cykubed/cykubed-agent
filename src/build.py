@@ -1,10 +1,12 @@
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 from shutil import copyfileobj
 
+import aiohttp
 import requests
 from wcmatch import glob
 
@@ -13,8 +15,10 @@ from exceptions import BuildFailedException
 from settings import settings
 from utils import runcmd
 
+ROOT_DIR = os.path.join(os.path.dirname(__file__), '..')
 NODE_DIR = os.path.join(os.path.dirname(__file__), 'node')
 GET_SPEC_CONFIG_FILE = os.path.join(NODE_DIR, 'get_spec_config.mjs')
+TSC_BIN = os.path.abspath(os.path.join(ROOT_DIR, 'node_modules/.bin/tsc'))
 
 
 def clone_repos(url: str, branch: str, logfile) -> str:
@@ -41,19 +45,18 @@ def get_lock_hash(build_dir):
     return m.hexdigest()
 
 
-def upload_to_cache(filename, file):
-    r = requests.post(os.path.join(settings.HUB_URL, 'upload'), files={
-        'file': (filename, file, 'application/octet-stream')
-    })
-    r.raise_for_status()
+async def upload_to_cache(file_name, logfile):
+    logfile.write("Uploading environment to cache")
+    async with aiohttp.ClientSession(base_url=settings.HUB_URL) as session:
+        await session.post('/upload', data={'file': open(file_name, 'rb')})
+    logfile.write("Environment uploaded")
 
 
-def create_build(testrun: NewTestRun, builddir: str, logfile):
+async def create_node_environment(testrun: NewTestRun, builddir: str, logfile):
     """
     Build the app. Uses a cache for node_modules
     """
     branch = testrun.branch
-    sha = testrun.sha
 
     logfile.write(f"Creating build distribution for branch {branch} in dir {builddir}\n")
     os.chdir(builddir)
@@ -76,22 +79,23 @@ def create_build(testrun: NewTestRun, builddir: str, logfile):
                 runcmd('npm ci', logfile=logfile)
 
             # tar up and store
-            with tempfile.NamedTemporaryFile(suffix='.tar.lz4') as fdst:
-                runcmd(f'tar cf {fdst.name} -I lz4 node_modules', logfile=logfile)
-                # upload
-                upload_to_cache(cache_filename, fdst)
+            runcmd(f'tar cf /tmp/{cache_filename} -I lz4 node_modules', logfile=logfile)
+            # upload
+            await upload_to_cache(f'/tmp/{cache_filename}', logfile)
 
+
+async def build_app(testrun: NewTestRun, logfile):
     # build the app
-    logfile.write(f"Building {branch}\n")
+    logfile.write(f"Building app\n")
     runcmd(f'./node_modules/.bin/{testrun.project.build_cmd}', logfile=logfile)
 
     # tar it up
-    with tempfile.NamedTemporaryFile(suffix='.tar.lz4') as fdst:
-        logfile.write("Create distribution and cleanup\n")
-        # tarball everything
-        runcmd(f'tar cf {fdst.name} . -I lz4', logfile=logfile)
-        # and upload
-        upload_to_cache(f'{sha}.tar.lz4', fdst)
+    logfile.write("Create distribution and cleanup\n")
+    filename = f'{testrun.sha}.tar.lz4'
+    # tarball everything
+    runcmd(f'tar cf /tmp/{filename} . -I lz4', logfile=logfile)
+    # and upload
+    await upload_to_cache(f'/tmp/{filename}', logfile)
 
 
 def make_array(x):
@@ -103,7 +107,7 @@ def make_array(x):
 def get_specs(wdir):
     cyjson = os.path.join(wdir, 'cypress.json')
 
-    compiled = None
+    tscdir = None
 
     if os.path.exists(cyjson):
         with open(cyjson, 'r') as f:
@@ -114,14 +118,17 @@ def get_specs(wdir):
     else:
         # we need to compile the TS config file
         folder = ''
-        cfg = os.path.join(wdir, 'cypress.config.ts')
-        if os.path.exists(cfg):
+        jsconfig = os.path.join(wdir, 'cypress.config.ts')
+        if os.path.exists(jsconfig):
             # compile it
-            subprocess.check_call(['npx', 'tsc', 'cypress.config.ts'], cwd=wdir)
-            compiled = os.path.join(wdir, 'cypress.config.js')
+            tscdir = tempfile.mkdtemp()
+            proc = subprocess.run(['./node_modules/.bin/tsc', '--outDir', tscdir], cwd=wdir, capture_output=True)
+            if proc.returncode:
+                print("Failed: "+proc.stderr.decode())
+                raise BuildFailedException()
+            shutil.copy(os.path.join(tscdir, 'cypress.config.js'), wdir)
 
-        cfg = os.path.join(wdir, 'cypress.config.js')
-        if not os.path.exists(cfg):
+        if not os.path.exists(jsconfig):
             raise BuildFailedException("Cannot find Cypress config file")
 
         # extract paths
@@ -138,8 +145,8 @@ def get_specs(wdir):
     specs = glob.glob(include_globs, root_dir=os.path.join(wdir, folder),
                       flags=glob.BRACE, exclude=exclude_globs)
 
-    if compiled:
-        os.remove(compiled)
+    if tscdir:
+        shutil.rmtree(tscdir)
 
     specs = [os.path.join(folder, s) for s in specs]
     return specs

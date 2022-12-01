@@ -20,7 +20,7 @@ async def connect_websocket():
                     data = json.loads(await ws.recv())
                     cmd = data['command']
                     if cmd == 'start':
-                        clone.start_run(NewTestRun.parse_raw(data['payload']))
+                        await clone.start_run(NewTestRun.parse_raw(data['payload']))
 
         except ConnectionClosedError:
             await sleep(1)

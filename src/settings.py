@@ -16,7 +16,7 @@ class AppSettings(BaseSettings):
 
     TEST_RUN_TIMEOUT: int = 30 * 60
     SPEC_FILE_TIMEOUT: int = 5 * 60
-    LOG_UPDATE_PERIOD = 10
+    LOG_UPDATE_PERIOD = 2
 
     BUILD_TIMEOUT: int = 900
 
@@ -24,10 +24,10 @@ class AppSettings(BaseSettings):
     PARALLELISM: int = 1
 
     HUB_URL: str = 'http://127.0.0.1:5000'
-    CACHE_URL: str = 'http://127.0.0.1:5001/cache'
+    CACHE_URL: str = 'http://127.0.0.1:5001'
 
     CYKUBE_API_URL: str = 'https://app.cykube.net/api'
-    CACHE_DIR: str = 'cache'
+    CACHE_DIR: str = '/var/lib/cykubecache'
 
     CYPRESS_RUNNER_VERSION: str = 'latest'
     DIST_CACHE_TTL_HOURS: int = 365*24
