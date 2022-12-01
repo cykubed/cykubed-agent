@@ -96,32 +96,19 @@ def get_specs(wdir):
 
     compiled = None
 
-    if os.path.exists(cyjson):
-        # TODO handle legacy JSON format
-        pass
-        # with open(cyjson, 'r') as f:
-        #     config = json.loads(f.read())
-        #     if 'integrationFolder' in config:
-        #         folder = config['integrationFolder']
-        #     else:
-        #         folder = 'cypress/integration'
-        #     test_files = config.get('testFiles', '**/*.*')
-        #     include_globs.append(os.path.join(folder, test_files))
-    else:
+    if not os.path.exists(cyjson):
+        # we need to compile the TS config file
         cfg = os.path.join(wdir, 'cypress.config.js')
-
         if not os.path.exists(cfg):
             cfg = os.path.join(wdir, 'cypress.config.ts')
             if not os.path.exists(cfg):
                 raise BuildFailedException("Cannot find Cypress config file")
             # compile it
-            subprocess.check_call(['npx', 'tsc',
-                                   'cypress.config.ts'], cwd=wdir)
+            subprocess.check_call(['npx', 'tsc', 'cypress.config.ts'], cwd=wdir)
             compiled = os.path.join(wdir, 'cypress.config.js')
 
     # extract paths
-    shutil.copy(os.path.join(os.path.dirname(__file__), '../get_specs.mjs'),
-                wdir)
+    shutil.copy(os.path.join(os.path.dirname(__file__), 'node/get_specs.mjs'), wdir)
     proc = subprocess.run(['/usr/bin/node', 'get_specs.mjs'], check=True, cwd=wdir, capture_output=True)
     specs = json.loads(proc.stdout.decode())
     if compiled:
