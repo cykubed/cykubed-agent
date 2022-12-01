@@ -6,7 +6,7 @@ export default defineConfig({
 
   e2e: {
     baseUrl: 'http://localhost:4200',
-    specPattern: 'cypress/e2e/**/*.cy.{js,jsx,ts,tsx}',
-    excludeSpecPattern: 'cypress/e2e/tests/test3.cy.*'
+    specPattern: 'cypress/xe2e/**/*.cy.{js,ts}',
+    excludeSpecPattern: 'cypress/xe2e/tests/test3.cy.*'
   }
 });

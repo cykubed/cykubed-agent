@@ -7,11 +7,7 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.10"
-google-cloud-storage = "*"
-python-jose = "*"
 six = "*"
-google-cloud-logging = "*"
-google-cloud-container = "*"
 kubernetes = "*"
 uvicorn = {extras = ["standard"], version = "*"}
 aiohttp = {extras = ["speedups"], version = "*"}
@@ -23,9 +19,11 @@ ecdsa = "*"
 jwt = "*"
 websockets = "*"
 python-multipart = "*"
+wcmatch = "^8.4.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.2.0"
+python-jose = "*"
 
 [build-system]
 requires = ["poetry-core"]

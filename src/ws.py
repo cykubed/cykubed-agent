@@ -30,3 +30,7 @@ async def connect_websocket():
             await sleep(60)
         except InvalidStatusCode:
             await sleep(10)
+
+
+if __name__ == '__main__':
+    connect_websocket()

@@ -1,17 +1,20 @@
 import hashlib
 import json
 import os
-import shutil
 import subprocess
 import tempfile
 from shutil import copyfileobj
 
 import requests
+from wcmatch import glob
 
 from common.schemas import NewTestRun
 from exceptions import BuildFailedException
 from settings import settings
 from utils import runcmd
+
+NODE_DIR = os.path.join(os.path.dirname(__file__), 'node')
+GET_SPEC_CONFIG_FILE = os.path.join(NODE_DIR, 'get_spec_config.mjs')
 
 
 def clone_repos(url: str, branch: str, logfile) -> str:
@@ -91,28 +94,53 @@ def create_build(testrun: NewTestRun, builddir: str, logfile):
         upload_to_cache(f'{sha}.tar.lz4', fdst)
 
 
+def make_array(x):
+    if not type(x) is list:
+        return [x]
+    return x
+
+
 def get_specs(wdir):
     cyjson = os.path.join(wdir, 'cypress.json')
 
     compiled = None
 
-    if not os.path.exists(cyjson):
+    if os.path.exists(cyjson):
+        with open(cyjson, 'r') as f:
+            config = json.loads(f.read())
+        folder = config.get('integrationFolder', 'cypress/integration')
+        include_globs = make_array(config.get('testFiles', '**/*.*'))
+        exclude_globs = make_array(config.get('ignoreTestFiles', '*.hot-update.js'))
+    else:
         # we need to compile the TS config file
-        cfg = os.path.join(wdir, 'cypress.config.js')
-        if not os.path.exists(cfg):
-            cfg = os.path.join(wdir, 'cypress.config.ts')
-            if not os.path.exists(cfg):
-                raise BuildFailedException("Cannot find Cypress config file")
+        folder = ''
+        cfg = os.path.join(wdir, 'cypress.config.ts')
+        if os.path.exists(cfg):
             # compile it
             subprocess.check_call(['npx', 'tsc', 'cypress.config.ts'], cwd=wdir)
             compiled = os.path.join(wdir, 'cypress.config.js')
 
-    # extract paths
-    shutil.copy(os.path.join(os.path.dirname(__file__), 'node/get_specs.mjs'), wdir)
-    proc = subprocess.run(['/usr/bin/node', 'get_specs.mjs'], check=True, cwd=wdir, capture_output=True)
-    specs = json.loads(proc.stdout.decode())
+        cfg = os.path.join(wdir, 'cypress.config.js')
+        if not os.path.exists(cfg):
+            raise BuildFailedException("Cannot find Cypress config file")
+
+        # extract paths
+        proc = subprocess.run(['/usr/bin/node', GET_SPEC_CONFIG_FILE, wdir], capture_output=True)
+        if proc.returncode:
+            raise BuildFailedException("Failed to extract specs: "+proc.stderr.decode())
+        config = json.loads(proc.stdout.decode())
+        include_globs = make_array(config.get('e2e_include', 'cypress/e2e/**/*.cy.{js,jsx,ts,tsx}')) + \
+            make_array(config.get('component_include', 'cypress/component/**/*.cy.{js,jsx,ts,tsx}'))
+        exclude_globs = \
+            make_array(config.get('e2e_exclude', '*.hot-update.js')) + \
+            make_array(config.get('component_exclude', ['/snapshots/*', '/image_snapshots/*']))
+
+    specs = glob.glob(include_globs, root_dir=os.path.join(wdir, folder),
+                      flags=glob.BRACE, exclude=exclude_globs)
+
     if compiled:
         os.remove(compiled)
-    os.remove(os.path.join(wdir, 'get_specs.mjs'))
+
+    specs = [os.path.join(folder, s) for s in specs]
     return specs
 

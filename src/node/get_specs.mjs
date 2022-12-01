@@ -2,7 +2,8 @@ import pkg from 'glob';
 import {readFileSync} from 'node:fs';
 
 const {glob} = pkg;
-
+const wdir = process.argv[2];
+process.chdir(wdir);
 
 import("./cypress.config.js").then(cfg => {
   const config = cfg.default.default;
