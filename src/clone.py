@@ -1,17 +1,18 @@
 import asyncio
+import base64
+import json
 import logging
 import subprocess
+import sys
 import tempfile
 import threading
 import time
 
-import click
 import requests
 
 import jobs
-import testruns
 from build import clone_repos, create_node_environment, get_specs, build_app
-from common import schemas
+from common.enums import TestRunStatus
 from common.schemas import NewTestRun
 from settings import settings
 from utils import log
@@ -35,7 +36,7 @@ def log_watcher(trid: int, fname: str):
             time.sleep(settings.LOG_UPDATE_PERIOD)
 
 
-def post_status(testrun: NewTestRun, status: schemas.Status):
+def post_status(testrun: NewTestRun, status: TestRunStatus):
     r = requests.put(f'{settings.CYKUBE_API_URL}/hub/testrun/{testrun.id}/status',
                       headers=cykube_headers,
                       timeout=10, json={'status': status.name})
@@ -58,7 +59,7 @@ async def clone_and_build(testrun: NewTestRun):
     logthread.start()
 
     t = time.time()
-    post_status(testrun, schemas.Status.building)
+    post_status(testrun, TestRunStatus.building)
     try:
         # clone
         wdir = clone_repos(testrun.project.url, testrun.branch, logfile)
@@ -95,10 +96,10 @@ async def clone_and_build(testrun: NewTestRun):
 
         if not specs:
             logfile.write("No specs - nothing to test\n")
-            post_status(testrun, schemas.Status.passed)
+            post_status(testrun, TestRunStatus.passed)
 
         logfile.write(f"Found {len(specs)} spec files\n")
-        post_status(testrun, schemas.Status.running)
+        post_status(testrun, TestRunStatus.running)
         t = time.time() - t
         logfile.write(f"Distribution created in {t:.1f}s\n")
 
@@ -112,8 +113,6 @@ async def clone_and_build(testrun: NewTestRun):
 
 
 async def start_run(newrun: NewTestRun):
-    testruns.add_run(newrun)
-
     if settings.JOB_MODE == 'k8':
         # fire in Job
         jobs.start_clone_job(newrun)
@@ -122,19 +121,8 @@ async def start_run(newrun: NewTestRun):
         await clone_and_build(newrun)
 
 
-@click.command()
-@click.option('--id', type=int, required=True, help='Testrun ID')
-@click.option('--url', type=str, required=True, help='Clone URL')
-@click.option('--sha', type=str, required=True, help='SHA')
-@click.option('--branch', type=str, required=True, help='Branch')
-@click.option('--build_cmd', type=str, default='ng build --output-path=dist', help='NPM build command')
-@click.option('--parallelism', type=int, default=None, help="Parallelism override")
-def main(id, url, sha, branch, build_cmd, parallelism=None):
-    if not parallelism:
-        parallelism = settings.PARALLELISM
-    tr = NewTestRun(id=id, url=url, sha=sha, branch=branch, parallelism=parallelism, build_cmd=build_cmd)
+if __name__ == '__main__':
+    trjson = json.loads(base64.b64decode(sys.argv[1]))
+    tr = NewTestRun(**trjson)
     asyncio.run(clone_and_build(tr))
 
-
-if __name__ == '__main__':
-    main()

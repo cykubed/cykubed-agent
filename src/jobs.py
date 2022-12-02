@@ -1,3 +1,4 @@
+import base64
 import logging
 import os
 import subprocess
@@ -123,7 +124,7 @@ def start_clone_job(newrun: NewTestRun):
     Start a clone job
     """
     with open(os.path.join(RUNNER_CONFIG_DIR, 'clone.yaml')) as f:
-        cfg = f.read().format(ARGS=newrun.dict())
+        cfg = f.read().format(ARGS=base64.b64encode(newrun.json()))
         # TODO handle log upload
         start_job(cfg)
 

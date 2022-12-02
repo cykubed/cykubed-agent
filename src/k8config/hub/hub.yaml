@@ -1,0 +1,124 @@
+#
+# test Hub App Service
+#
+apiVersion: v1
+kind: Service
+metadata:
+  name: cypresshub-external
+spec:
+  type: NodePort
+  selector:
+    app: cypresshub
+  ports:
+  - port: 5001
+    protocol: TCP
+    targetPort: nginx-port
+    name: http
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: cypresshub
+spec:
+  type: ClusterIP
+  selector:
+    app: cypresshub
+  ports:
+  - port: 5000
+    protocol: TCP
+    targetPort: cypresshub-port
+    name: http
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cypresshub-config
+data:
+  REDIS_HOST: redis
+
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cypresshub-persistent-storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100G
+---
+
+#
+# cypresshub Apps
+#
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cypresshub
+spec:
+  selector:
+    matchLabels:
+      app: cypresshub
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: cypresshub
+    spec:
+      containers:
+        #
+        # API server
+        #
+        - name: server
+          image: nickbrookdocker/cypresshub:1.2
+          imagePullPolicy: IfNotPresent
+          command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5000"]
+          ports:
+            - containerPort: 5000
+              name: cypresshub-port
+              protocol: TCP
+#          livenessProbe:
+#            httpGet:
+#              path: /hc
+#              port: 5000
+#            initialDelaySeconds: 60
+#            periodSeconds: 5
+          volumeMounts:
+          - name: cypresshub-persistent-storage
+            mountPath: /var/lib/cypresshub
+          envFrom:
+          - configMapRef:
+              name: cypresshub-config
+          - secretRef:
+              name: cypresshub-secrets
+
+        #
+        # NGINX
+        #
+        - name: nginx
+          image: nickbrookdocker/cypresshub-nginx:1.1
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+          - name: cypresshub-persistent-storage
+            mountPath: /var/lib/cypresshub
+          ports:
+            - containerPort: 5001
+              name: nginx-port
+              protocol: TCP
+
+      volumes:
+        - name: cypresshub-persistent-storage
+          persistentVolumeClaim:
+            claimName: cypresshub-persistent-storage
+
