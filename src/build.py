@@ -1,8 +1,8 @@
 import hashlib
 import json
 import os
+import re
 import shutil
-import subprocess
 import tempfile
 from shutil import copyfileobj
 
@@ -15,10 +15,8 @@ from exceptions import BuildFailedException
 from settings import settings
 from utils import runcmd
 
-ROOT_DIR = os.path.join(os.path.dirname(__file__), '..')
-NODE_DIR = os.path.join(os.path.dirname(__file__), 'node')
-GET_SPEC_CONFIG_FILE = os.path.join(NODE_DIR, 'get_spec_config.mjs')
-TSC_BIN = os.path.abspath(os.path.join(ROOT_DIR, 'node_modules/.bin/tsc'))
+INCLUDE_SPEC_REGEX = re.compile(r'specPattern:\s*[\"\'](.*)[\"\']')
+EXCLUDE_SPEC_REGEX = re.compile(r'excludeSpecPattern:\s*[\"\'](.*)[\"\']')
 
 
 def clone_repos(url: str, branch: str, logfile) -> str:
@@ -116,31 +114,18 @@ def get_specs(wdir):
         include_globs = make_array(config.get('testFiles', '**/*.*'))
         exclude_globs = make_array(config.get('ignoreTestFiles', '*.hot-update.js'))
     else:
-        # we need to compile the TS config file
-        folder = ''
-        jsconfig = os.path.join(wdir, 'cypress.config.ts')
-        if os.path.exists(jsconfig):
-            # compile it
-            tscdir = tempfile.mkdtemp()
-            proc = subprocess.run(['./node_modules/.bin/tsc', '--outDir', tscdir], cwd=wdir, capture_output=True)
-            if proc.returncode:
-                print("Failed: "+proc.stderr.decode())
-                raise BuildFailedException()
-            shutil.copy(os.path.join(tscdir, 'cypress.config.js'), wdir)
-
-        if not os.path.exists(jsconfig):
-            raise BuildFailedException("Cannot find Cypress config file")
-
-        # extract paths
-        proc = subprocess.run(['/usr/bin/node', GET_SPEC_CONFIG_FILE, wdir], capture_output=True)
-        if proc.returncode:
-            raise BuildFailedException("Failed to extract specs: "+proc.stderr.decode())
-        config = json.loads(proc.stdout.decode())
-        include_globs = make_array(config.get('e2e_include', 'cypress/e2e/**/*.cy.{js,jsx,ts,tsx}')) + \
-            make_array(config.get('component_include', 'cypress/component/**/*.cy.{js,jsx,ts,tsx}'))
-        exclude_globs = \
-            make_array(config.get('e2e_exclude', '*.hot-update.js')) + \
-            make_array(config.get('component_exclude', ['/snapshots/*', '/image_snapshots/*']))
+        # technically I should use node to extra the various globs, but it's more trouble than it's worth
+        # so i'll stick with regex
+        folder = ""
+        config = os.path.join(wdir, 'cypress.config.js')
+        if not os.path.exists(config):
+            config = os.path.join(wdir, 'cypress.config.ts')
+            if not os.path.exists(config):
+                raise BuildFailedException("Cannot find Cypress config file")
+        with open(config, 'r') as f:
+            cfgtext = f.read()
+            include_globs = re.findall(INCLUDE_SPEC_REGEX, cfgtext)
+            exclude_globs = re.findall(EXCLUDE_SPEC_REGEX, cfgtext)
 
     specs = glob.glob(include_globs, root_dir=os.path.join(wdir, folder),
                       flags=glob.BRACE, exclude=exclude_globs)
