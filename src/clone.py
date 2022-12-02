@@ -25,9 +25,10 @@ def log_watcher(trid: int, fname: str):
     with open(fname, 'r') as logfile:
         global running
         while running:
-            logs = logfile.read().encode('utf8')
+            logs = logfile.read()
             if logs:
-                r = requests.post(f'{settings.CYKUBE_API_URL}/hub/testrun/{trid}/logs', data=logs,
+                print(logs)
+                r = requests.post(f'{settings.CYKUBE_API_URL}/hub/testrun/{trid}/logs', data=logs.encode('utf8'),
                                   headers=cykube_headers)
                 if r.status_code != 200:
                     logging.error(f"Failed to push logs")

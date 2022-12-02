@@ -11,9 +11,9 @@ import requests
 from wcmatch import glob
 
 from common.schemas import NewTestRun
+from common.utils import runcmd
 from exceptions import BuildFailedException
 from settings import settings
-from utils import runcmd
 
 INCLUDE_SPEC_REGEX = re.compile(r'specPattern:\s*[\"\'](.*)[\"\']')
 EXCLUDE_SPEC_REGEX = re.compile(r'excludeSpecPattern:\s*[\"\'](.*)[\"\']')
@@ -82,16 +82,17 @@ async def create_node_environment(testrun: NewTestRun, builddir: str, logfile):
             await upload_to_cache(f'/tmp/{cache_filename}', logfile)
 
 
-async def build_app(testrun: NewTestRun, logfile):
+async def build_app(testrun: NewTestRun, wdir: str, logfile):
     # build the app
     logfile.write(f"Building app\n")
-    runcmd(f'./node_modules/.bin/{testrun.project.build_cmd}', logfile=logfile)
+
+    runcmd(f'{testrun.project.build_cmd}', logfile=logfile, cwd=wdir)
 
     # tar it up
     logfile.write("Create distribution and cleanup\n")
     filename = f'{testrun.sha}.tar.lz4'
     # tarball everything
-    runcmd(f'tar cf /tmp/{filename} . -I lz4', logfile=logfile)
+    runcmd(f'tar cf /tmp/{filename} . -I lz4', logfile=logfile, cwd=wdir)
     # and upload
     await upload_to_cache(f'/tmp/{filename}', logfile)
 
