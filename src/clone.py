@@ -59,7 +59,6 @@ async def clone_and_build(testrun: NewTestRun):
     logthread.start()
 
     t = time.time()
-    post_status(testrun, TestRunStatus.building)
     try:
         # clone
         wdir = clone_repos(testrun.project.url, testrun.branch, logfile)
