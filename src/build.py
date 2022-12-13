@@ -115,7 +115,7 @@ def get_specs(wdir):
         include_globs = make_array(config.get('testFiles', '**/*.*'))
         exclude_globs = make_array(config.get('ignoreTestFiles', '*.hot-update.js'))
     else:
-        # technically I should use node to extra the various globs, but it's more trouble than it's worth
+        # technically I should use node to extract the various globs, but it's more trouble than it's worth
         # so i'll stick with regex
         folder = ""
         config = os.path.join(wdir, 'cypress.config.js')

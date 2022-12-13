@@ -1,6 +1,6 @@
 import json
 import socket
-from asyncio import sleep
+from asyncio import sleep, exceptions
 
 import websockets
 from loguru import logger
@@ -31,7 +31,7 @@ async def connect_websocket():
 
         except ConnectionClosedError:
             await sleep(1)
-        except TimeoutError:
+        except exceptions.TimeoutError:
             await sleep(1)
         except ConnectionRefusedError:
             await sleep(60)
