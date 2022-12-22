@@ -1,5 +1,7 @@
+import asyncio
 import json
 import socket
+import sys
 from asyncio import sleep, exceptions
 
 import websockets
@@ -8,17 +10,22 @@ from websockets.exceptions import ConnectionClosedError, InvalidStatusCode
 
 # TODO add better protection for connection failed
 import clone
+import jobs
 from common.schemas import NewTestRun
 from settings import settings
+
+jobs.connect_k8()
 
 
 async def connect_websocket():
     while True:
+        logger.info("Starting websocket")
         try:
             domain = settings.CYKUBE_API_URL[settings.CYKUBE_API_URL.find('//') + 2:]
             async with websockets.connect(f'wss://{domain}/agent/ws',
                   extra_headers={'Authorization': f'Bearer {settings.API_TOKEN}'}) as ws:
                 while True:
+                    logger.info("Connected")
                     data = json.loads(await ws.recv())
                     cmd = data['command']
                     payload = data['payload']
@@ -42,4 +49,8 @@ async def connect_websocket():
 
 
 if __name__ == '__main__':
-    connect_websocket()
+    try:
+        asyncio.run(connect_websocket())
+    except KeyboardInterrupt:
+        sys.exit(0)
+

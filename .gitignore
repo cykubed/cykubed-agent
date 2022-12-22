@@ -142,4 +142,4 @@ dmypy.json
 cython_debug/
 
 /secrets.yaml
-/src/k8config/secrets.yaml
+/k8config/secrets.yaml

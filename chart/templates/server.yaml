@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cykube-agent
+spec:
+  selector:
+    matchLabels:
+      app: cykube-agent
+  template:
+    metadata:
+      labels:
+        app: cykube-agent
+    spec:
+      containers:
+        - name: cykube-ws
+          image: cykube/agent:ca15929
+          args: ["ws.py"]
+          imagePullPolicy: IfNotPresent
+          envFrom:
+          - configMapRef:
+              name: {{ .Release.Name }}-configmap
+        - name: cykube-server
+          image: cykube/agent:ca15929
+          command: [ "uvicorn" ]
+          args: ["main:app", "--port", "5000"]
+          ports:
+            - containerPort: 5000
+              name: cykube-server-port
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /hc/
+              port: cykube-server-port

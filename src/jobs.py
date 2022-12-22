@@ -13,7 +13,7 @@ from settings import settings
 
 batchapi = None
 
-RUNNER_CONFIG_DIR = os.path.join(os.path.dirname(__file__), 'k8config/cypress-runner')
+RUNNER_CONFIG_DIR = os.path.join(os.path.dirname(__file__), '../k8config/cypress-runner')
 CYPRESS_RUNNER_VERSION = os.environ.get('CYPRESS_RUNNER_VERSION', '1.0')
 HUB_URL = os.environ.get('CYPRESSHUB_URL', 'http://cypresshub:5000')
 DIST_URL = os.environ.get('CYPRESSHUB_URL', 'http://cypresshub:5001/dist-cache')

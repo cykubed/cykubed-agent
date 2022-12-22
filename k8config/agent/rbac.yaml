@@ -11,7 +11,7 @@ rules:
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: cypresshub-binding
+  name: cykube-binding
 subjects:
 - kind: ServiceAccount
   name: default
