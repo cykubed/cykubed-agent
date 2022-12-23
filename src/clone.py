@@ -47,7 +47,7 @@ async def clone_and_build(testrun: NewTestRun):
     """
     Clone and build
     """
-    parallelism = testrun.project.parallelism or settings.PARALLELISM
+    parallelism = testrun.project.parallelism
 
     logfile = tempfile.NamedTemporaryFile(suffix='.log', mode='w')
 

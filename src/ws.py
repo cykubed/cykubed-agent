@@ -10,11 +10,8 @@ from websockets.exceptions import ConnectionClosedError, InvalidStatusCode
 
 # TODO add better protection for connection failed
 import clone
-import jobs
 from common.schemas import NewTestRun
 from settings import settings
-
-jobs.connect_k8()
 
 
 async def connect_websocket():

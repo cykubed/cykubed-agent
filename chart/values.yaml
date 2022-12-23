@@ -1,2 +1,3 @@
 cacheStorage: 100G
 namespace: cykube
+agentVersion: "1.2"

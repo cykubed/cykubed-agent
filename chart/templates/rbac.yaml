@@ -12,9 +12,10 @@ kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: cykube-binding
+  namespace: {{ .Values.namespace }}
 subjects:
 - kind: ServiceAccount
-  name: default
+  name: cykube
   namespace: {{ .Values.namespace }}
 roleRef:
   kind: Role
