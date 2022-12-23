@@ -25,6 +25,7 @@ async def connect_websocket():
                     logger.info("Connected")
                     data = json.loads(await ws.recv())
                     cmd = data['command']
+                    logger.info(f"Received command {cmd}")
                     payload = data['payload']
                     if cmd == 'start':
                         await clone.start_run(NewTestRun.parse_raw(payload))

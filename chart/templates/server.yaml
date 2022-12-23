@@ -35,6 +35,7 @@ spec:
       labels:
         app: cykube-ws
     spec:
+      serviceAccountName: cykube
       containers:
         - name: cykube-ws
           image: "cykube/agent:{{ .Values.agentVersion }}"
@@ -89,7 +90,6 @@ spec:
       labels:
         app: cykube-server
     spec:
-      serviceAccountName: cykube
       containers:
         - name: server
           image: "cykube/agent:{{ .Values.agentVersion }}"

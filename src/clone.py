@@ -1,5 +1,4 @@
 import asyncio
-import base64
 import logging
 import subprocess
 import sys
@@ -121,7 +120,5 @@ async def start_run(newrun: NewTestRun):
 
 
 if __name__ == '__main__':
-    trjson = base64.b64decode(sys.argv[1])
-    tr = NewTestRun.parse_raw(trjson)
-    asyncio.run(clone_and_build(tr))
+    asyncio.run(clone_and_build(jobs.decode_testrun(sys.argv[1])))
 

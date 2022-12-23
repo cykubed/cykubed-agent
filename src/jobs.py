@@ -45,6 +45,14 @@ def get_job_env():
     return [client.V1EnvVar(name='API_TOKEN', value=settings.API_TOKEN)]
 
 
+def encode_testrun(tr: schemas.NewTestRun) -> str:
+    return base64.b64encode(tr.json().encode()).decode()
+
+
+def decode_testrun(payload: str) -> schemas.NewTestRun:
+    return schemas.NewTestRun.parse_raw(base64.b64decode(payload).decode())
+
+
 def create_build_job(testrun: schemas.NewTestRun):
     """
     Create a Job to clone and build the app
@@ -61,7 +69,7 @@ def create_build_job(testrun: schemas.NewTestRun):
             limits={"cpu": testrun.project.build_cpu,
                     "memory": testrun.project.build_memory}
         ),
-        command=["./clone.py", base64.b64encode(testrun.json())],
+        command=["./clone.py", encode_testrun(testrun)],
     )
     pod_template = client.V1PodTemplateSpec(
         spec=client.V1PodSpec(restart_policy="Never",
