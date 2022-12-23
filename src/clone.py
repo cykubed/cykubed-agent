@@ -1,6 +1,5 @@
 import asyncio
 import base64
-import json
 import logging
 import subprocess
 import sys
@@ -83,10 +82,9 @@ async def clone_and_build(testrun: NewTestRun):
 
         # start the runner jobs - that way the cluster has a head start on spinning
         # up new nodes
-        if jobs.batchapi:
+        if settings.JOB_MODE == 'k8':
             log(logfile, f"Starting {parallelism} Jobs")
-            jobs.start_runner_job(testrun.branch, testrun.sha, logfile,
-                                  parallelism=parallelism)
+            jobs.create_runner_jobs(testrun)
         else:
             log(logfile, f"Test mode: sha={testrun.sha}")
 
@@ -113,15 +111,17 @@ async def clone_and_build(testrun: NewTestRun):
 
 async def start_run(newrun: NewTestRun):
     if settings.JOB_MODE == 'k8':
-        # fire in Job
-        jobs.start_clone_job(newrun)
+        # stop existing jobs
+        jobs.delete_jobs_for_branch(newrun.branch)
+        # and create a new one
+        jobs.create_build_job(newrun)
     else:
         # inline mode (for testing)
         await clone_and_build(newrun)
 
 
 if __name__ == '__main__':
-    trjson = json.loads(base64.b64decode(sys.argv[1]))
-    tr = NewTestRun(**trjson)
+    trjson = base64.b64decode(sys.argv[1])
+    tr = NewTestRun.parse_raw(trjson)
     asyncio.run(clone_and_build(tr))
 

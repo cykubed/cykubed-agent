@@ -1,6 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
+  namespace: {{ .Values.namespace }}
   name: {{ .Release.Name }}-configmap
 data:
   API_TOKEN: {{ .Values.token }}
