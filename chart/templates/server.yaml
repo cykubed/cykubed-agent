@@ -19,6 +19,7 @@ data:
   API_TOKEN: {{ .Values.token }}
   CACHE_URL: "http://cache"
   HUB_URL: "http://cykube:5000"
+  MAIN_API_URL: {{ .Values.apiUrl }}
   JOB_MODE: "k8"
 ---
 apiVersion: apps/v1

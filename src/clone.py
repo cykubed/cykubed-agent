@@ -27,7 +27,7 @@ def log_watcher(trid: int, fname: str):
             logs = logfile.read()
             if logs:
                 print(logs)
-                r = requests.post(f'{settings.CYKUBE_API_URL}/agent/testrun/{trid}/logs', data=logs.encode('utf8'),
+                r = requests.post(f'{settings.MAIN_API_URL}/agent/testrun/{trid}/logs', data=logs.encode('utf8'),
                                   headers=cykube_headers)
                 if r.status_code != 200:
                     logging.error(f"Failed to push logs")
@@ -35,9 +35,9 @@ def log_watcher(trid: int, fname: str):
 
 
 def post_status(testrun: NewTestRun, status: TestRunStatus):
-    r = requests.put(f'{settings.CYKUBE_API_URL}/agent/testrun/{testrun.id}/status',
-                      headers=cykube_headers,
-                      timeout=10, json={'status': status.name})
+    r = requests.put(f'{settings.MAIN_API_URL}/agent/testrun/{testrun.id}/status',
+                     headers=cykube_headers,
+                     timeout=10, json={'status': status.name})
     if r.status_code != 200:
         logging.error(f"Failed to contact CyKube to update status for run {testrun.id}")
 
@@ -72,7 +72,7 @@ async def clone_and_build(testrun: NewTestRun):
         specs = get_specs(wdir)
 
         # tell cykube
-        r = requests.put(f'{settings.CYKUBE_API_URL}/agent/testrun/{testrun.id}/specs',
+        r = requests.put(f'{settings.MAIN_API_URL}/agent/testrun/{testrun.id}/specs',
                          headers=cykube_headers,
                          json={'specs': specs, 'sha': testrun.sha})
         if not r.status_code == 200:

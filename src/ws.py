@@ -18,8 +18,12 @@ async def connect_websocket():
     while True:
         logger.info("Starting websocket")
         try:
-            domain = settings.CYKUBE_API_URL[settings.CYKUBE_API_URL.find('//') + 2:]
-            async with websockets.connect(f'wss://{domain}/agent/ws',
+            domain = settings.MAIN_API_URL[settings.MAIN_API_URL.find('//') + 2:]
+            if settings.MAIN_API_URL.startswith('https'):
+                url = f'wss://{domain}/agent/ws'
+            else:
+                url = f'ws://{domain}/agent/ws'
+            async with websockets.connect(url,
                   extra_headers={'Authorization': f'Bearer {settings.API_TOKEN}'}) as ws:
                 while True:
                     logger.info("Connected")

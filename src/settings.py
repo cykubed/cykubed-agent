@@ -26,7 +26,7 @@ class AppSettings(BaseSettings):
     HUB_URL: str = 'http://127.0.0.1:5000'
     CACHE_URL: str = 'http://127.0.0.1:5001'
 
-    CYKUBE_API_URL: str = 'https://app.cykube.net/api'
+    MAIN_API_URL: str = 'https://app.cykube.net/api'
     CACHE_DIR: str = '/var/lib/cykubecache'
 
     CYPRESS_RUNNER_VERSION: str = 'latest'
