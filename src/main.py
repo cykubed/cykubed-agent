@@ -11,10 +11,11 @@ from settings import settings
 
 app = FastAPI()
 
+# FIXME tighten this up
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    # allow_origin_regex=r"https://.*\.ngrok\.io",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -24,6 +25,8 @@ JSONObject = Dict[AnyStr, Any]
 
 logger.info("** Started server **")
 
+os.makedirs(settings.CACHE_DIR, exist_ok=True)
+
 
 @app.get('/hc')
 def health_check():
@@ -32,7 +35,6 @@ def health_check():
 
 @app.post('/upload')
 def upload(file: UploadFile):
-    os.makedirs(settings.CACHE_DIR, exist_ok=True)
     path = os.path.join(settings.CACHE_DIR, file.filename)
     if os.path.exists(path):
         return {"message": "Exists"}
