@@ -9,9 +9,16 @@ from loguru import logger
 from websockets.exceptions import ConnectionClosedError, InvalidStatusCode
 
 # TODO add better protection for connection failed
-import clone
+import jobs
 from common.schemas import NewTestRun
 from settings import settings
+
+
+async def start_run(newrun: NewTestRun):
+    # stop existing jobs
+    jobs.delete_jobs_for_branch(newrun.branch)
+    # and create a new one
+    jobs.create_build_job(newrun)
 
 
 async def connect_websocket():
@@ -32,7 +39,7 @@ async def connect_websocket():
                     logger.info(f"Received command {cmd}")
                     payload = data['payload']
                     if cmd == 'start':
-                        await clone.start_run(NewTestRun.parse_raw(payload))
+                        await start_run(NewTestRun.parse_raw(payload))
                     elif cmd == 'cancel':
                         testrun_id = payload['testrun_id']
                         # TODO delete the K8 jobs
