@@ -10,9 +10,9 @@ import aiohttp
 import requests
 from wcmatch import glob
 
+from common.exceptions import BuildFailedException
 from common.schemas import NewTestRun
 from common.utils import runcmd
-from exceptions import BuildFailedException
 from settings import settings
 
 INCLUDE_SPEC_REGEX = re.compile(r'specPattern:\s*[\"\'](.*)[\"\']')
