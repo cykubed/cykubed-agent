@@ -1,3 +1,4 @@
+import asyncio
 import os
 import shutil
 
@@ -6,9 +7,13 @@ from fastapi import FastAPI, UploadFile, Response
 from fastapi_exceptions.exceptions import ValidationError, NotFound
 from loguru import logger
 from starlette.middleware.cors import CORSMiddleware
+from uvicorn.config import (
+    Config,
+)
 from uvicorn.server import Server, ServerState  # noqa: F401  # Used to be defined here.
 
 import testruns
+import ws
 from common.enums import TestRunStatus
 from common.schemas import TestRunSpecs, TestRunDetail, TestRunSpec
 from common.utils import get_headers
@@ -31,6 +36,13 @@ logger.info("** Started server **")
 @app.get('/hc')
 def health_check():
     return {'message': 'OK!'}
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    ws.shutting_down = True
+    if ws.mainsocket:
+        await ws.mainsocket.close()
 
 
 def store_file(path: str, file: UploadFile):
@@ -100,10 +112,24 @@ async def get_next_testrun_spec(pk: int, response: Response):
     return spec
 
 
+async def create_tasks():
+    config = Config(app, port=5000, host='0.0.0.0')
+    config.setup_event_loop()
+    server = Server(config=config)
+    t1 = asyncio.create_task(ws.connect_websocket())
+    t2 = asyncio.create_task(server.serve())
+    await asyncio.gather(t1, t2)
+
 # Unless I want to add external retry support I don't need to know when a spec is finished:
 # I can assume that each spec is owned by a single runner
 
 # @app.post('/testrun/{trid}/completed-spec/{specid}')
 # async def completed_spec(trid: int, specid: int):
 #     mark_spec_completed(trid, specid)
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(create_tasks())
+    except Exception as ex:
+        print(ex)
 

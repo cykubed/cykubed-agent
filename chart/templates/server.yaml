@@ -22,38 +22,6 @@ data:
   MAIN_API_URL: {{ .Values.apiUrl }}
   JOB_MODE: "k8"
 ---
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: cykube-ws
-  namespace: {{ .Values.namespace }}
-spec:
-  selector:
-    matchLabels:
-      app: cykube-ws
-  template:
-    metadata:
-      labels:
-        app: cykube-ws
-    spec:
-      serviceAccountName: cykube
-      containers:
-        - name: cykube-ws
-          image: "cykube/agent:{{ .Values.agentVersion }}"
-          command: ["python"]
-          args: ["./ws.py"]
-          imagePullPolicy: IfNotPresent
-          envFrom:
-          - configMapRef:
-              name: {{ .Release.Name }}-configmap
-
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
- name: cykube
- namespace: {{ .Values.namespace }}
----
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -94,8 +62,6 @@ spec:
       containers:
         - name: server
           image: "cykube/agent:{{ .Values.agentVersion }}"
-          command: [ "uvicorn" ]
-          args: ["main:app", "--port", "5000", "--host", "0.0.0.0"]
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:
@@ -103,6 +69,7 @@ spec:
           ports:
             - containerPort: 5000
               name: cykube-server
+              protocol: TCP
           readinessProbe:
             httpGet:
               path: /hc

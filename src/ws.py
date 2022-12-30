@@ -14,6 +14,9 @@ from common.schemas import NewTestRun
 from settings import settings
 from testruns import add_run
 
+shutting_down = False
+mainsocket = None
+
 
 async def start_run(newrun: NewTestRun):
     add_run(newrun)
@@ -25,7 +28,7 @@ async def start_run(newrun: NewTestRun):
 
 
 async def connect_websocket():
-    while True:
+    while not shutting_down:
         logger.info("Starting websocket")
         try:
             domain = settings.MAIN_API_URL[settings.MAIN_API_URL.find('//') + 2:]
@@ -33,8 +36,11 @@ async def connect_websocket():
             url = f'{protocol}://{domain}/agent/ws'
             async with websockets.connect(url,
                                           extra_headers={'Authorization': f'Bearer {settings.API_TOKEN}'}) as ws:
-                while True:
+                global mainsocket
+                mainsocket = ws
+                while not shutting_down:
                     logger.info("Connected")
+
                     data = json.loads(await ws.recv())
                     cmd = data['command']
                     logger.info(f"Received command {cmd}")
@@ -47,6 +53,8 @@ async def connect_websocket():
                         logger.info(f"Deleting jobs for test run {testrun_id}")
 
         except ConnectionClosedError:
+            if shutting_down:
+                return
             await sleep(1)
         except exceptions.TimeoutError:
             await sleep(1)

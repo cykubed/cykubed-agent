@@ -15,7 +15,7 @@ metadata:
   namespace: {{ .Values.namespace }}
 subjects:
 - kind: ServiceAccount
-  name: cykube
+  name: default
   namespace: {{ .Values.namespace }}
 roleRef:
   kind: Role
