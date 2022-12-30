@@ -12,9 +12,12 @@ from websockets.exceptions import ConnectionClosedError, InvalidStatusCode
 import jobs
 from common.schemas import NewTestRun
 from settings import settings
+from testruns import add_run
 
 
 async def start_run(newrun: NewTestRun):
+    add_run(newrun)
+
     # stop existing jobs
     jobs.delete_jobs_for_branch(newrun.branch)
     # and create a new one
@@ -26,10 +29,8 @@ async def connect_websocket():
         logger.info("Starting websocket")
         try:
             domain = settings.MAIN_API_URL[settings.MAIN_API_URL.find('//') + 2:]
-            if settings.MAIN_API_URL.startswith('https'):
-                url = f'wss://{domain}/agent/ws'
-            else:
-                url = f'ws://{domain}/agent/ws'
+            protocol = 'wss' if settings.MAIN_API_URL.startswith('https') else 'ws'
+            url = f'{protocol}://{domain}/agent/ws'
             async with websockets.connect(url,
                   extra_headers={'Authorization': f'Bearer {settings.API_TOKEN}'}) as ws:
                 while True:
