@@ -9,8 +9,6 @@ from common.schemas import NewTestRun, Project, TestRunDetail, SpecFile, TestRun
 from main import app
 from testruns import add_run
 
-client = TestClient(app)
-
 
 @pytest.fixture()
 def testrun():
@@ -23,7 +21,7 @@ def testrun():
 
 def test_cache():
     file = os.path.join(os.path.dirname(__file__), 'fixtures/dummy.txt')
-
+    client = TestClient(app)
     r = client.post(f'/upload', files={'file': ('dummy.txt',
                                                 open(file, 'rb'), 'application/octet-stream')})
     assert r.status_code == 200
@@ -34,6 +32,7 @@ def test_cache():
 
 
 def test_get_run(testrun):
+    client = TestClient(app)
     r = client.get(f'/testrun/{testrun.id}')
     assert r.status_code == 200
     tr = r.json()
@@ -54,6 +53,7 @@ def test_set_specs(testrun, respx_mock):
     request = respx_mock.put("https://app.cykube.net/api/agent/testrun/1/specs",
                              json=payload).mock(return_value=Response(200, json=fulltr.dict()))
 
+    client = TestClient(app)
     r = client.put(f'/testrun/{testrun.id}/specs', json=payload)
     assert r.status_code == 200
     assert request.call_count == 1

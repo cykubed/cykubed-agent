@@ -32,7 +32,7 @@ async def connect_websocket():
             protocol = 'wss' if settings.MAIN_API_URL.startswith('https') else 'ws'
             url = f'{protocol}://{domain}/agent/ws'
             async with websockets.connect(url,
-                  extra_headers={'Authorization': f'Bearer {settings.API_TOKEN}'}) as ws:
+                                          extra_headers={'Authorization': f'Bearer {settings.API_TOKEN}'}) as ws:
                 while True:
                     logger.info("Connected")
                     data = json.loads(await ws.recv())
@@ -63,4 +63,3 @@ if __name__ == '__main__':
         asyncio.run(connect_websocket())
     except KeyboardInterrupt:
         sys.exit(0)
-
