@@ -27,7 +27,7 @@ class AppSettings(BaseSettings):
     CACHE_URL: str = 'http://127.0.0.1:5001'
 
     MAIN_API_URL: str = 'https://app.cykube.net/api'
-    CACHE_DIR: str = '/var/lib/cykubecache'
+    CACHE_DIR: str = '/tmp/cykubecache'
 
     CYPRESS_RUNNER_VERSION: str = 'latest'
     DIST_CACHE_TTL_HOURS: int = 365*24

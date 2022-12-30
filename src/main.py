@@ -28,11 +28,6 @@ app.add_middleware(
 logger.info("** Started server **")
 
 
-@app.on_event("startup")
-def init_folders():
-    os.makedirs(settings.CACHE_DIR, exist_ok=True)
-
-
 @app.get('/hc')
 def health_check():
     return {'message': 'OK!'}
@@ -50,6 +45,7 @@ def store_file(path: str, file: UploadFile):
 
 @app.post('/upload')
 def upload(file: UploadFile):
+    os.makedirs(settings.CACHE_DIR, exist_ok=True)
     path = os.path.join(settings.CACHE_DIR, file.filename)
     if os.path.exists(path):
         return {"message": "Exists"}

@@ -1,3 +1,5 @@
+import os
+
 import pytest
 from fastapi.testclient import TestClient
 from httpx import Response
@@ -17,6 +19,18 @@ def testrun():
     newrun = NewTestRun(id=1, project=project, branch='master')
     add_run(newrun)
     return newrun
+
+
+def test_cache():
+    file = os.path.join(os.path.dirname(__file__), 'fixtures/dummy.txt')
+
+    r = client.post(f'/upload', files={'file': ('dummy.txt',
+                                                open(file, 'rb'), 'application/octet-stream')})
+    assert r.status_code == 200
+    fname = '/tmp/cykubecache/dummy.txt'
+    assert os.path.exists(fname)
+    with open(fname, 'r') as f:
+        assert 'fish\n' == f.read()
 
 
 def test_get_run(testrun):
