@@ -1,6 +1,7 @@
 import asyncio
 import os
 import shutil
+import tempfile
 
 import httpx as httpx
 from fastapi import FastAPI, UploadFile, Response
@@ -57,11 +58,12 @@ def store_file(path: str, file: UploadFile):
         file.file.close()
 
 
-@app.post('/upload')
-def upload(file: UploadFile):
+@app.post('/upload/cache')
+def upload_cache(file: UploadFile):
     logger.info(f"Uploading file {file.filename} to cache")
-    os.makedirs(settings.CACHE_DIR, exist_ok=True)
-    path = os.path.join(settings.CACHE_DIR, file.filename)
+    pdir = os.path.join(settings.CACHE_DIR, 'cache')
+    os.makedirs(pdir, exist_ok=True)
+    path = os.path.join(pdir, file.filename)
     if os.path.exists(path):
         return {"message": "Exists"}
     try:
@@ -69,6 +71,22 @@ def upload(file: UploadFile):
             shutil.copyfileobj(file.file, dest)
     finally:
         file.file.close()
+    return {"message": "OK"}
+
+
+@app.post('/upload/dist/{trid}')
+def upload_dist(trid: int, file: UploadFile):
+    logger.info(f"Upload and unpack {file.filename}")
+    path = os.path.join(settings.CACHE_DIR, 'dist', str(trid))
+    os.makedirs(path)
+    if os.path.exists(path):
+        return {"message": "Exists"}
+
+    with tempfile.NamedTemporaryFile('wb') as dest:
+        shutil.copyfileobj(file.file, dest)
+        # unpack it into the new dir
+        shutil.unpack_archive(dest.name, path, 'gztar')
+
     return {"message": "OK"}
 
 
