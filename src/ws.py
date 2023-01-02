@@ -10,6 +10,7 @@ from websockets.exceptions import ConnectionClosedError, InvalidStatusCode
 
 # TODO add better protection for connection failed
 import jobs
+from common.logupload import upload_exception_trace
 from common.schemas import NewTestRun
 from settings import settings
 from testruns import add_run
@@ -22,7 +23,7 @@ async def start_run(newrun: NewTestRun):
     add_run(newrun)
 
     # stop existing jobs
-    jobs.delete_jobs_for_branch(newrun.branch)
+    jobs.delete_jobs_for_branch(newrun.id, newrun.branch)
     # and create a new one
     jobs.create_build_job(newrun)
 
@@ -38,15 +39,20 @@ async def connect_websocket():
                                           extra_headers={'Authorization': f'Bearer {settings.API_TOKEN}'}) as ws:
                 global mainsocket
                 mainsocket = ws
-                while not shutting_down:
-                    logger.info("Connected")
+                logger.info("Connected")
 
+                while not shutting_down:
                     data = json.loads(await ws.recv())
                     cmd = data['command']
                     logger.info(f"Received command {cmd}")
                     payload = data['payload']
                     if cmd == 'start':
-                        await start_run(NewTestRun.parse_raw(payload))
+                        try:
+                            tr = NewTestRun.parse_raw(payload)
+                            await start_run(tr)
+                        except:
+                            logger.error("Failed to start run")
+                            upload_exception_trace(tr.id)
                     elif cmd == 'cancel':
                         testrun_id = payload['testrun_id']
                         # TODO delete the K8 jobs

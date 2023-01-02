@@ -71,6 +71,7 @@ spec:
               name: cykube-server
               protocol: TCP
           readinessProbe:
+            periodSeconds: 30
             httpGet:
               path: /hc
               port: cykube-server
