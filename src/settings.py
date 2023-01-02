@@ -23,7 +23,7 @@ class AppSettings(BaseSettings):
     TEST_MODE: bool = True
     PARALLELISM: int = 1
 
-    HUB_URL: str = 'http://127.0.0.1:5000'
+    AGENT_URL: str = 'http://127.0.0.1:5000'
     CACHE_URL: str = 'http://127.0.0.1:5001'
 
     MAIN_API_URL: str = 'https://app.cykube.net/api'

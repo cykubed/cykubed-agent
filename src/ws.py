@@ -4,13 +4,14 @@ import socket
 import sys
 from asyncio import sleep, exceptions
 
+import httpx
 import websockets
 from loguru import logger
 from websockets.exceptions import ConnectionClosedError, InvalidStatusCode
 
 # TODO add better protection for connection failed
 import jobs
-from common.logupload import upload_exception_trace
+from common.logupload import upload_exception_trace, upload_log_line
 from common.schemas import NewTestRun
 from settings import settings
 from testruns import add_run
@@ -51,8 +52,12 @@ async def connect_websocket():
                             tr = NewTestRun.parse_raw(payload)
                             await start_run(tr)
                         except:
-                            logger.error("Failed to start run")
+                            upload_log_line(tr.id, "Failed to start run")
+                            logger.exception(f"Failed to start test run {tr.id}")
                             upload_exception_trace(tr.id)
+                            r = httpx.put(f'{settings.AGENT_URL}/testrun/{tr.id}/status/failed')
+                            if r.status_code != 200:
+                                logger.error("Failed to mark run as cancelled")
                     elif cmd == 'cancel':
                         testrun_id = payload['testrun_id']
                         # TODO delete the K8 jobs

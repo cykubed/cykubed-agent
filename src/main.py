@@ -16,7 +16,7 @@ import testruns
 import ws
 from common.enums import TestRunStatus
 from common.schemas import TestRunSpecs, TestRunDetail, TestRunSpec
-from common.utils import get_headers
+from common.utils import get_headers, disable_hc_logging
 from settings import settings
 
 app = FastAPI()
@@ -30,6 +30,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+disable_hc_logging()
 logger.info("** Started server **")
 
 
@@ -57,6 +59,7 @@ def store_file(path: str, file: UploadFile):
 
 @app.post('/upload')
 def upload(file: UploadFile):
+    logger.info(f"Uploading file {file.filename} to cache")
     os.makedirs(settings.CACHE_DIR, exist_ok=True)
     path = os.path.join(settings.CACHE_DIR, file.filename)
     if os.path.exists(path):
@@ -79,6 +82,7 @@ def get_testrun(trid: int) -> TestRunDetail:
 
 @app.put('/testrun/{trid}/status/{status}')
 def update_status(trid: int, status: TestRunStatus):
+    logger.debug(f'Update testrun {trid} status to {status}')
     testruns.update_status(trid, status)
     # and tell cykube
     httpx.put(f'{settings.MAIN_API_URL}/agent/testrun/{trid}/status/{status}',

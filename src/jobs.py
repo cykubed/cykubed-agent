@@ -1,30 +1,23 @@
-import logging
+from kubernetes import client
 
 from kubernetes import client
-from kubernetes.client import ApiException
 
 from common import schemas
 from common.k8common import NAMESPACE, get_batch_api, get_job_env
-from common.logupload import upload_exception_trace
+from common.logupload import upload_log_line
 
 
-def delete_jobs_for_branch(trid: int, branch: str, logfile=None):
-    if logfile:
-        logfile.write(f'Look for existing jobs for branch {branch}\n')
+def delete_jobs_for_branch(trid: int, branch: str):
 
     # delete any job already running
-    try:
-        api = get_batch_api()
-        jobs = api.list_namespaced_job(NAMESPACE, label_selector=f'branch={branch}')
-        if jobs.items:
-            if logfile:
-                logfile.write(f'Found {len(jobs.items)} existing Jobs - deleting them\n')
-            # delete it (there should just be one, but iterate anyway)
-            for job in jobs.items:
-                logging.info(f"Deleting existing job {job.metadata.name}")
-                api.delete_namespaced_job(job.metadata.name, NAMESPACE)
-    except ApiException as ex:
-        upload_exception_trace(trid)
+    api = get_batch_api()
+    jobs = api.list_namespaced_job(NAMESPACE, label_selector=f'branch={branch}')
+    if jobs.items:
+        upload_log_line(trid, f'Found {len(jobs.items)} existing Jobs - deleting them\n')
+        # delete it (there should just be one, but iterate anyway)
+        for job in jobs.items:
+            upload_log_line(trid, f"Deleting existing job {job.metadata.name}")
+            api.delete_namespaced_job(job.metadata.name, NAMESPACE)
 
 
 def create_build_job(testrun: schemas.NewTestRun):
@@ -33,9 +26,9 @@ def create_build_job(testrun: schemas.NewTestRun):
     :param testrun:
     :return:
     """
-    job_name = f'cykube-run-{testrun.id}'
+    job_name = f'cykube-build-{testrun.id}'
     container = client.V1Container(
-        image=testrun.project.agent_image,
+        image=testrun.project.runner_image,
         name='cykube-builder',
         image_pull_policy='IfNotPresent',
         env=get_job_env(),
@@ -43,7 +36,7 @@ def create_build_job(testrun: schemas.NewTestRun):
             limits={"cpu": testrun.project.build_cpu,
                     "memory": testrun.project.build_memory}
         ),
-        command=["build", str(testrun.id)],
+        command=["python", "./main.py", "build", str(testrun.id)],
     )
     pod_template = client.V1PodTemplateSpec(
         spec=client.V1PodSpec(restart_policy="Never",
@@ -61,7 +54,4 @@ def create_build_job(testrun: schemas.NewTestRun):
         spec=client.V1JobSpec(backoff_limit=0, template=pod_template,
                               ttl_seconds_after_finished=3600),
     )
-    try:
-        get_batch_api().create_namespaced_job(NAMESPACE, job)
-    except ApiException as ex:
-        upload_exception_trace(testrun.id)
+    get_batch_api().create_namespaced_job(NAMESPACE, job)
