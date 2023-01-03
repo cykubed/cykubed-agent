@@ -1,5 +1,4 @@
 cacheStorage: 100G
 namespace: cykube
-agentVersion: "1.5"
+agentVersion: "1.28"
 apiUrl: "https://app.cykube.net/api"
-

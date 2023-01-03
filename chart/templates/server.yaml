@@ -2,7 +2,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: cykube-cache
-  namespace: {{ .Values.namespace }}
+  namespace: {{ .Release.Namespace }}
 spec:
   accessModes:
     - ReadWriteOnce
@@ -13,52 +13,21 @@ spec:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  namespace: {{ .Values.namespace }}
-  name: {{ .Release.Name }}-configmap
+  namespace: {{ .Release.Namespace }}
+  name: {{ .Release.Name }}-{{ .Values.agentVersion }}-configmap
 data:
   API_TOKEN: {{ .Values.token }}
   CACHE_URL: "http://cache"
-  HUB_URL: "http://cykube:5000"
+  AGENT_URL: "http://cykube:5000"
   MAIN_API_URL: {{ .Values.apiUrl }}
   JOB_MODE: "k8"
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: cykube-ws
-  namespace: {{ .Values.namespace }}
-spec:
-  selector:
-    matchLabels:
-      app: cykube-ws
-  template:
-    metadata:
-      labels:
-        app: cykube-ws
-    spec:
-      serviceAccountName: cykube
-      containers:
-        - name: cykube-ws
-          image: "cykube/agent:{{ .Values.agentVersion }}"
-          command: ["python"]
-          args: ["./ws.py"]
-          imagePullPolicy: IfNotPresent
-          envFrom:
-          - configMapRef:
-              name: {{ .Release.Name }}-configmap
-
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
- name: cykube
- namespace: {{ .Values.namespace }}
+  CACHE_DIR: "/var/lib/cykubecache"
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: nginx-conf
-  namespace: {{ .Values.namespace }}
+  namespace: {{ .Release.Namespace }}
 data:
   nginx.conf: |
     worker_processes  1;
@@ -67,6 +36,8 @@ data:
     }
     http {
       server {
+          access_log /var/log/nginx/access.log;
+          error_log /var/log/nginx/error.log;
           listen       80;
           server_name  localhost;
           location / {
@@ -80,7 +51,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: cykube-server
-  namespace: {{ .Values.namespace }}
+  namespace: {{ .Release.Namespace }}
 spec:
   replicas: 1
   selector:
@@ -94,15 +65,14 @@ spec:
       containers:
         - name: server
           image: "cykube/agent:{{ .Values.agentVersion }}"
-          command: [ "uvicorn" ]
-          args: ["main:app", "--port", "5000", "--host", "0.0.0.0"]
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:
-                name: {{ .Release.Name }}-configmap
+                name: {{ .Release.Name }}-{{ .Values.agentVersion }}-configmap
           ports:
             - containerPort: 5000
               name: cykube-server
+              protocol: TCP
           readinessProbe:
             httpGet:
               path: /hc
@@ -137,7 +107,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: cykube
-  namespace: {{ .Values.namespace }}
+  namespace: {{ .Release.Namespace }}
 spec:
   ports:
   - port: 5000
@@ -150,7 +120,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: cache
-  namespace: {{ .Values.namespace }}
+  namespace: {{ .Release.Namespace }}
 spec:
   ports:
   - port: 80
