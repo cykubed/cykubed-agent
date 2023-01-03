@@ -34,7 +34,7 @@ def create_build_job(testrun: schemas.NewTestRun):
             limits={"cpu": testrun.project.build_cpu,
                     "memory": testrun.project.build_memory}
         ),
-        command=["python", "./main.py", "build", str(testrun.id)],
+        args=["build", str(testrun.id)],
     )
     pod_template = client.V1PodTemplateSpec(
         spec=client.V1PodSpec(restart_policy="Never",
