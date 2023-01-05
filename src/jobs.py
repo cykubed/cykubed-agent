@@ -32,8 +32,12 @@ def create_build_job(testrun: schemas.NewTestRun):
         image_pull_policy='IfNotPresent',
         env=get_job_env(),
         resources=client.V1ResourceRequirements(
+            requests={"cpu": testrun.project.build_cpu,
+                      "memory": testrun.project.build_memory,
+                      "ephemeral-storage": "2Gi"},
             limits={"cpu": testrun.project.build_cpu,
-                    "memory": testrun.project.build_memory}
+                    "memory": testrun.project.build_memory,
+                    "ephemeral-storage": "4Gi"}
         ),
         args=["build", str(testrun.id)],
     )
