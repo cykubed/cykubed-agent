@@ -1,13 +1,12 @@
- steps:
-  - name: 'gcr.io/cloud-builders/git'
-    entrypoint: 'bash'
-    args:
-    - '-c'
-    - |
-      git config -f .gitmodules submodule.src/common.url https://source.cloud.google.com/iron-lodge-372417/github_cykube_cykube-common
-      git submodule init
-      git submodule update
-
+steps:
+ - name: 'gcr.io/cloud-builders/git'
+   entrypoint: 'bash'
+   args:
+   - '-c'
+   - |
+     git config -f .gitmodules submodule.src/common.url https://source.cloud.google .com/iron-lodge-372417/github_cykube_cykube-common
+     git submodule init
+     git submodule update
  - name: 'gcr.io/cloud-builders/docker'
    entrypoint: 'bash'
    args: ['-c', 'docker login --username=$$USERNAME --password=$$PASSWORD']
@@ -20,7 +19,7 @@
    entrypoint: 'bash'
    args: ['-c', 'docker push $$USERNAME/cykube-agent:$COMMIT_SHA']
    secretEnv: ['USERNAME']
- availableSecrets:
+availableSecrets:
    secretManager:
    - versionName: projects/1090211518452/secrets/docker-username/versions/1
      env: 'USERNAME'
