@@ -4,7 +4,7 @@ steps:
    args:
    - '-c'
    - |
-     git config -f .gitmodules submodule.src/common.url https://source.cloud.google .com/iron-lodge-372417/github_cykube_cykube-common
+     git config -f .gitmodules submodule.src/common.url https://source.developers.google.com/p/iron-lodge-372417/r/github_cykube_cykube-common
      git submodule init
      git submodule update
  - name: 'gcr.io/cloud-builders/docker'
