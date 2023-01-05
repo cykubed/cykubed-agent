@@ -106,9 +106,7 @@ spec:
           - name: nginx-conf
             mountPath: /etc/nginx/nginx.conf
             subPath: nginx.conf
-            readOnly: true
           - name: cykube-cache
-            readOnly: true
             mountPath: /var/lib/cykubecache
 
       volumes:
