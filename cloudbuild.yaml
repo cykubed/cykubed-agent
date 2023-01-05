@@ -1,4 +1,13 @@
  steps:
+  - name: 'gcr.io/cloud-builders/git'
+    entrypoint: 'bash'
+    args:
+    - '-c'
+    - |
+      git config -f .gitmodules submodule.src/common.url https://source.cloud.google.com/iron-lodge-372417/github_cykube_cykube-common
+      git submodule init
+      git submodule update
+
  - name: 'gcr.io/cloud-builders/docker'
    entrypoint: 'bash'
    args: ['-c', 'docker login --username=$$USERNAME --password=$$PASSWORD']

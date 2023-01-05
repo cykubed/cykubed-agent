@@ -64,8 +64,12 @@ spec:
     spec:
       containers:
         - name: server
-          image: "cykube/agent:{{ .Values.agentVersion }}"
+          image: "{{ .Values.agentImage }}"
           imagePullPolicy: IfNotPresent
+          resources:
+            limits:
+              cpu: 250m
+              memory: 0.5G
           envFrom:
             - configMapRef:
                 name: {{ .Release.Name }}-{{ .Values.agentVersion }}-configmap
@@ -83,6 +87,10 @@ spec:
 
         - name: nginx
           image: nginx
+          resources:
+            limits:
+              cpu: 250m
+              memory: 0.5G
           ports:
           - containerPort: 80
             name: nginx-port
