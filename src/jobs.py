@@ -1,4 +1,5 @@
 from kubernetes import client
+from loguru import logger
 
 from common import schemas
 from common.k8common import NAMESPACE, get_batch_api, get_job_env
@@ -52,4 +53,5 @@ def create_build_job(testrun: schemas.NewTestRun):
         spec=client.V1JobSpec(backoff_limit=0, template=pod_template,
                               ttl_seconds_after_finished=3600),
     )
+    logger.info("Creating build job")
     get_batch_api().create_namespaced_job(NAMESPACE, job)
