@@ -72,8 +72,9 @@ async def connect_websocket():
             await sleep(1)
         except ConnectionRefusedError:
             await sleep(60)
-        except socket.gaierror:
-            await sleep(60)
+        except OSError:
+            logger.warning("Cannot connect to cykube - sleep for 60 secs")
+            await sleep(10)
         except InvalidStatusCode:
             await sleep(10)
 
