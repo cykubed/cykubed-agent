@@ -20,7 +20,7 @@ metadata:
   name: cykube-build-{{ testrun_id }}
   namespace: cykube
 spec:
-  backoffLimit: 1
+  backoffLimit: 0
   ttlSecondsAfterFinished: 3600
   template:
     spec:
@@ -48,6 +48,7 @@ spec:
           requests:
             cpu: {{ cpu }}
             memory: {{ memory }}
+            ephemeral-storage: "2Gi"
         volumeMounts:
           - mountPath: /usr/app/dist
             name: build
