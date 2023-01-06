@@ -1,0 +1,43 @@
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: cykube-run-{{ .Values.testrun }}
+spec:
+  dataSource:
+    name: cykube-build-{{ .Values.testrun }}
+    kind: PersistentVolumeClaim
+  accessModes:
+    - ReadOnlyMany
+  resources:
+    requests:
+      storage: {{ .Values.storage }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+    branch: {{ .Values.branch }}
+    name: cykube-run-{{ .Values.testrun }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      volumes:
+        - name: build
+          persistentVolumeClaim:
+            claimName: cykube-run-{{ .Values.testrun }}
+      containers:
+      - name: build
+        image: {{ .Values.image }}
+        args: [ "build", {{ .Values.testrun }} ]
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            cpu: {{ .Values.cpu }}
+            memory: {{ .Values.memory }}
+        volumeMounts:
+          - mountPath: /var/lib/cykubecache
+            name: build
+      restartPolicy: Never
