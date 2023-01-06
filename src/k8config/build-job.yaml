@@ -15,9 +15,12 @@ kind: Job
 metadata:
   labels:
     branch: {{ branch }}
+    type: cykube-builder
+    testrun_id: "{{ testrun_id }}"
   name: cykube-build-{{ testrun_id }}
   namespace: cykube
 spec:
+  backoffLimit: 1
   ttlSecondsAfterFinished: 3600
   template:
     spec:
@@ -49,4 +52,5 @@ spec:
           - mountPath: /usr/app/dist
             name: build
       restartPolicy: Never
+
 

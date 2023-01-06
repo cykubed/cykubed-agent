@@ -18,6 +18,8 @@ class AppSettings(BaseSettings):
 
     TEST_RUN_TIMEOUT: int = 30 * 60
     SPEC_FILE_TIMEOUT: int = 5 * 60
+
+    JOB_TTL = 60*30
     LOG_UPDATE_PERIOD = 2
 
     BUILD_TIMEOUT: int = 900
