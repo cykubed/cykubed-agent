@@ -21,7 +21,6 @@ metadata:
   namespace: cykube
 spec:
   backoffLimit: 0
-  ttlSecondsAfterFinished: 3600
   template:
     spec:
       volumes:

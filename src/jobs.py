@@ -24,6 +24,15 @@ def delete_jobs_for_branch(trid: int, branch: str):
             api.delete_namespaced_job(job.metadata.name, NAMESPACE)
 
 
+def delete_job(job):
+    batchapi = client.BatchV1Api()
+    batchapi.delete_namespaced_job(job.metadata.name, NAMESPACE)
+    for volume in job.spec.template.spec.volumes:
+        if volume.persistent_volume_claim:
+            client.CoreV1Api().delete_namespaced_persistent_volume_claim(
+                volume.persistent_volume_claim.claim_name, NAMESPACE)
+
+
 def cleanup_jobs(ttl=settings.JOB_TTL):
     """
     Delete terminated jobs and volumes
@@ -34,15 +43,14 @@ def cleanup_jobs(ttl=settings.JOB_TTL):
     now = datetime.datetime.now()
     jobs = batchapi.list_namespaced_job(NAMESPACE, label_selector=f'type=cykube-runner')
     for job in jobs.items:
-        if (now - job.status.completion_time).seconds > ttl:
-            if job.status.active:
+        if job.status.active:
+            if (now - job.metadata.creation_timestsmp).seconds > ttl:
                 # kill the job
-                batchapi.delete_namespaced_job(job.metadata.name, NAMESPACE)
-
-            # delete PVCs if they exist
-            for volume in job.spec.template.spec.volumes:
-                if volume.persistent_volume_claim:
-                    api.delete_namespaced_persistent_volume_claim(volume.persistent_volume_claim.claim_name, NAMESPACE)
+                delete_job(job)
+                # TODO set testrun status to timeout
+        else:
+            if (now - job.status.completion_time).seconds > ttl:
+                delete_job(job)
 
 
 def create_build_job(testrun: schemas.NewTestRun):
