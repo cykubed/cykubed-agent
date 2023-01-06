@@ -31,11 +31,11 @@ def start_run(newrun: NewTestRun):
 
 async def connect_websocket():
     while not shutting_down:
-        logger.info("Starting websocket")
         try:
             domain = settings.MAIN_API_URL[settings.MAIN_API_URL.find('//') + 2:]
             protocol = 'wss' if settings.MAIN_API_URL.startswith('https') else 'ws'
             url = f'{protocol}://{domain}/agent/ws'
+            logger.info(f"Starting websocket {url}")
             async with websockets.connect(url,
                                           extra_headers={'Authorization': f'Bearer {settings.API_TOKEN}'}) as ws:
                 global mainsocket

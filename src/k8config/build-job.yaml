@@ -39,6 +39,8 @@ spec:
             value: {{ token }}
           - name: AGENT_URL
             value: "http://cykube:5000"
+          - name: MAIN_API_URL
+            value: {{ main_api_url }}
         resources:
           requests:
             cpu: {{ cpu }}
