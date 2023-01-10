@@ -59,7 +59,7 @@ async def connect_websocket():
                                 logger.error("Failed to mark run as cancelled")
                     elif cmd == 'cancel':
                         testrun_id = payload['testrun_id']
-                        if settings.JOB_MODE == 'k8':
+                        if settings.K8:
                             # TODO delete the K8 jobs
                             pass
 

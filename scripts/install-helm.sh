@@ -1,7 +1,7 @@
 poetry export -o requirements.txt
 eval "$(minikube docker-env)"
-docker build . -t cykube/agent:$1
-helm upgrade --install cykube -n cykube --create-namespace --set-string token=1da3b1a6-1027-4144-afdd-28849e5b38ce --set-string agentVersion="$1" ./chart
+docker build . -t nickbrookck/cykube-agent:$1
+helm upgrade --install cykube -n cykube --create-namespace --set-string token=3af7a1e8-5bbd-4027-8523-a5cfd87b57d1 --set-string agentImage="nickbrookck/cykube-agent:$1" ./chart
 
 
 
