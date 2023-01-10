@@ -1,6 +1,5 @@
 import asyncio
 import json
-import socket
 import sys
 from asyncio import sleep, exceptions
 
@@ -20,7 +19,7 @@ mainsocket = None
 
 
 def start_run(newrun: NewTestRun):
-    if settings.JOB_MODE == 'k8':
+    if settings.K8:
         # stop existing jobs
         jobs.delete_jobs_for_branch(newrun.id, newrun.branch)
         # and create a new one
