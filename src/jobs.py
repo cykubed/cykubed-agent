@@ -2,20 +2,20 @@ from kubernetes import client
 from loguru import logger
 
 from common import schemas
-from common.k8common import NAMESPACE, get_batch_api, get_job_env
+from common.k8common import NAMESPACE, get_job_env
 from common.logupload import upload_log_line
 
 
 def delete_jobs_for_branch(trid: int, branch: str):
 
     # delete any job already running
-    api = get_batch_api()
+    api = client.BatchV1Api()
     jobs = api.list_namespaced_job(NAMESPACE, label_selector=f'branch={branch}')
     if jobs.items:
-        upload_log_line(trid, f'Found {len(jobs.items)} existing Jobs - deleting them\n')
+        logger.info(f'Found {len(jobs.items)} existing Jobs - deleting them', trid=trid)
         # delete it (there should just be one, but iterate anyway)
         for job in jobs.items:
-            upload_log_line(trid, f"Deleting existing job {job.metadata.name}")
+            logger.info(f"Deleting existing job {job.metadata.name}", trid=trid)
             api.delete_namespaced_job(job.metadata.name, NAMESPACE)
 
 
@@ -58,4 +58,4 @@ def create_build_job(testrun: schemas.NewTestRun):
                               ttl_seconds_after_finished=3600),
     )
     upload_log_line(testrun.id, "Creating build job")
-    get_batch_api().create_namespaced_job(NAMESPACE, job)
+    client.BatchV1Api().create_namespaced_job(NAMESPACE, job)

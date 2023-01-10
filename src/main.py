@@ -12,7 +12,9 @@ from uvicorn.config import (
 from uvicorn.server import Server, ServerState  # noqa: F401  # Used to be defined here.
 
 import ws
+from common import k8common
 from common.utils import disable_hc_logging
+from logs import configure_logging
 from settings import settings
 
 app = FastAPI()
@@ -85,6 +87,9 @@ async def create_tasks():
 
 if __name__ == "__main__":
     try:
+        if settings.K8:
+            k8common.init()
+        configure_logging()
         asyncio.run(create_tasks())
     except Exception as ex:
         print(ex)
