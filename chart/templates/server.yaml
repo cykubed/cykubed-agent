@@ -14,11 +14,11 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   namespace: {{ .Release.Namespace }}
-  name: {{ .Release.Name }}-{{ .Values.agentVersion }}-configmap
+  name: {{ .Release.Name }}-agent-configmap
 data:
   API_TOKEN: {{ .Values.token }}
-  CACHE_URL: "http://cache"
-  AGENT_URL: "http://cykube:5000"
+  CACHE_URL: {{ .Values.agentUrl }}
+  AGENT_URL: {{ .Values.cacheUrl }}
   MAIN_API_URL: {{ .Values.apiUrl }}
   JOB_MODE: "k8"
   CACHE_DIR: "/var/lib/cykubecache"
@@ -77,7 +77,7 @@ spec:
               memory: 0.5G
           envFrom:
             - configMapRef:
-                name: {{ .Release.Name }}-{{ .Values.agentVersion }}-configmap
+                name: {{ .Release.Name }}-agent-configmap
           ports:
             - containerPort: 5000
               name: cykube-server

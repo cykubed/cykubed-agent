@@ -10,11 +10,11 @@ from websockets.exceptions import ConnectionClosedError, InvalidStatusCode
 
 # TODO add better protection for connection failed
 import jobs
+import status
 from common.logupload import upload_exception_trace, upload_log_line
 from common.schemas import NewTestRun
 from settings import settings
 
-shutting_down = False
 mainsocket = None
 
 
@@ -29,7 +29,7 @@ def start_run(newrun: NewTestRun):
 
 
 async def connect_websocket():
-    while not shutting_down:
+    while status.running:
         logger.info("Starting websocket")
         try:
             domain = settings.MAIN_API_URL[settings.MAIN_API_URL.find('//') + 2:]
@@ -41,7 +41,7 @@ async def connect_websocket():
                 mainsocket = ws
                 logger.info("Connected")
 
-                while not shutting_down:
+                while status.running:
                     data = json.loads(await ws.recv())
                     cmd = data['command']
                     logger.info(f"Received command {cmd}")
@@ -60,11 +60,10 @@ async def connect_websocket():
                     elif cmd == 'cancel':
                         testrun_id = payload['testrun_id']
                         if settings.K8:
-                            # TODO delete the K8 jobs
-                            pass
+                            jobs.delete_jobs(testrun_id)
 
         except ConnectionClosedError:
-            if shutting_down:
+            if not status.running:
                 return
             await sleep(1)
         except exceptions.TimeoutError:
