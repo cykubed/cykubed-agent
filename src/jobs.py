@@ -9,8 +9,8 @@ from loguru import logger
 from pydantic import BaseModel
 
 import status
-from common import schemas
-from common.k8common import NAMESPACE, get_job_env, get_batch_api, get_events_api
+from common import schemas, k8common
+from common.k8common import NAMESPACE, get_job_env, get_batch_api, get_events_api, get_core_api
 from common.logupload import post_status
 from settings import settings
 
@@ -117,7 +117,7 @@ def create_runner_jobs(build: schemas.CompletedBuild):
     :return:
     """
     # remove build job first
-    delete_jobs(build.testrun.id)
+    # delete_jobs(build.testrun.id)
 
     # now create run jobs
     testrun = build.testrun
@@ -163,45 +163,62 @@ async def check_job_status():
 
     while status.running:
         to_remove = []
-        for job in active_jobs:
+        for job_int in active_jobs:
+
+            job_name = job_int.name
+            jobitems = get_batch_api().list_namespaced_job('cykube',
+                                                            field_selector=f"metadata.name={job_name}").items
+            if not jobitems:
+                active_jobs.remove(job_int)
+                continue
+
+            if jobitems[0].status.failed:
+                logger.error(f"Job {job_name} has failed", trid=job_int.testrun_id)
+                active_jobs.remove(job_int)
+                continue
+
+            poditems = get_core_api().list_namespaced_pod('cykube', label_selector=f'job-name={job_name}').items
+            if poditems and poditems[0].status.phase == 'running':
+                logger.info(f'Pod {poditems[0].metadata.name} is running', trid=job_int.testrun_id)
+
             # there's a bug in the deserialiser that can break if there is no event time
             # so just get the raw JSON
             try:
                 events = json.loads(get_events_api().list_namespaced_event(
                     NAMESPACE,
-                    field_selector=f"regarding.kind=Job,regarding.name={job.name}",
+                    field_selector=f"regarding.kind=Job,regarding.name={job_int.name}",
                     _preload_content=False).data.decode('utf8'))['items']
-                if len(events) > len(job.events):
-                    for ev in events[len(job.events):]:
+                if len(events) > len(job_int.events):
+                    for ev in events[len(job_int.events):]:
                         newev = JobEvent(ts=parse(ev['metadata']['creationTimestamp'], ignoretz=True),
                                          reason=ev['reason'],
                                          note=ev['note'])
-                        job.events.append(newev)
+                        job_int.events.append(newev)
                         # always log "BackoffLimitExceeded"
-                        logger.info(f"Job event {newev.reason} ({newev.note}) for test run {job.testrun_id}")
+                        logger.info(f"Job event {newev.reason} ({newev.note}) for test run {job_int.testrun_id}")
                         if newev.reason in ['DeadlineExceeded', 'BackoffLimitExceeded']:
-                            logger.error(f"Failed to create Job: {newev.note}", trid=job.testrun_id)
-                            post_status(job.testrun_id, 'failed')
-                            to_remove.append(job)
+                            logger.error(f"Failed to create Job: {newev.note}", trid=job_int.testrun_id)
+                            post_status(job_int.testrun_id, 'timeout')
+                            to_remove.append(job_int)
                             break
 
             except ApiException:
                 logger.exception("Failed to contact cluster to fetch Job status")
 
-        for job in to_remove:
-            active_jobs.remove(job)
+        for job_int in to_remove:
+            active_jobs.remove(job_int)
 
         await asyncio.sleep(settings.JOB_STATUS_POLL_PERIOD)
 
 #
-# if __name__ == "__main__":
-#     k8common.init()
-#     # jobs = get_batch_api().list_namespaced_job('cykube')
-#     # print(jobs)
-#
-#     job_name='cykube-build-20'
-#     # job = get_batch_api().list_namespaced_job('cykube', field_selector=f"metadata.name={job_name}").items[0]
-#     # print(job)
+if __name__ == "__main__":
+    k8common.init()
+    # jobs = get_batch_api().list_namespaced_job('cykube')
+    # print(jobs)
+
+    job_name='cykube-build-41'
+    job = get_batch_api().list_namespaced_job('cykube', field_selector=f"metadata.name={job_name}").items[0]
+    print(job)
 #
 #     api = client.EventsV1Api()
 #     try:
@@ -216,10 +233,10 @@ async def check_job_status():
 #         dt = parse(dtstr, ignoretz=True)
 #         print(f"{dt}: {ev['reason']}: {ev['note']}")
 #
-#     api = client.CoreV1Api()
-#     items = api.list_namespaced_pod('cykube', label_selector=f'job-name={job_name}').items
-#     for item in items:
-#         print(item.status.phase)
+    api = client.CoreV1Api()
+    items = api.list_namespaced_pod('cykube', label_selector=f'job-name={job_name}').items
+    for item in items:
+        print(f'Pod {item.metadata.name} {item.status.phase}')
 #     # print(json.dumps(events, indent=4))
 #     # with kubernetes.client.ApiClient() as apiclient:
 #     #     ret = apiclient.call_api('/apis/events.k8s.io/v1/namespaces/{namespace}/events', 'GET',
