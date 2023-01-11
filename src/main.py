@@ -78,9 +78,9 @@ def build_complete(build: CompletedBuild):
     if settings.K8:
         create_runner_jobs(build)
     else:
-        logger.info(f'Start runner with "./main.py run {build.id} {build.cache_hash}"')
+        logger.info(f'Start runner with "./main.py run {build.testrun.id} {build.cache_hash}"')
 
-    post_status(build.id, 'running')
+    post_status(build.testrun.id, 'running')
     return {"message": "OK"}
 
 

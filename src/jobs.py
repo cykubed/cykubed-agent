@@ -66,22 +66,23 @@ def create_runner_jobs(build: schemas.CompletedBuild):
     Create runner jobs
     :return:
     """
-    job_name = f'cykube-run-{build.id}'
+    testrun = build.testrun
+    job_name = f'cykube-run-{testrun.id}'
 
     container = client.V1Container(
-        image=build.project.runner_image,
+        image=testrun.project.runner_image,
         name='cykube-runner',
         image_pull_policy='IfNotPresent',
         env=get_job_env(),
         resources=client.V1ResourceRequirements(
-            requests={"cpu": build.project.runner_cpu,
-                      "memory": build.project.runner_memory,
+            requests={"cpu": testrun.project.runner_cpu,
+                      "memory": testrun.project.runner_memory,
                       "ephemeral-storage": "2Gi"},
-            limits={"cpu": build.project.runner_cpu,
-                    "memory": build.project.runner_memory,
+            limits={"cpu": testrun.project.runner_cpu,
+                    "memory": testrun.project.runner_memory,
                     "ephemeral-storage": "4Gi"}
         ),
-        args=['run', str(build.id), build.cache_hash],
+        args=['run', str(testrun.id), build.cache_hash],
     )
     pod_template = client.V1PodTemplateSpec(
         spec=client.V1PodSpec(restart_policy="Never",
@@ -90,14 +91,14 @@ def create_runner_jobs(build: schemas.CompletedBuild):
     )
     metadata = client.V1ObjectMeta(name=job_name,
                                    labels={"cykube-job": "runner",
-                                           "branch": build.branch})
+                                           "branch": testrun.branch})
 
     job = client.V1Job(
         api_version="batch/v1",
         kind="Job",
         metadata=metadata,
         spec=client.V1JobSpec(backoff_limit=0, template=pod_template,
-                              parallelism=build.project.parallelism,
+                              parallelism=min(len(testrun.files), testrun.project.parallelism),
                               ttl_seconds_after_finished=3600),
     )
     get_batch_api().create_namespaced_job(NAMESPACE, job)
