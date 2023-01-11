@@ -13,7 +13,10 @@ from uvicorn.server import Server, ServerState  # noqa: F401  # Used to be defin
 
 import ws
 from common import k8common
+from common.logupload import post_status
+from common.schemas import CompletedBuild
 from common.utils import disable_hc_logging
+from jobs import create_runner_jobs
 from logs import configure_logging
 from settings import settings
 
@@ -67,6 +70,17 @@ def upload_cache(file: UploadFile):
             shutil.copyfileobj(file.file, dest)
     finally:
         file.file.close()
+    return {"message": "OK"}
+
+
+@app.post('/build-complete')
+def build_complete(build: CompletedBuild):
+    if settings.K8:
+        create_runner_jobs(build)
+    else:
+        logger.info(f'Start runner with "./main.py run {build.id} {build.cache_hash}"')
+
+    post_status(build.id, 'running')
     return {"message": "OK"}
 
 
