@@ -3,7 +3,6 @@ import json
 import sys
 from asyncio import sleep, exceptions
 
-import httpx
 import websockets
 from loguru import logger
 from websockets.exceptions import ConnectionClosedError, InvalidStatusCode
@@ -11,6 +10,7 @@ from websockets.exceptions import ConnectionClosedError, InvalidStatusCode
 # TODO add better protection for connection failed
 import jobs
 import status
+from common.logupload import post_testrun_status
 from common.schemas import NewTestRun
 from settings import settings
 
@@ -51,13 +51,12 @@ async def connect_websocket():
                             start_run(tr)
                         except:
                             logger.exception(f"Failed to start test run {tr.id}", trid=tr.id)
-                            r = httpx.put(f'{settings.AGENT_URL}/testrun/{tr.id}/status/failed')
-                            if r.status_code != 200:
-                                logger.error("Failed to mark run as cancelled")
+                            post_testrun_status(tr, 'failed')
                     elif cmd == 'cancel':
-                        testrun_id = payload['testrun_id']
+                        project_id = payload['project_id']
+                        local_id = payload['testrun_id']
                         if settings.K8:
-                            jobs.delete_jobs(testrun_id)
+                            jobs.delete_jobs(project_id, local_id)
 
         except ConnectionClosedError:
             if not status.running:

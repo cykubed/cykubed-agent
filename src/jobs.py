@@ -11,7 +11,7 @@ from pydantic import BaseModel
 import status
 from common import schemas, k8common
 from common.k8common import NAMESPACE, get_job_env, get_batch_api, get_events_api, get_core_api
-from common.logupload import post_status
+from common.logupload import post_testrun_status
 from settings import settings
 
 
@@ -27,7 +27,7 @@ class JobStatus(BaseModel):
     active: bool = False
     failed: int = 0
     succeeded: int = 0
-    testrun_id: int
+    testrun: schemas.NewTestRun
     events: list[JobEvent] = []
 
 
@@ -47,22 +47,22 @@ def delete_jobs_for_branch(trid: int, branch: str):
             api.delete_namespaced_job(job.metadata.name, NAMESPACE)
 
 
-def create_job(name: str, jobcfg: client.V1Job, jobtype: str, testrun_id: int):
+def create_job(name: str, jobcfg: client.V1Job, jobtype: str, testrun: schemas.NewTestRun):
     job = get_batch_api().create_namespaced_job(NAMESPACE, jobcfg)
     active_jobs.append(JobStatus(name=name,
                                  jobtype=jobtype,
                                  active=job.status.active is not None and job.status.active > 0,
-                                 testrun_id=testrun_id))
+                                 testrun=testrun))
 
 
-def delete_jobs(testrun_id):
+def delete_jobs(project_id, local_id):
     api = client.BatchV1Api()
     for job in active_jobs:
-        if job.testrun_id == testrun_id:
+        if (job.testrun.project.id, job.testrun.local_id) == (project_id, local_id):
             try:
                 api.delete_namespaced_job(job.name, NAMESPACE)
             except ApiException:
-                logger.error(f"Failed to delete job for testrun {testrun_id}")
+                logger.error(f"Failed to delete job for testrun {local_id} for project {project_id}")
             active_jobs.remove(job)
             return
 
@@ -73,7 +73,7 @@ def create_build_job(testrun: schemas.NewTestRun):
     :param testrun:
     :return:
     """
-    job_name = f'cykube-build-{testrun.id}'
+    job_name = f'cykube-build-{testrun.project.name}-{testrun.id}'
     container = client.V1Container(
         image=testrun.project.runner_image,
         name='cykube-builder',
@@ -87,7 +87,7 @@ def create_build_job(testrun: schemas.NewTestRun):
                     "memory": testrun.project.build_memory,
                     "ephemeral-storage": "4Gi"}
         ),
-        args=["build", str(testrun.id)],
+        args=["build", str(testrun.project.id), str(testrun.local_id)],
     )
     pod_template = client.V1PodTemplateSpec(
         spec=client.V1PodSpec(restart_policy="Never",
@@ -121,7 +121,7 @@ def create_runner_jobs(build: schemas.CompletedBuild):
 
     # now create run jobs
     testrun = build.testrun
-    job_name = f'cykube-run-{testrun.id}'
+    job_name = f'cykube-run-{testrun.project.name}-{testrun.id}'
 
     container = client.V1Container(
         image=testrun.project.runner_image,
@@ -136,7 +136,7 @@ def create_runner_jobs(build: schemas.CompletedBuild):
                     "memory": testrun.project.runner_memory,
                     "ephemeral-storage": "4Gi"}
         ),
-        args=['run', str(testrun.id), build.cache_hash],
+        args=['run', str(testrun.project.id), str(testrun.local_id), build.cache_hash],
     )
     pod_template = client.V1PodTemplateSpec(
         spec=client.V1PodSpec(restart_policy="Never",
@@ -156,7 +156,7 @@ def create_runner_jobs(build: schemas.CompletedBuild):
                               parallelism=min(len(testrun.files), testrun.project.parallelism),
                               ttl_seconds_after_finished=settings.JOB_TTL),
     )
-    create_job(job_name, jobcfg, 'run', testrun.id)
+    create_job(job_name, jobcfg, 'run', testrun)
 
 
 async def check_job_status():
@@ -173,13 +173,13 @@ async def check_job_status():
                 continue
 
             if jobitems[0].status.failed:
-                logger.error(f"Job {job_name} has failed", trid=job_int.testrun_id)
+                logger.error(f"Job {job_name} has failed", tr=job.testrun)
                 active_jobs.remove(job_int)
                 continue
 
             poditems = get_core_api().list_namespaced_pod('cykube', label_selector=f'job-name={job_name}').items
             if poditems and poditems[0].status.phase == 'running':
-                logger.info(f'Pod {poditems[0].metadata.name} is running', trid=job_int.testrun_id)
+                logger.info(f'Pod {poditems[0].metadata.name} is running', tr=job.testrun)
 
             # there's a bug in the deserialiser that can break if there is no event time
             # so just get the raw JSON
@@ -195,10 +195,11 @@ async def check_job_status():
                                          note=ev['note'])
                         job_int.events.append(newev)
                         # always log "BackoffLimitExceeded"
-                        logger.info(f"Job event {newev.reason} ({newev.note}) for test run {job_int.testrun_id}")
+                        logger.info(f"Job event {newev.reason} ({newev.note}) for test run {job_int.testrun.local_id} "
+                                    f"in project {job_int.testrun.project.name}")
                         if newev.reason in ['DeadlineExceeded', 'BackoffLimitExceeded']:
-                            logger.error(f"Failed to create Job: {newev.note}", trid=job_int.testrun_id)
-                            post_status(job_int.testrun_id, 'timeout')
+                            logger.error(f"Failed to create Job: {newev.note}", tr=job_int.testrun)
+                            post_testrun_status(job_int.testrun, 'timeout')
                             to_remove.append(job_int)
                             break
 

@@ -15,7 +15,7 @@ import jobs
 import status
 import ws
 from common import k8common
-from common.logupload import post_status
+from common.logupload import post_testrun_status
 from common.schemas import CompletedBuild
 from common.utils import disable_hc_logging
 from jobs import create_runner_jobs
@@ -82,7 +82,7 @@ def build_complete(build: CompletedBuild):
     else:
         logger.info(f'Start runner with "./main.py run {build.testrun.id} {build.cache_hash}"')
 
-    post_status(build.testrun.id, 'running')
+    post_testrun_status(build.testrun, 'running')
     return {"message": "OK"}
 
 
