@@ -68,6 +68,7 @@ def upload_cache(file: UploadFile):
     if os.path.exists(path):
         return {"message": "Exists"}
     try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "wb") as dest:
             shutil.copyfileobj(file.file, dest)
     finally:
@@ -80,7 +81,8 @@ def build_complete(build: CompletedBuild):
     if settings.K8:
         create_runner_jobs(build)
     else:
-        logger.info(f'Start runner with "./main.py run {build.testrun.id} {build.cache_hash}"')
+        logger.info(f'Start runner with "./main.py run {build.testrun.project.id} {build.testrun.local_id} '
+                    f'{build.cache_hash}"')
 
     post_testrun_status(build.testrun, 'running')
     return {"message": "OK"}

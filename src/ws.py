@@ -24,7 +24,7 @@ def start_run(newrun: NewTestRun):
         # and create a new one
         jobs.create_build_job(newrun)
     else:
-        logger.info(f"Now run cykuberunner with options 'build {newrun.id}'")
+        logger.info(f"Now run cykuberunner with options 'build {newrun.project.id} {newrun.local_id}'")
 
 
 async def connect_websocket():
@@ -54,7 +54,7 @@ async def connect_websocket():
                             post_testrun_status(tr, 'failed')
                     elif cmd == 'cancel':
                         project_id = payload['project_id']
-                        local_id = payload['testrun_id']
+                        local_id = payload['local_id']
                         if settings.K8:
                             jobs.delete_jobs(project_id, local_id)
 
