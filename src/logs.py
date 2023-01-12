@@ -10,12 +10,12 @@ def rest_logsink(msg: loguru.Message):
     record = msg.record
     trid = record['extra'].get('trid')
     if trid:
-        upload_logs(trid, msg)
+        upload_logs('agent', trid, msg)
 
 
 def configure_logging():
     logger.add(rest_logsink,
-               format="{time:HH:mm:ss.SSS} {level} {message}", level="INFO")
+               format="{message}", level="INFO")
 
 
 if __name__ == "__main__":

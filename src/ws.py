@@ -11,7 +11,6 @@ from websockets.exceptions import ConnectionClosedError, InvalidStatusCode
 # TODO add better protection for connection failed
 import jobs
 import status
-from common.logupload import upload_exception_trace, upload_log_line
 from common.schemas import NewTestRun
 from settings import settings
 
@@ -51,9 +50,7 @@ async def connect_websocket():
                             tr = NewTestRun.parse_raw(payload)
                             start_run(tr)
                         except:
-                            upload_log_line(tr.id, "Failed to start run")
-                            logger.exception(f"Failed to start test run {tr.id}")
-                            upload_exception_trace(tr.id)
+                            logger.exception(f"Failed to start test run {tr.id}", trid=tr.id)
                             r = httpx.put(f'{settings.AGENT_URL}/testrun/{tr.id}/status/failed')
                             if r.status_code != 200:
                                 logger.error("Failed to mark run as cancelled")
