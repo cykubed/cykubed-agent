@@ -20,4 +20,4 @@ def rest_logsink(msg: loguru.Message):
 
 def configure_logging():
     logger.add(rest_logsink,
-               format="{message}", level="INFO")
+               format="{time:HH:mm:ss.SSS} {level} {message}", level="INFO")

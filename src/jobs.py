@@ -1,8 +1,9 @@
 import asyncio
 import json
 from datetime import datetime
+from functools import lru_cache
 
-from dateutil.parser import parse
+import httpx
 from kubernetes import client
 from kubernetes.client import ApiException
 from loguru import logger
@@ -12,6 +13,8 @@ import status
 from common import schemas, k8common
 from common.k8common import NAMESPACE, get_job_env, get_batch_api, get_events_api, get_core_api
 from common.logupload import post_status
+from common.schemas import TestRunJobStatus
+from common.utils import get_headers
 from settings import settings
 
 
@@ -60,7 +63,7 @@ def create_job(name: str, jobcfg: client.V1Job, jobtype: str, testrun: schemas.N
 def delete_jobs(project_id, local_id):
     api = client.BatchV1Api()
     for job in active_jobs:
-        if (job.project.id, job.local_id) == (project_id, local_id):
+        if (job.project_id, job.local_id) == (project_id, local_id):
             try:
                 api.delete_namespaced_job(job.name, NAMESPACE)
             except ApiException:
@@ -99,6 +102,8 @@ def create_build_job(testrun: schemas.NewTestRun):
     )
     metadata = client.V1ObjectMeta(name=job_name,
                                    labels={"cykube-job": "builder",
+                                           "project_id": str(testrun.project.id),
+                                           "local_id": str(testrun.local_id),
                                            "branch": testrun.branch})
     jobcfg = client.V1Job(
         api_version="batch/v1",
@@ -109,8 +114,8 @@ def create_build_job(testrun: schemas.NewTestRun):
                                                       settings.DEFAULT_BUILD_JOB_DEADLINE,
                               ttl_seconds_after_finished=settings.JOB_TTL),
     )
-    logger.info("Creating build job", trid=testrun.id)
-    create_job(job_name, jobcfg, 'build', testrun.id)
+    logger.info("Creating build job", tr=testrun)
+    create_job(job_name, jobcfg, 'build', testrun)
 
 
 def create_runner_jobs(build: schemas.CompletedBuild):
@@ -147,6 +152,8 @@ def create_runner_jobs(build: schemas.CompletedBuild):
     )
     metadata = client.V1ObjectMeta(name=job_name,
                                    labels={"cykube-job": "runner",
+                                           "project_id": str(testrun.project.id),
+                                           "local_id": str(testrun.local_id),
                                            "branch": testrun.branch})
     jobcfg = client.V1Job(
         api_version="batch/v1",
@@ -161,81 +168,140 @@ def create_runner_jobs(build: schemas.CompletedBuild):
     create_job(job_name, jobcfg, 'run', testrun)
 
 
-def get_job_info(job_int: JobStatus):
-    project_id, local_id = job_int.project_id, job_int.local_id
-    job_name = job_int.name
-    jobitems = get_batch_api().list_namespaced_job('cykube',
-                                                   field_selector=f"metadata.name={job_name}").items
-    failed = False
+@lru_cache(maxsize=1000)
+def post_job_status(project_id: int, local_id: int, name: str, status: str, message: str = None):
+    r = httpx.post(f'{settings.MAIN_API_URL}/agent/testrun/{project_id}/{local_id}/job/status',
+                   json=TestRunJobStatus(name=name,
+                                         status=status,
+                                         message=message).dict(), headers=get_headers())
+    if r.status_code != 200:
+        logger.error(f"Failed to update cykube about job status: {r.status_code}: {r.text}")
 
+#
+# async def get_job_info(job_int: JobStatus):
+#     project_id, local_id = job_int.project_id, job_int.local_id
+#     job_name = job_int.name
+#     jobitems = get_batch_api().list_namespaced_job('cykube',
+#                                                    field_selector=f"metadata.name={job_name}").items
+#     failed = False
+#
+#     if not jobitems:
+#         return True
+#
+#     if jobitems[0].status.failed:
+#         post_job_status(project_id, local_id, jo)
+#         logger.error(f"Job {job_name} has failed", project_id=project_id, local_id=local_id)
+#         failed = True
+#
+#     poditems = get_core_api().list_namespaced_pod('cykube', label_selector=f'job-name={job_name}').items
+#     if poditems:
+#         pod = poditems[0]
+#         phase = pod.status.phase.lower()
+#         if phase == 'running':
+#             logger.info(f'Pod {pod.metadata.name} is running',
+#                         project_id=project_id, local_id=local_id)
+#         elif phase == 'failed':
+#             # check for the reason
+#             terminated = pod.status.container_statuses[0].state.terminated
+#             if terminated and terminated.reason == 'OOMKilled':
+#                 logger.error(f"Build job run out of memory - try increasing the memory limit",
+#                              project_id=project_id, local_id=local_id)
+#             failed = True
+#
+#     # there's a bug in the deserialiser that can break if there is no event time
+#     # so just get the raw JSON
+#     try:
+#         events = json.loads(get_events_api().list_namespaced_event(
+#             NAMESPACE,
+#             field_selector=f"regarding.kind=Job,regarding.name={job_int.name}",
+#             _preload_content=False).data.decode('utf8'))['items']
+#         if len(events) > len(job_int.events):
+#             for ev in events[len(job_int.events):]:
+#                 newev = JobEvent(ts=parse(ev['metadata']['creationTimestamp'], ignoretz=True),
+#                                  reason=ev['reason'],
+#                                  note=ev['note'])
+#                 job_int.events.append(newev)
+#                 # always log "BackoffLimitExceeded"
+#                 logger.info(f"Job event {newev.reason} ({newev.note}) for test run {local_id} "
+#                             f"in project {project_id}")
+#                 if newev.reason in ['DeadlineExceeded', 'BackoffLimitExceeded']:
+#                     logger.error(f"Failed to create Job: {newev.note}",
+#                                  project_id=project_id, local_id=local_id)
+#                     post_status(project_id, local_id, 'timeout')
+#                     failed = True
+#
+#     except ApiException:
+#         logger.exception("Failed to contact cluster to fetch Job status")
+#
+#     return failed
+
+
+def fetch_job_statuses():
+    jobitems = get_batch_api().list_namespaced_job(NAMESPACE,
+                                                   label_selector=f"cykube-job in (builder,runner)").items
     if not jobitems:
-        return True
+        return
+
+    for job in jobitems:
+
+        name = job.metadata.name
+        project_id = int(job.metadata.labels['project_id'])
+        local_id = int(job.metadata.labels['local_id'])
+        jobtype = job.metadata.labels['cykube-job']
+        logged_fail = False
+
+        poditems = get_core_api().list_namespaced_pod('cykube', label_selector=f'job-name={name}').items
+        if poditems:
+            # there'll only be a single pod
+            pod = poditems[0]
+            phase = pod.status.phase.lower()
+            if phase == 'running':
+                logger.info(f'Pod {pod.metadata.name} is running',
+                            project_id=project_id, local_id=local_id)
+            elif phase == 'failed':
+                # check for the reason
+                terminated = pod.status.container_statuses[0].state.terminated
+                if terminated and terminated.reason == 'OOMKilled':
+                    post_job_status(project_id, local_id, name, f'{jobtype.capitalize()} job failed',
+                                    'Job ran out of memory - try increasing the memory limit')
+                    logged_fail = True
+
+        if job.status.failed:
+            if not logged_fail:
+                post_job_status(project_id, local_id, name, f'{jobtype.capitalize()} job failed')
+        elif not job.status.succeeded:
+            # track the creation
+            for event in json.loads(get_events_api().list_namespaced_event(
+                NAMESPACE,
+                field_selector=f"regarding.kind=Job,regarding.name={name}",
+                        _preload_content=False).data.decode('utf8'))['items']:
+
+                message = None
+                if event.reason == 'DeadlineExceeded':
+                    message = 'Job exceeded deadline'
+                elif event.reason == 'BackoffLimitExceeded':
+                    message = 'Backoff limit exceeded - job is probably crashing'
+
+                if message:
+                    post_job_status(project_id, local_id, name, f'{jobtype.capitalize()} job failed',
+                                    message)
+                    logged_fail = True
+
+        if logged_fail:
+            post_status(project_id, local_id, 'failed')
 
 
-    if jobitems[0].status.failed:
-        logger.error(f"Job {job_name} has failed", project_id=project_id, local_id=local_id)
-        failed = True
-
-    poditems = get_core_api().list_namespaced_pod('cykube', label_selector=f'job-name={job_name}').items
-    if poditems:
-        pod = poditems[0]
-        phase = pod.status.phase.lower()
-        if phase == 'running':
-            logger.info(f'Pod {pod.metadata.name} is running',
-                        project_id=project_id, local_id=local_id)
-        elif phase == 'failed':
-            # check for the reason
-            terminated = pod.status.container_statuses[0].state.terminated
-            if terminated and terminated.reason == 'OOMKilled':
-                logger.error(f"Build job run out of memory - try increasing the memory limit",
-                             project_id=project_id, local_id=local_id)
-            failed = True
-
-    # there's a bug in the deserialiser that can break if there is no event time
-    # so just get the raw JSON
-    try:
-        events = json.loads(get_events_api().list_namespaced_event(
-            NAMESPACE,
-            field_selector=f"regarding.kind=Job,regarding.name={job_int.name}",
-            _preload_content=False).data.decode('utf8'))['items']
-        if len(events) > len(job_int.events):
-            for ev in events[len(job_int.events):]:
-                newev = JobEvent(ts=parse(ev['metadata']['creationTimestamp'], ignoretz=True),
-                                 reason=ev['reason'],
-                                 note=ev['note'])
-                job_int.events.append(newev)
-                # always log "BackoffLimitExceeded"
-                logger.info(f"Job event {newev.reason} ({newev.note}) for test run {local_id} "
-                            f"in project {project_id}")
-                if newev.reason in ['DeadlineExceeded', 'BackoffLimitExceeded']:
-                    logger.error(f"Failed to create Job: {newev.note}",
-                                 project_id=project_id, local_id=local_id)
-                    post_status(project_id, local_id, 'timeout')
-                    failed = True
-
-    except ApiException:
-        logger.exception("Failed to contact cluster to fetch Job status")
-
-    return failed
-
-
-async def check_job_status():
+async def job_status_poll():
 
     while status.running:
-        to_remove = []
-        for job_int in active_jobs:
-            failed = get_job_info(job_int)
-            if failed:
-                to_remove.append(job_int)
-
-        for job_int in to_remove:
-            active_jobs.remove(job_int)
-
+        try:
+            fetch_job_statuses()
+        except:
+            logger.exception("Failed to fetch Job statues")
         await asyncio.sleep(settings.JOB_STATUS_POLL_PERIOD)
 
 
 if __name__ == "__main__":
     k8common.init()
-    active_jobs.append(JobStatus(active=True, jobtype='build', name='cykube-build-dummyui-11',
-                                 project_id=11, local_id=2))
-    asyncio.run(check_job_status())
+    fetch_job_statuses()
+    # asyncio.run(job_status_poll())

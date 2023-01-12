@@ -94,7 +94,7 @@ async def create_tasks():
     server = Server(config=config)
     t1 = asyncio.create_task(ws.connect_websocket())
     t2 = asyncio.create_task(server.serve())
-    t3 = asyncio.create_task(jobs.check_job_status())
+    t3 = asyncio.create_task(jobs.job_status_poll())
     await asyncio.gather(t1, t2, t3)
 
 # Unless I want to add external retry support I don't need to know when a spec is finished:
