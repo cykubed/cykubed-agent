@@ -18,6 +18,7 @@ from common.schemas import CompletedBuild
 from common.utils import disable_hc_logging
 from jobs import create_runner_jobs
 from logs import configure_logging
+from messages import queue
 from settings import settings
 
 app = FastAPI()
@@ -81,7 +82,8 @@ async def build_complete(build: CompletedBuild):
     else:
         logger.info(f'Start runner with "./main.py run {build.testrun.project.id} {build.testrun.local_id} '
                     f'{build.cache_hash}"')
-    await ws.send_status_update(build.testrun.project.id, build.testrun.local_id, 'running')
+    await queue.send_status_update(build.testrun.project.id, build.testrun.local_id,
+                                   'running')
     return {"message": "OK"}
 
 
