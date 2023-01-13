@@ -32,6 +32,9 @@ class MessageQueue:
         """
         self.queue = asyncio.Queue(maxsize=1000)
 
+    async def add_agent_msg(self, msg: schemas.AgentLogMessage):
+        await self.queue.put(msg.json())
+
     async def send_log(self, source: str, project_id: int, local_id: int, msg):
         """
         Send a log event

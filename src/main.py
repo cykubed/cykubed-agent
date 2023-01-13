@@ -11,10 +11,11 @@ from uvicorn.config import (
 )
 from uvicorn.server import Server, ServerState  # noqa: F401  # Used to be defined here.
 
+import messages
 import status
 import ws
 from common import k8common
-from common.schemas import CompletedBuild
+from common.schemas import CompletedBuild, AgentLogMessage
 from common.utils import disable_hc_logging
 from jobs import create_runner_jobs
 from logs import configure_logging
@@ -73,6 +74,16 @@ def upload_cache(file: UploadFile):
     finally:
         file.file.close()
     return {"message": "OK"}
+
+
+@app.post('/log')
+async def post_log(msg: AgentLogMessage):
+    """
+    Proxy all log messages up to the main server
+    :param msg:
+    :return:
+    """
+    await messages.queue.add_agent_msg(msg)
 
 
 @app.post('/build-complete')
