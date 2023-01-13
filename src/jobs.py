@@ -227,7 +227,7 @@ def post_job_status(project_id: int, local_id: int, name: str, status: str, mess
 #                 if newev.reason in ['DeadlineExceeded', 'BackoffLimitExceeded']:
 #                     logger.error(f"Failed to create Job: {newev.note}",
 #                                  project_id=project_id, local_id=local_id)
-#                     post_status(project_id, local_id, 'timeout')
+#                     update_status(project_id, local_id, 'timeout')
 #                     failed = True
 #
 #     except ApiException:
@@ -288,7 +288,7 @@ async def fetch_job_statuses():
                     logged_fail = True
 
         if logged_fail:
-            await messages.queue.send_status_update(project_id, local_id, 'failed')
+            messages.update_status(project_id, local_id, 'failed')
 
 
 async def job_status_poll():

@@ -18,7 +18,7 @@ from common.schemas import CompletedBuild
 from common.utils import disable_hc_logging
 from jobs import create_runner_jobs
 from logs import configure_logging
-from messages import queue
+from messages import update_status
 from settings import settings
 
 app = FastAPI()
@@ -82,8 +82,7 @@ async def build_complete(build: CompletedBuild):
     else:
         logger.info(f'Start runner with "./main.py run {build.testrun.project.id} {build.testrun.local_id} '
                     f'{build.cache_hash}"')
-    await queue.send_status_update(build.testrun.project.id, build.testrun.local_id,
-                                   'running')
+    update_status(build.testrun.project.id, build.testrun.local_id, 'running')
     return {"message": "OK"}
 
 
@@ -91,7 +90,7 @@ async def create_tasks():
     config = Config(app, port=5000, host='0.0.0.0')
     config.setup_event_loop()
     server = Server(config=config)
-    t1 = asyncio.create_task(ws.connect_websocket())
+    t1 = asyncio.create_task(ws.connect())
     t2 = asyncio.create_task(server.serve())
     # t3 = asyncio.create_task(jobs.job_status_poll())
     await asyncio.gather(t1, t2)
