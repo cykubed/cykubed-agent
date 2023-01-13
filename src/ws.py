@@ -55,7 +55,11 @@ async def producer_handler(websocket):
 
 
 async def connect():
-    # we must initialise the queue here so it refers to the correct event loop
+    """
+    Connect to the main cykube servers via a websocket
+    """
+
+    # note that we must initialise the queue here so it refers to the correct event loop
     await queue.init()
     while status.is_running():
         logger.info("Starting websocket")
