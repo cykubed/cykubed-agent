@@ -10,11 +10,12 @@ from websockets.exceptions import ConnectionClosedError, InvalidStatusCode
 # TODO add better protection for connection failed
 import jobs
 import status
-from common.logupload import post_testrun_status
+from common import schemas
 from common.schemas import NewTestRun
+from logs import configure_logging
 from settings import settings
 
-mainsocket = None
+mainsocket: websockets.WebSocketClientProtocol = None
 
 
 def start_run(newrun: NewTestRun):
@@ -27,8 +28,28 @@ def start_run(newrun: NewTestRun):
         logger.info(f"Now run cykuberunner with options 'build {newrun.project.id} {newrun.local_id}'")
 
 
+async def send_log(source: str, project_id: int, local_id: int, msg):
+    global mainsocket
+    if mainsocket:
+        await mainsocket.send(schemas.AgentLogMessage(ts=msg.record['time'],
+                                                  project_id=project_id,
+                                                  local_id=local_id,
+                                                  level=str(msg.record['level']),
+                                                  msg=msg,
+                                                  source=source).json())
+
+
+async def send_status_update(project_id: int, local_id: int, status: schemas.TestRunStatus):
+    global mainsocket
+    if mainsocket:
+        await mainsocket.send(schemas.AgentStatusMessage(
+                                                      project_id=project_id,
+                                                      local_id=local_id,
+                                                      status=status).json())
+
+
 async def connect_websocket():
-    while status.running:
+    while status.is_running():
         logger.info("Starting websocket")
         try:
             domain = settings.MAIN_API_URL[settings.MAIN_API_URL.find('//') + 2:]
@@ -40,7 +61,7 @@ async def connect_websocket():
                 mainsocket = ws
                 logger.info("Connected")
 
-                while status.running:
+                while status.is_running():
                     data = json.loads(await ws.recv())
                     cmd = data['command']
                     logger.info(f"Received command {cmd}")
@@ -51,7 +72,7 @@ async def connect_websocket():
                             start_run(tr)
                         except:
                             logger.exception(f"Failed to start test run {tr.id}", trid=tr.id)
-                            post_testrun_status(tr, 'failed')
+                            await send_status_update(tr.project.id, tr.local_id, 'failed')
                     elif cmd == 'cancel':
                         project_id = payload['project_id']
                         local_id = payload['local_id']
@@ -59,13 +80,13 @@ async def connect_websocket():
                             jobs.delete_jobs(project_id, local_id)
 
         except ConnectionClosedError:
-            if not status.running:
+            if not status.is_running():
                 return
             await sleep(1)
         except exceptions.TimeoutError:
             await sleep(1)
         except ConnectionRefusedError:
-            await sleep(60)
+            await sleep(10)
         except OSError:
             logger.warning("Cannot connect to cykube - sleep for 60 secs")
             await sleep(10)
@@ -73,8 +94,23 @@ async def connect_websocket():
             await sleep(10)
 
 
+async def test_logging():
+    i = 0
+    while status.is_running():
+        await asyncio.sleep(1)
+        logger.info(f'Test {i}', project_id=11, local_id=12)
+        await asyncio.sleep(100)
+        i += 1
+
+
+async def run():
+    await asyncio.gather(connect_websocket(),
+                         test_logging())
+
+
 if __name__ == '__main__':
     try:
-        asyncio.run(connect_websocket())
+        configure_logging()
+        asyncio.run(run())
     except KeyboardInterrupt:
         sys.exit(0)

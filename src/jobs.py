@@ -10,9 +10,9 @@ from loguru import logger
 from pydantic import BaseModel
 
 import status
+import ws
 from common import schemas, k8common
 from common.k8common import NAMESPACE, get_job_env, get_batch_api, get_events_api, get_core_api
-from common.logupload import post_status
 from common.schemas import TestRunJobStatus
 from common.utils import get_headers
 from settings import settings
@@ -236,7 +236,7 @@ def post_job_status(project_id: int, local_id: int, name: str, status: str, mess
 #     return failed
 
 
-def fetch_job_statuses():
+async def fetch_job_statuses():
     jobitems = get_batch_api().list_namespaced_job(NAMESPACE,
                                                    label_selector=f"cykube-job in (builder,runner)").items
     if not jobitems:
@@ -288,14 +288,15 @@ def fetch_job_statuses():
                     logged_fail = True
 
         if logged_fail:
-            post_status(project_id, local_id, 'failed')
+            await ws.send_status_update(project_id, local_id, 'failed')
 
 
 async def job_status_poll():
 
-    while status.running:
+    while status.is_running():
         try:
-            fetch_job_statuses()
+            await asyncio.sleep(1)
+            await fetch_job_statuses()
         except:
             logger.exception("Failed to fetch Job statues")
         await asyncio.sleep(settings.JOB_STATUS_POLL_PERIOD)

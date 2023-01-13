@@ -27,6 +27,7 @@ python-dateutil = "^2.8.2"
 pytest = "^7.2.0"
 python-jose = "*"
 respx = "^0.20.1"
+ipython = "^8.8.0"
 
 [build-system]
 requires = ["poetry-core"]

@@ -11,11 +11,9 @@ from uvicorn.config import (
 )
 from uvicorn.server import Server, ServerState  # noqa: F401  # Used to be defined here.
 
-import jobs
 import status
 import ws
 from common import k8common
-from common.logupload import post_testrun_status
 from common.schemas import CompletedBuild
 from common.utils import disable_hc_logging
 from jobs import create_runner_jobs
@@ -77,14 +75,13 @@ def upload_cache(file: UploadFile):
 
 
 @app.post('/build-complete')
-def build_complete(build: CompletedBuild):
+async def build_complete(build: CompletedBuild):
     if settings.K8:
         create_runner_jobs(build)
     else:
         logger.info(f'Start runner with "./main.py run {build.testrun.project.id} {build.testrun.local_id} '
                     f'{build.cache_hash}"')
-
-    post_testrun_status(build.testrun, 'running')
+    await ws.send_status_update(build.testrun.project.id, build.testrun.local_id, 'running')
     return {"message": "OK"}
 
 
@@ -94,8 +91,8 @@ async def create_tasks():
     server = Server(config=config)
     t1 = asyncio.create_task(ws.connect_websocket())
     t2 = asyncio.create_task(server.serve())
-    t3 = asyncio.create_task(jobs.job_status_poll())
-    await asyncio.gather(t1, t2, t3)
+    # t3 = asyncio.create_task(jobs.job_status_poll())
+    await asyncio.gather(t1, t2)
 
 # Unless I want to add external retry support I don't need to know when a spec is finished:
 # I can assume that each spec is owned by a single runner

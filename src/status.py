@@ -1,8 +1,7 @@
 _running = True
 
 
-@property
-def running() -> bool:
+def is_running() -> bool:
     global _running
     return _running
 
