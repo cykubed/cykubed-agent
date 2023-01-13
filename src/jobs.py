@@ -9,8 +9,8 @@ from kubernetes.client import ApiException
 from loguru import logger
 from pydantic import BaseModel
 
+import messages
 import status
-import ws
 from common import schemas, k8common
 from common.k8common import NAMESPACE, get_job_env, get_batch_api, get_events_api, get_core_api
 from common.schemas import TestRunJobStatus
@@ -288,7 +288,7 @@ async def fetch_job_statuses():
                     logged_fail = True
 
         if logged_fail:
-            await ws.send_status_update(project_id, local_id, 'failed')
+            await messages.queue.send_status_update(project_id, local_id, 'failed')
 
 
 async def job_status_poll():
