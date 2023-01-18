@@ -3,9 +3,7 @@ import os
 import shutil
 
 from fastapi import FastAPI, UploadFile
-from fastapi_exceptions.exceptions import ValidationError
 from loguru import logger
-from starlette.middleware.cors import CORSMiddleware
 from uvicorn.config import (
     Config,
 )
@@ -24,17 +22,8 @@ from messages import update_status
 
 app = FastAPI()
 
-# FIXME tighten CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
 disable_hc_logging()
+
 logger.info("** Started server **")
 
 
@@ -48,16 +37,6 @@ async def shutdown_event():
     status.shutdown()
     if ws.mainsocket:
         await ws.mainsocket.close()
-
-
-def store_file(path: str, file: UploadFile):
-    if os.path.exists(path):
-        raise ValidationError({"message": "Exists"})
-    try:
-        with open(path, "wb") as dest:
-            shutil.copyfileobj(file.file, dest)
-    finally:
-        file.file.close()
 
 
 @app.post('/upload')
@@ -98,6 +77,9 @@ async def build_complete(build: CompletedBuild):
 
 
 async def create_tasks():
+    """
+    Run the websocket and server concurrently
+    """
     config = Config(app, port=5000, host='0.0.0.0')
     config.setup_event_loop()
     server = Server(config=config)
