@@ -16,11 +16,11 @@ import status
 import ws
 from common import k8common
 from common.schemas import CompletedBuild, AgentLogMessage
+from common.settings import settings
 from common.utils import disable_hc_logging
 from jobs import create_runner_jobs
 from logs import configure_logging
 from messages import update_status
-from settings import settings
 
 app = FastAPI()
 
@@ -77,13 +77,13 @@ def upload_cache(file: UploadFile):
 
 
 @app.post('/log')
-async def post_log(msg: AgentLogMessage):
+def post_log(msg: AgentLogMessage):
     """
     Proxy all log messages up to the main server
     :param msg:
     :return:
     """
-    await messages.queue.add_agent_msg(msg)
+    messages.queue.add_agent_msg(msg)
 
 
 @app.post('/build-complete')
@@ -92,7 +92,7 @@ async def build_complete(build: CompletedBuild):
         create_runner_jobs(build)
     else:
         logger.info(f'Start runner with "./main.py run {build.testrun.project.id} {build.testrun.local_id} '
-                    f'{build.cache_hash}"')
+                    f'{build.cache_hash}"', tr=build.testrun)
     update_status(build.testrun.project.id, build.testrun.local_id, 'running')
     return {"message": "OK"}
 
@@ -101,17 +101,8 @@ async def create_tasks():
     config = Config(app, port=5000, host='0.0.0.0')
     config.setup_event_loop()
     server = Server(config=config)
-    t1 = asyncio.create_task(ws.connect())
-    t2 = asyncio.create_task(server.serve())
-    # t3 = asyncio.create_task(jobs.job_status_poll())
-    await asyncio.gather(t1, t2)
+    await asyncio.gather(ws.connect(), server.serve())
 
-# Unless I want to add external retry support I don't need to know when a spec is finished:
-# I can assume that each spec is owned by a single runner
-
-# @app.post('/testrun/{trid}/completed-spec/{specid}')
-# async def completed_spec(trid: int, specid: int):
-#     mark_spec_completed(trid, specid)
 
 if __name__ == "__main__":
     try:

@@ -14,8 +14,8 @@ import status
 from common import schemas, k8common
 from common.k8common import NAMESPACE, get_job_env, get_batch_api, get_events_api, get_core_api
 from common.schemas import TestRunJobStatus
+from common.settings import settings
 from common.utils import get_headers
-from settings import settings
 
 
 class JobEvent(BaseModel):

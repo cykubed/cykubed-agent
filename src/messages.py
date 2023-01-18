@@ -1,11 +1,13 @@
 import asyncio
+from asyncio import QueueFull
 from functools import lru_cache
 
 import httpx
+from loguru import logger
 
 from common import schemas
+from common.settings import settings
 from common.utils import get_headers
-from settings import settings
 
 
 def post_testrun_status(tr: schemas.NewTestRun, status: str):
@@ -24,7 +26,6 @@ class MessageQueue:
     """
     Queue for messages to be sent to cykube via the websocket
     """
-
     async def init(self):
         """
         We can't do this in the constructor as it needs to be inside an event loop
@@ -32,10 +33,13 @@ class MessageQueue:
         """
         self.queue = asyncio.Queue(maxsize=1000)
 
-    async def add_agent_msg(self, msg: schemas.AgentLogMessage):
-        await self.queue.put(msg.json())
+    def add_agent_msg(self, msg: schemas.AgentLogMessage):
+        try:
+            self.queue.put_nowait(msg.json())
+        except QueueFull:
+            logger.error("Log message queue full - dropping message")
 
-    async def send_log(self, source: str, project_id: int, local_id: int, msg):
+    def send_log(self, source: str, project_id: int, local_id: int, msg):
         """
         Send a log event
         :param source:
@@ -49,8 +53,8 @@ class MessageQueue:
                                        local_id=local_id,
                                        level=msg.record['level'].name.lower(),
                                        msg=msg,
-                                       source=source).json()
-        await self.queue.put(item)
+                                       source=source)
+        self.add_agent_msg(item)
 
     async def get(self):
         """

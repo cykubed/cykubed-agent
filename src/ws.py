@@ -10,9 +10,10 @@ from websockets.exceptions import ConnectionClosedError, InvalidStatusCode
 import jobs
 import status
 from common.schemas import NewTestRun
-from logs import configure_logging
+from common.settings import settings
 from messages import queue
-from settings import settings
+
+mainsocket = None
 
 
 def start_run(newrun: NewTestRun):
@@ -22,14 +23,13 @@ def start_run(newrun: NewTestRun):
         # and create a new one
         jobs.create_build_job(newrun)
     else:
-        logger.info(f"Now run cykuberunner with options 'build {newrun.project.id} {newrun.local_id}'")
+        logger.info(f"Now run cykuberunner with options 'build {newrun.project.id} {newrun.local_id}'",
+                    tr=newrun)
 
 
 async def consumer_handler(websocket):
-    async for message in websocket:
-        if not status.is_running():
-            return
-
+    while status.is_running():
+        message = await websocket.recv()
         data = json.loads(message)
         cmd = data['command']
         logger.info(f"Received command {cmd}")
@@ -54,6 +54,12 @@ async def producer_handler(websocket):
         queue.task_done()
 
 
+async def close():
+    global mainsocket
+    if mainsocket:
+        await mainsocket.close()
+
+
 async def connect():
     """
     Connect to the main cykube servers via a websocket
@@ -69,7 +75,8 @@ async def connect():
             url = f'{protocol}://{domain}/agent/ws'
             async with websockets.connect(url,
                                           extra_headers={'Authorization': f'Bearer {settings.API_TOKEN}'}) as ws:
-
+                global mainsocket
+                mainsocket = ws
                 logger.info("Connected")
                 while status.is_running():
                     await asyncio.gather(consumer_handler(ws), producer_handler(ws))
@@ -104,7 +111,6 @@ async def run():
 
 if __name__ == '__main__':
     try:
-        configure_logging()
         asyncio.run(run())
     except KeyboardInterrupt:
         sys.exit(0)
