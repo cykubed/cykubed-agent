@@ -1,13 +1,10 @@
 import asyncio
 import json
-from datetime import datetime
 from functools import lru_cache
 
 import httpx
 from kubernetes import client
-from kubernetes.client import ApiException
 from loguru import logger
-from pydantic import BaseModel
 
 import messages
 import status
@@ -18,24 +15,24 @@ from common.settings import settings
 from common.utils import get_headers
 
 
-class JobEvent(BaseModel):
-    ts: datetime
-    reason: str
-    note: str
-
-
-class JobStatus(BaseModel):
-    name: str
-    jobtype: str
-    active: bool = False
-    failed: int = 0
-    succeeded: int = 0
-    project_id: int
-    local_id: int
-    events: list[JobEvent] = []
-
-
-active_jobs: list[JobStatus] = []
+# class JobEvent(BaseModel):
+#     ts: datetime
+#     reason: str
+#     note: str
+#
+#
+# class JobStatus(BaseModel):
+#     name: str
+#     jobtype: str
+#     active: bool = False
+#     failed: int = 0
+#     succeeded: int = 0
+#     project_id: int
+#     local_id: int
+#     events: list[JobEvent] = []
+#
+#
+# active_jobs: list[JobStatus] = []
 
 
 def delete_jobs_for_branch(trid: int, branch: str):
@@ -51,25 +48,12 @@ def delete_jobs_for_branch(trid: int, branch: str):
             api.delete_namespaced_job(job.metadata.name, NAMESPACE)
 
 
-def create_job(name: str, jobcfg: client.V1Job, jobtype: str, testrun: schemas.NewTestRun):
-    job = get_batch_api().create_namespaced_job(NAMESPACE, jobcfg)
-    active_jobs.append(JobStatus(name=name,
-                                 jobtype=jobtype,
-                                 active=job.status.active is not None and job.status.active > 0,
-                                 project_id=testrun.project.id,
-                                 local_id=testrun.local_id))
-
-
 def delete_jobs(project_id, local_id):
     api = client.BatchV1Api()
-    for job in active_jobs:
-        if (job.project_id, job.local_id) == (project_id, local_id):
-            try:
-                api.delete_namespaced_job(job.name, NAMESPACE)
-            except ApiException:
-                logger.error(f"Failed to delete job for testrun {local_id} for project {project_id}")
-            active_jobs.remove(job)
-            return
+    jobs = api.list_namespaced_job(NAMESPACE, label_selector=f"project_id={project_id},local_id={local_id}")
+    for job in jobs:
+        logger.info(f'Deleting job {job.name}', project_id=project_id, local_id=local_id)
+        api.delete_namespaced_job(job.name, NAMESPACE)
 
 
 def create_build_job(testrun: schemas.NewTestRun):
@@ -114,8 +98,8 @@ def create_build_job(testrun: schemas.NewTestRun):
                                                       settings.DEFAULT_BUILD_JOB_DEADLINE,
                               ttl_seconds_after_finished=settings.JOB_TTL),
     )
-    logger.info("Creating build job", tr=testrun)
-    create_job(job_name, jobcfg, 'build', testrun)
+    logger.info(f"Creating build job {job_name}", tr=testrun)
+    get_batch_api().create_namespaced_job(NAMESPACE, jobcfg)
 
 
 def create_runner_jobs(build: schemas.CompletedBuild):
@@ -165,7 +149,8 @@ def create_runner_jobs(build: schemas.CompletedBuild):
                               parallelism=min(len(testrun.files), testrun.project.parallelism),
                               ttl_seconds_after_finished=settings.JOB_TTL),
     )
-    create_job(job_name, jobcfg, 'run', testrun)
+    get_batch_api().create_namespaced_job(NAMESPACE, jobcfg)
+    logger.info(f'Creating running job {job_name}', tr=testrun)
 
 
 @lru_cache(maxsize=1000)
