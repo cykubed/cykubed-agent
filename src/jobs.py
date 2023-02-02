@@ -62,7 +62,7 @@ def create_build_job(testrun: schemas.NewTestRun):
     :param testrun:
     :return:
     """
-    job_name = f'cykube-build-{testrun.project.name}-{testrun.id}'
+    job_name = f'cykube-build-{testrun.project.name}-{testrun.local_id}'
     container = client.V1Container(
         image=testrun.project.runner_image,
         name='cykube-builder',
@@ -112,7 +112,7 @@ def create_runner_jobs(build: schemas.CompletedBuild):
 
     # now create run jobs
     testrun = build.testrun
-    job_name = f'cykube-run-{testrun.project.name}-{testrun.id}'
+    job_name = f'cykube-run-{testrun.project.name}-{testrun.local_id}'
 
     container = client.V1Container(
         image=testrun.project.runner_image,
