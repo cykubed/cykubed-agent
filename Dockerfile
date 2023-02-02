@@ -1,7 +1,6 @@
 FROM python:3.10-slim-buster as build
 RUN apt-get update
-RUN apt-get install -y --no-install-recommends \
-build-essential gcc
+RUN apt-get install -y --no-install-recommends build-essential gcc
 
 WORKDIR /src/app
 RUN python -m venv /usr/app/venv
