@@ -50,7 +50,9 @@ async def consumer_handler(websocket):
 
 async def producer_handler(websocket):
     while status.is_running():
-        await websocket.send(await queue.get()+'\n')
+        msg = await queue.get() + '\n'
+        print(msg)
+        await websocket.send(msg)
         queue.task_done()
 
 
