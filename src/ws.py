@@ -80,9 +80,11 @@ async def connect():
                 global mainsocket
                 mainsocket = ws
                 logger.info("Connected")
-                while status.is_running():
-                    await asyncio.gather(consumer_handler(ws), producer_handler(ws))
-
+                done, pending = await asyncio.wait([consumer_handler(ws), producer_handler(ws)],
+                                                   return_when=asyncio.FIRST_COMPLETED)
+                # we'll need to reconnect
+                for task in pending:
+                    task.cancel()
         except ConnectionClosedError:
             if not status.is_running():
                 return
