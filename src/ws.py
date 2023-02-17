@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import json
 import sys
 from asyncio import sleep, exceptions
@@ -9,8 +10,9 @@ from websockets.exceptions import ConnectionClosedError, InvalidStatusCode
 
 import jobs
 import status
-from common.schemas import NewTestRun
+from common.schemas import NewTestRun, AgentLogMessage
 from common.settings import settings
+from common.utils import encode_testrun
 from messages import queue
 
 mainsocket = None
@@ -23,7 +25,8 @@ def start_run(newrun: NewTestRun):
         # and create a new one
         jobs.create_build_job(newrun)
     else:
-        logger.info(f"Now run cykuberunner with options 'build {newrun.project.id} {newrun.local_id}'",
+        encodedrun = encode_testrun(newrun)
+        logger.info(f"Now run cykuberunner with options 'build {encodedrun}'",
                     tr=newrun)
 
 
@@ -34,6 +37,16 @@ async def consumer_handler(websocket):
         cmd = data['command']
         logger.info(f"Received command {cmd}")
         payload = data['payload']
+
+        if cmd == 'dummy':
+            queue.add_agent_msg(AgentLogMessage(ts=datetime.datetime.now(),
+                                                project_id=0,
+                                                local_id=0,
+                                                level='info',
+                                                msg='dummy',
+                                                source='agent'))
+            continue
+
         if cmd == 'start':
             tr = NewTestRun.parse_raw(payload)
             try:

@@ -12,7 +12,7 @@ from common import schemas, k8common
 from common.k8common import NAMESPACE, get_job_env, get_batch_api, get_events_api, get_core_api
 from common.schemas import TestRunJobStatus
 from common.settings import settings
-from common.utils import get_headers
+from common.utils import get_headers, encode_testrun
 
 
 # class JobEvent(BaseModel):
@@ -76,7 +76,7 @@ def create_build_job(testrun: schemas.NewTestRun):
                     "memory": testrun.project.build_memory,
                     "ephemeral-storage": "4Gi"}
         ),
-        args=["build", str(testrun.project.id), str(testrun.local_id)],
+        args=["build", encode_testrun(testrun)],
     )
     pod_template = client.V1PodTemplateSpec(
         spec=client.V1PodSpec(restart_policy="Never",
