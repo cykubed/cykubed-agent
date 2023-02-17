@@ -4,21 +4,22 @@ import shutil
 
 from fastapi import FastAPI, UploadFile
 from loguru import logger
+from starlette.responses import Response
 from uvicorn.config import (
     Config,
 )
 from uvicorn.server import Server, ServerState  # noqa: F401  # Used to be defined here.
 
 import messages
+import mongo
 import status
 import ws
 from common import k8common
-from common.schemas import CompletedBuild, AgentLogMessage
+from common.schemas import CompletedBuild, AgentLogMessage, AgentCompletedBuildMessage, AgentSpecCompleted, SpecResult
 from common.settings import settings
 from common.utils import disable_hc_logging
 from jobs import create_runner_jobs
 from logs import configure_logging
-from messages import update_status
 
 app = FastAPI()
 
@@ -65,21 +66,44 @@ def post_log(msg: AgentLogMessage):
     messages.queue.add_agent_msg(msg)
 
 
-@app.post('/build-complete')
-async def build_complete(build: CompletedBuild):
+@app.get('/testrun/{pk}/next', response_model=str | None)
+async def get_next_spec(pk: int, pod_name: str, response: Response) -> str:
+    tr = await mongo.get_testrun(pk)
+    if tr.status != 'running':
+        response.status_code = 204
+        return
+    spec = await mongo.assign_next_spec(pod_name, pk)
+    if not spec:
+        response.status_code = 204
+        return
+    return spec
+
+
+@app.post('/testrun/{pk}/spec-completed')
+async def spec_completed(pk: int, result: SpecResult):
+    # for now we assume file uploads go straight to cykubemain
+    await mongo.spec_completed(pk, result.file)
+    messages.queue.add_agent_msg(AgentSpecCompleted(testrun_id=pk, result=result))
+
+
+@app.post('/testrun/{pk}/build-complete')
+async def build_complete(pk: int, build: CompletedBuild):
+    await mongo.set_build_details(pk, build)
+    messages.queue.add_agent_msg(AgentCompletedBuildMessage(testrun_id=pk, build=build))
+
     if settings.K8:
         create_runner_jobs(build)
     else:
-        logger.info(f'Start runner with "./main.py run {build.testrun.project.id} {build.testrun.local_id} '
-                    f'{build.cache_hash}"', tr=build.testrun)
-    update_status(build.testrun.project.id, build.testrun.local_id, 'running')
+        logger.info(f'Start runner with "./main.py run {pk}', id=pk)
+
     return {"message": "OK"}
 
 
-async def create_tasks():
+async def init():
     """
     Run the websocket and server concurrently
     """
+    await mongo.init()
     config = Config(app, port=5000, host='0.0.0.0')
     config.setup_event_loop()
     server = Server(config=config)
@@ -91,7 +115,7 @@ if __name__ == "__main__":
         if settings.K8:
             k8common.init()
         configure_logging()
-        asyncio.run(create_tasks())
+        asyncio.run(init())
     except Exception as ex:
         print(ex)
 

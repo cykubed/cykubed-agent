@@ -8,14 +8,9 @@ from messages import queue
 
 def rest_logsink(msg: loguru.Message):
     record = msg.record
-    tr = record['extra'].get('tr')
-    if tr:
-        queue.send_log('agent', tr.project.id, tr.local_id, msg)
-    else:
-        local_id = record['extra'].get('local_id')
-        project_id = record['extra'].get('project_id')
-        if local_id and project_id:
-            queue.send_log('agent', project_id, local_id, msg)
+    id = record['extra'].get('id')
+    if id:
+        queue.send_log('agent', id, msg)
 
 
 def configure_logging():

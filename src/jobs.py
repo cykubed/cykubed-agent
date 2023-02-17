@@ -76,7 +76,7 @@ def create_build_job(testrun: schemas.NewTestRun):
                     "memory": testrun.project.build_memory,
                     "ephemeral-storage": "4Gi"}
         ),
-        args=["build", str(testrun.project.id), str(testrun.local_id)],
+        args=["build", str(testrun.id)],
     )
     pod_template = client.V1PodTemplateSpec(
         spec=client.V1PodSpec(restart_policy="Never",

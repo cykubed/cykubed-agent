@@ -8,6 +8,7 @@ from loguru import logger
 from websockets.exceptions import ConnectionClosedError, InvalidStatusCode
 
 import jobs
+import mongo
 import status
 from common.schemas import NewTestRun
 from common.settings import settings
@@ -16,14 +17,16 @@ from messages import queue
 mainsocket = None
 
 
-def start_run(newrun: NewTestRun):
+async def start_run(newrun: NewTestRun):
+    await mongo.new_run(newrun)
+
     if settings.K8:
         # stop existing jobs
         jobs.delete_jobs_for_branch(newrun.id, newrun.branch)
         # and create a new one
         jobs.create_build_job(newrun)
     else:
-        logger.info(f"Now run cykuberunner with options 'build {newrun.project.id} {newrun.local_id}'",
+        logger.info(f"Now run cykuberunner with options 'build {newrun.id}'",
                     tr=newrun)
 
 
@@ -37,7 +40,7 @@ async def consumer_handler(websocket):
         if cmd == 'start':
             tr = NewTestRun.parse_raw(payload)
             try:
-                start_run(tr)
+                await start_run(tr)
             except:
                 logger.exception(f"Failed to start test run {tr.local_id}", tr=tr)
                 await queue.send_status_update(tr.project.id, tr.local_id, 'failed')
@@ -51,7 +54,6 @@ async def consumer_handler(websocket):
 async def producer_handler(websocket):
     while status.is_running():
         msg = await queue.get() + '\n'
-        print(msg)
         await websocket.send(msg)
         queue.task_done()
 

@@ -33,24 +33,22 @@ class MessageQueue:
         """
         self.queue = asyncio.Queue(maxsize=1000)
 
-    def add_agent_msg(self, msg: schemas.AgentLogMessage):
+    def add_agent_msg(self, msg: schemas.AgentEvent):
         try:
             self.queue.put_nowait(msg.json())
         except QueueFull:
             logger.error("Log message queue full - dropping message")
 
-    def send_log(self, source: str, project_id: int, local_id: int, msg):
+    def send_log(self, source: str, testrun_id: int, msg):
         """
         Send a log event
+        :param testrun_id:
         :param source:
-        :param project_id:
-        :param local_id:
         :param msg:
         :return:
         """
         item = schemas.AgentLogMessage(ts=msg.record['time'],
-                                       project_id=project_id,
-                                       local_id=local_id,
+                                       testrun_id=testrun_id,
                                        level=msg.record['level'].name.lower(),
                                        msg=msg,
                                        source=source)
