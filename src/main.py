@@ -12,10 +12,12 @@ from uvicorn.server import Server, ServerState  # noqa: F401  # Used to be defin
 
 import messages
 import mongo
-import status
 import ws
+from appstate import shutdown
 from common import k8common
-from common.schemas import CompletedBuild, AgentLogMessage, AgentCompletedBuildMessage, AgentSpecCompleted, SpecResult
+from common.enums import TestRunStatus, AgentEventType
+from common.schemas import CompletedBuild, AgentLogMessage, AgentCompletedBuildMessage, AgentSpecCompleted, SpecResult, \
+    AgentStatusChanged
 from common.settings import settings
 from common.utils import disable_hc_logging
 from jobs import create_runner_jobs
@@ -35,7 +37,7 @@ def health_check():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    status.shutdown()
+    shutdown()
     if ws.mainsocket:
         await ws.mainsocket.close()
 
@@ -79,22 +81,33 @@ async def get_next_spec(pk: int, pod_name: str, response: Response) -> str:
     return spec
 
 
+@app.post('/testrun/{pk}/status/{status}')
+async def spec_completed(pk: int, status: TestRunStatus):
+    messages.queue.add_agent_msg(AgentStatusChanged(testrun_id=pk,
+                                                    type=AgentEventType.status,
+                                                    status=status))
+
+
 @app.post('/testrun/{pk}/spec-completed')
 async def spec_completed(pk: int, result: SpecResult):
     # for now we assume file uploads go straight to cykubemain
     await mongo.spec_completed(pk, result.file)
-    messages.queue.add_agent_msg(AgentSpecCompleted(testrun_id=pk, result=result))
+    messages.queue.add_agent_msg(AgentSpecCompleted(testrun_id=pk,
+                                                    type=AgentEventType.spec_completed,
+                                                    result=result))
 
 
 @app.post('/testrun/{pk}/build-complete')
 async def build_complete(pk: int, build: CompletedBuild):
     await mongo.set_build_details(pk, build)
-    messages.queue.add_agent_msg(AgentCompletedBuildMessage(testrun_id=pk, build=build))
+    messages.queue.add_agent_msg(AgentCompletedBuildMessage(testrun_id=pk,
+                                                            type=AgentEventType.build_completed,
+                                                            build=build))
 
     if settings.K8:
         create_runner_jobs(build)
     else:
-        logger.info(f'Start runner with "./main.py run {pk}', id=pk)
+        logger.info(f'Start runner with "./main.py run {pk} {build.cache_hash}', id=pk)
 
     return {"message": "OK"}
 
@@ -112,7 +125,7 @@ async def init():
 
 if __name__ == "__main__":
     try:
-        if settings.K8:
+        if settings.K8 and not settings.TEST:
             k8common.init()
         configure_logging()
         asyncio.run(init())

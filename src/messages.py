@@ -6,6 +6,8 @@ import httpx
 from loguru import logger
 
 from common import schemas
+from common.enums import TestRunStatus, AgentEventType
+from common.schemas import AgentStatusChanged
 from common.settings import settings
 from common.utils import get_headers
 
@@ -38,6 +40,11 @@ class MessageQueue:
             self.queue.put_nowait(msg.json())
         except QueueFull:
             logger.error("Log message queue full - dropping message")
+
+    def send_status_update(self, trid: int, status: TestRunStatus):
+        self.add_agent_msg(AgentStatusChanged(type=AgentEventType.status,
+                                              testrun_id=trid,
+                                              status=status))
 
     def send_log(self, source: str, testrun_id: int, msg):
         """

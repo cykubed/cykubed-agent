@@ -11,6 +11,9 @@ from common.settings import settings
 
 @cache
 def client():
+    if settings.TEST:
+        from mongomock_motor import AsyncMongoMockClient
+        return AsyncMongoMockClient()
     return AsyncIOMotorClient(settings.MONGO_URL)
 
 
@@ -20,8 +23,8 @@ def db():
 
 
 @cache
-def testrun_coll():
-    return db().testruns
+def runs_coll():
+    return db().runs
 
 
 @cache
@@ -30,16 +33,17 @@ def specfile_coll():
 
 
 async def init():
-    await testrun_coll().create_index([("id", pymongo.ASCENDING)])
+    await runs_coll().create_index([("id", pymongo.ASCENDING)])
     await specfile_coll().create_index([("trid", pymongo.ASCENDING),("started", pymongo.ASCENDING)])
 
 
 async def new_run(tr: NewTestRun):
-    await testrun_coll().insert_one(tr)
+    await runs_coll().insert_one(tr.dict())
 
 
 async def set_build_details(testrun_id: int, details: CompletedBuild):
-    await testrun_coll().find_and_update({'id': testrun_id}, {'$set': {
+    coll = runs_coll()
+    await coll.find_and_update({'id': testrun_id}, {'$set': {
         'sha': details.sha,
         'cache_hash': details.cache_hash
     }})
@@ -47,7 +51,7 @@ async def set_build_details(testrun_id: int, details: CompletedBuild):
 
 
 async def get_testrun(testrun_id: int) -> NewTestRun:
-    return await testrun_coll().find_one({'id': testrun_id})
+    return await runs_coll().find_one({'id': testrun_id})
 
 
 async def assign_next_spec(pod_name: str, testrun_id: int) -> str | None:

@@ -7,11 +7,12 @@ import websockets
 from loguru import logger
 from websockets.exceptions import ConnectionClosedError, InvalidStatusCode
 
+import appstate
 import jobs
 import mongo
-import status
 from common.schemas import NewTestRun
 from common.settings import settings
+from common.utils import encode_testrun
 from messages import queue
 
 mainsocket = None
@@ -26,33 +27,41 @@ async def start_run(newrun: NewTestRun):
         # and create a new one
         jobs.create_build_job(newrun)
     else:
-        logger.info(f"Now run cykuberunner with options 'build {newrun.id}'",
+        encoded_testrun = encode_testrun(newrun)
+        logger.info(f"Now run cykuberunner with options 'build {encoded_testrun}'",
                     tr=newrun)
 
 
+async def handle_message(data):
+    """
+    Handle a message from the websocket
+    :param data:
+    :return:
+    """
+    cmd = data['command']
+    payload = data['payload']
+    if cmd == 'start':
+        tr = NewTestRun.parse_raw(payload)
+        try:
+            await start_run(tr)
+        except:
+            logger.exception(f"Failed to start test run {tr.local_id}", tr=tr)
+            await queue.send_status_update(tr.id, 'failed')
+    elif cmd == 'cancel':
+        project_id = payload['project_id']
+        local_id = payload['local_id']
+        if settings.K8:
+            jobs.delete_jobs(project_id, local_id)
+
+
 async def consumer_handler(websocket):
-    while status.is_running():
+    while appstate.is_running():
         message = await websocket.recv()
-        data = json.loads(message)
-        cmd = data['command']
-        logger.info(f"Received command {cmd}")
-        payload = data['payload']
-        if cmd == 'start':
-            tr = NewTestRun.parse_raw(payload)
-            try:
-                await start_run(tr)
-            except:
-                logger.exception(f"Failed to start test run {tr.local_id}", tr=tr)
-                await queue.send_status_update(tr.project.id, tr.local_id, 'failed')
-        elif cmd == 'cancel':
-            project_id = payload['project_id']
-            local_id = payload['local_id']
-            if settings.K8:
-                jobs.delete_jobs(project_id, local_id)
+        await handle_message(json.loads(message))
 
 
 async def producer_handler(websocket):
-    while status.is_running():
+    while appstate.is_running():
         msg = await queue.get() + '\n'
         await websocket.send(msg)
         queue.task_done()
@@ -71,7 +80,7 @@ async def connect():
 
     # note that we must initialise the queue here so it refers to the correct event loop
     await queue.init()
-    while status.is_running():
+    while appstate.is_running():
         logger.info("Starting websocket")
         try:
             domain = settings.MAIN_API_URL[settings.MAIN_API_URL.find('//') + 2:]
@@ -88,7 +97,7 @@ async def connect():
                 for task in pending:
                     task.cancel()
         except ConnectionClosedError:
-            if not status.is_running():
+            if not appstate.is_running():
                 return
             await sleep(1)
         except exceptions.TimeoutError:
@@ -104,7 +113,7 @@ async def connect():
 
 async def test_logging():
     i = 0
-    while status.is_running():
+    while appstate.is_running():
         await asyncio.sleep(5)
         logger.info(f'Test {i}', project_id=11, local_id=12)
         i += 1

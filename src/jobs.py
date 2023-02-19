@@ -7,7 +7,6 @@ from kubernetes import client
 from loguru import logger
 
 import messages
-import status
 from common import schemas, k8common
 from common.k8common import NAMESPACE, get_job_env, get_batch_api, get_events_api, get_core_api
 from common.schemas import TestRunJobStatus
