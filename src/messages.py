@@ -7,7 +7,7 @@ from loguru import logger
 
 from common import schemas
 from common.enums import TestRunStatus, AgentEventType
-from common.schemas import AgentStatusChanged
+from common.schemas import AgentStatusChanged, AppLogMessage
 from common.settings import settings
 from common.utils import get_headers
 
@@ -54,11 +54,12 @@ class MessageQueue:
         :param msg:
         :return:
         """
-        item = schemas.AgentLogMessage(ts=msg.record['time'],
-                                       testrun_id=testrun_id,
-                                       level=msg.record['level'].name.lower(),
-                                       msg=msg,
-                                       source=source)
+        item = schemas.AgentLogMessage(testrun_id=testrun_id,
+                                       type=AgentEventType.log,
+                                       msg=AppLogMessage(ts=msg.record['time'],
+                                                         level=msg.record['level'].name.lower(),
+                                                         msg=msg,
+                                                         source=source))
         self.add_agent_msg(item)
 
     async def get(self):

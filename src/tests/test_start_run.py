@@ -1,6 +1,7 @@
 from starlette.testclient import TestClient
 
-from common.schemas import NewTestRun, CompletedBuild
+from common.enums import TestRunStatus
+from common.schemas import NewTestRun, CompletedBuild, SpecResult, TestResult
 from main import app
 from mongo import runs_coll, specfile_coll, new_run, set_build_details
 from ws import handle_message
@@ -83,4 +84,25 @@ async def test_get_specs(testrun: NewTestRun):
     assert resp.status_code == 204
 
 
+async def test_spec_completed(mocker, testrun: NewTestRun):
+    add_agent_msg = mocker.patch('main.messages.queue.add_agent_msg')
+    client = TestClient(app)
+    await new_run(testrun)
+    await set_build_details(testrun.id, CompletedBuild(sha='deadbeef00101',
+                                                       specs=['cypress/e2e/stuff/test1.spec.ts',
+                                                              'cypress/e2e/stuff/test2.spec.ts'],
+                                                       cache_hash='deadbeef0101'))
+    resp = client.get('/testrun/20/next', params={'name': 'cykube-run-20'})
+    assert resp.status_code == 200
+    file = resp.text
+    assert file == 'cypress/e2e/stuff/test1.spec.ts'
+    result = SpecResult(file=file,
+                        tests=[TestResult(title="Title",
+                                          context="Context",
+                                          status=TestRunStatus.passed)])
+    resp = client.post('/testrun/20/spec-completed', json=result.dict())
+    assert resp.status_code == 200
+    spec = await specfile_coll().find_one({'trid': testrun.id, 'file': file})
+    assert spec['finished'] is not None
+    add_agent_msg.assert_called_once()
 

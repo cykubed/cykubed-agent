@@ -61,4 +61,5 @@ async def assign_next_spec(testrun_id: int, pod_name: str = None) -> str | None:
 
 
 async def spec_completed(trid: int, file: str):
-    await specfile_coll().find_one_and_update({'trid': trid, 'file': file, 'finished': datetime.utcnow()})
+    await specfile_coll().find_one_and_update({'trid': trid, 'file': file},
+                                              {'$set': {'finished': datetime.utcnow()}})

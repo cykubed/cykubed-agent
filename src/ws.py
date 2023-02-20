@@ -56,9 +56,12 @@ async def handle_message(data):
 
 async def consumer_handler(websocket):
     while appstate.is_running():
-        message = await websocket.recv()
-        await handle_message(json.loads(message))
-
+        try:
+            message = await websocket.recv()
+            await handle_message(json.loads(message))
+        except ConnectionClosedError:
+            if not appstate.is_running():
+                return
 
 async def producer_handler(websocket):
     while appstate.is_running():
