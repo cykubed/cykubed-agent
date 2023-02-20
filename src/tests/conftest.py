@@ -5,11 +5,13 @@ import messages
 from common.enums import PlatformEnum
 from common.schemas import Project, OrganisationSummary, NewTestRun
 from common.settings import settings
+from mongo import client
 
 
 @pytest.fixture(autouse=True)
 async def init():
     settings.TEST = True
+    await client().drop_database(settings.MONGO_DATABASE)
     logger.remove()
     await messages.queue.init()
 
@@ -28,8 +30,8 @@ async def project() -> Project:
 @pytest.fixture()
 async def testrun(project: Project) -> NewTestRun:
     return NewTestRun(url='git@github.org/dummy.git',
-                    id=10,
-                    local_id=1,
-                    project=project,
-                    status='started',
-                    branch='master')
+                      id=20,
+                      local_id=1,
+                      project=project,
+                      status='started',
+                      branch='master')

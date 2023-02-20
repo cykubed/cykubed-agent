@@ -4,7 +4,7 @@ import shutil
 
 from fastapi import FastAPI, UploadFile
 from loguru import logger
-from starlette.responses import Response
+from starlette.responses import Response, PlainTextResponse
 from uvicorn.config import (
     Config,
 )
@@ -68,13 +68,13 @@ def post_log(msg: AgentLogMessage):
     messages.queue.add_agent_msg(msg)
 
 
-@app.get('/testrun/{pk}/next', response_model=str | None)
-async def get_next_spec(pk: int, pod_name: str, response: Response) -> str:
+@app.get('/testrun/{pk}/next', response_class=PlainTextResponse)
+async def get_next_spec(pk: int, response: Response, name: str = None) -> str:
     tr = await mongo.get_testrun(pk)
-    if tr.status != 'running':
+    if tr['status'] != 'running':
         response.status_code = 204
         return
-    spec = await mongo.assign_next_spec(pod_name, pk)
+    spec = await mongo.assign_next_spec(pk, name)
     if not spec:
         response.status_code = 204
         return

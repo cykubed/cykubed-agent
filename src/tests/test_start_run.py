@@ -2,7 +2,7 @@ from starlette.testclient import TestClient
 
 from common.schemas import NewTestRun, CompletedBuild
 from main import app
-from mongo import runs_coll, specfile_coll
+from mongo import runs_coll, specfile_coll, new_run, set_build_details
 from ws import handle_message
 
 
@@ -17,7 +17,7 @@ async def test_start_run(mocker, testrun: NewTestRun):
     create_build_job = mocker.patch('jobs.create_job')
     await handle_message(dict(command='start', payload=testrun.json()))
     # this will add an entry to the testrun collection
-    doc = await runs_coll().find_one({'id': 10})
+    doc = await runs_coll().find_one({'id': 20})
     assert doc['url'] == 'git@github.org/dummy.git'
     # and create the build Job
     deletejobs.assert_called_once()
@@ -55,6 +55,32 @@ async def test_build_completed(mocker, testrun: NewTestRun):
 
     assert args.metadata.name == 'cykube-run-project-1'
 
+
+async def test_get_specs(testrun: NewTestRun):
+    """
+    We should be able to fetch all the specs until we get a 204
+    Store the optional pod name as it will be useful to pods
+    :param testrun:
+    :return:
+    """
+    client = TestClient(app)
+    await new_run(testrun)
+    await set_build_details(testrun.id, CompletedBuild(sha='deadbeef00101',
+                                                       specs=['cypress/e2e/stuff/test1.spec.ts',
+                                                              'cypress/e2e/stuff/test2.spec.ts'],
+                                                       cache_hash='deadbeef0101'))
+    resp = client.get('/testrun/20/next', params={'name': 'cykube-run-20'})
+    assert resp.status_code == 200
+    assert resp.text == 'cypress/e2e/stuff/test1.spec.ts'
+    f = await specfile_coll().find_one({'file': 'cypress/e2e/stuff/test1.spec.ts'})
+    assert f['started'] is not None
+
+    resp = client.get('/testrun/20/next', params={'name': 'cykube-run-20'})
+    assert resp.status_code == 200
+    assert resp.text == 'cypress/e2e/stuff/test2.spec.ts'
+
+    resp = client.get('/testrun/20/next', params={'name': 'cykube-run-20'})
+    assert resp.status_code == 204
 
 
 
