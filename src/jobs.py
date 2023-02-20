@@ -1,17 +1,10 @@
-import asyncio
-import json
-from functools import lru_cache
-
-import httpx
 from kubernetes import client
 from loguru import logger
 
-import messages
-from common import schemas, k8common
-from common.k8common import NAMESPACE, get_job_env, get_batch_api, get_events_api, get_core_api
-from common.schemas import TestRunJobStatus
+from common import schemas
+from common.k8common import NAMESPACE, get_job_env, get_batch_api
+from common.schemas import NewTestRun
 from common.settings import settings
-from common.utils import get_headers
 
 
 # class JobEvent(BaseModel):
@@ -53,6 +46,10 @@ def delete_jobs(project_id, local_id):
     for job in jobs.items:
         logger.info(f'Deleting job {job.metadata.name}', project_id=project_id, local_id=local_id)
         api.delete_namespaced_job(job.metadata.name, NAMESPACE)
+
+
+def create_job(jobcfg: client.V1Job):
+    get_batch_api().create_namespaced_job(NAMESPACE, jobcfg)
 
 
 def create_build_job(testrun: schemas.NewTestRun):
@@ -98,10 +95,10 @@ def create_build_job(testrun: schemas.NewTestRun):
                               ttl_seconds_after_finished=settings.JOB_TTL),
     )
     logger.info(f"Creating build job {job_name}", tr=testrun)
-    get_batch_api().create_namespaced_job(NAMESPACE, jobcfg)
+    create_job(jobcfg)
 
 
-def create_runner_jobs(build: schemas.CompletedBuild):
+def create_runner_jobs(testrun: NewTestRun, numfiles: int, cache_hash: str):
     """
     Create runner jobs
     :return:
@@ -110,7 +107,6 @@ def create_runner_jobs(build: schemas.CompletedBuild):
     # delete_jobs(build.testrun.id)
 
     # now create run jobs
-    testrun = build.testrun
     job_name = f'cykube-run-{testrun.project.name}-{testrun.local_id}'
 
     container = client.V1Container(
@@ -126,7 +122,7 @@ def create_runner_jobs(build: schemas.CompletedBuild):
                     "memory": testrun.project.runner_memory,
                     "ephemeral-storage": "4Gi"}
         ),
-        args=['run', str(testrun.project.id), str(testrun.local_id), build.cache_hash],
+        args=['run', str(testrun.project.id), str(testrun.local_id), cache_hash],
     )
     pod_template = client.V1PodTemplateSpec(
         spec=client.V1PodSpec(restart_policy="Never",
@@ -145,21 +141,21 @@ def create_runner_jobs(build: schemas.CompletedBuild):
         spec=client.V1JobSpec(backoff_limit=0, template=pod_template,
                               active_deadline_seconds=testrun.project.runner_deadline or
                                                       settings.DEFAULT_RUNNER_JOB_DEADLINE,
-                              parallelism=min(len(testrun.files), testrun.project.parallelism),
+                              parallelism=min(numfiles, testrun.project.parallelism),
                               ttl_seconds_after_finished=settings.JOB_TTL),
     )
-    get_batch_api().create_namespaced_job(NAMESPACE, jobcfg)
+    create_job(jobcfg)
     logger.info(f'Creating running job {job_name}', tr=testrun)
 
-
-@lru_cache(maxsize=1000)
-def post_job_status(project_id: int, local_id: int, name: str, status: str, message: str = None):
-    r = httpx.post(f'{settings.MAIN_API_URL}/agent/testrun/{project_id}/{local_id}/job/status',
-                   json=TestRunJobStatus(name=name,
-                                         status=status,
-                                         message=message).dict(), headers=get_headers())
-    if r.status_code != 200:
-        logger.error(f"Failed to update cykube about job status: {r.status_code}: {r.text}")
+#
+# @lru_cache(maxsize=1000)
+# def post_job_status(project_id: int, local_id: int, name: str, status: str, message: str = None):
+#     r = httpx.post(f'{settings.MAIN_API_URL}/agent/testrun/{project_id}/{local_id}/job/status',
+#                    json=TestRunJobStatus(name=name,
+#                                          status=status,
+#                                          message=message).dict(), headers=get_headers())
+#     if r.status_code != 200:
+#         logger.error(f"Failed to update cykube about job status: {r.status_code}: {r.text}")
 
 #
 # async def get_job_info(job_int: JobStatus):
@@ -220,73 +216,74 @@ def post_job_status(project_id: int, local_id: int, name: str, status: str, mess
 #     return failed
 
 
-async def fetch_job_statuses():
-    jobitems = get_batch_api().list_namespaced_job(NAMESPACE,
-                                                   label_selector=f"cykube-job in (builder,runner)").items
-    if not jobitems:
-        return
-
-    for job in jobitems:
-
-        name = job.metadata.name
-        project_id = int(job.metadata.labels['project_id'])
-        local_id = int(job.metadata.labels['local_id'])
-        jobtype = job.metadata.labels['cykube-job']
-        logged_fail = False
-
-        poditems = get_core_api().list_namespaced_pod('cykube', label_selector=f'job-name={name}').items
-        if poditems:
-            # there'll only be a single pod
-            pod = poditems[0]
-            phase = pod.status.phase.lower()
-            if phase == 'running':
-                logger.info(f'Pod {pod.metadata.name} is running',
-                            project_id=project_id, local_id=local_id)
-            elif phase == 'failed':
-                # check for the reason
-                terminated = pod.status.container_statuses[0].state.terminated
-                if terminated and terminated.reason == 'OOMKilled':
-                    post_job_status(project_id, local_id, name, f'{jobtype.capitalize()} job failed',
-                                    'Job ran out of memory - try increasing the memory limit')
-                    logged_fail = True
-
-        if job.status.failed:
-            if not logged_fail:
-                post_job_status(project_id, local_id, name, f'{jobtype.capitalize()} job failed')
-        elif not job.status.succeeded:
-            # track the creation
-            for event in json.loads(get_events_api().list_namespaced_event(
-                NAMESPACE,
-                field_selector=f"regarding.kind=Job,regarding.name={name}",
-                        _preload_content=False).data.decode('utf8'))['items']:
-
-                message = None
-                if event.reason == 'DeadlineExceeded':
-                    message = 'Job exceeded deadline'
-                elif event.reason == 'BackoffLimitExceeded':
-                    message = 'Backoff limit exceeded - job is probably crashing'
-
-                if message:
-                    post_job_status(project_id, local_id, name, f'{jobtype.capitalize()} job failed',
-                                    message)
-                    logged_fail = True
-
-        if logged_fail:
-            messages.update_status(project_id, local_id, 'failed')
-
-
-async def job_status_poll():
-
-    while status.is_running():
-        try:
-            await asyncio.sleep(1)
-            await fetch_job_statuses()
-        except:
-            logger.exception("Failed to fetch Job statues")
-        await asyncio.sleep(settings.JOB_STATUS_POLL_PERIOD)
-
-
-if __name__ == "__main__":
-    k8common.init()
-    fetch_job_statuses()
+# FIXME replace this will mongo
+# async def fetch_job_statuses():
+#     jobitems = get_batch_api().list_namespaced_job(NAMESPACE,
+#                                                    label_selector=f"cykube-job in (builder,runner)").items
+#     if not jobitems:
+#         return
+#
+#     for job in jobitems:
+#
+#         name = job.metadata.name
+#         project_id = int(job.metadata.labels['project_id'])
+#         local_id = int(job.metadata.labels['local_id'])
+#         jobtype = job.metadata.labels['cykube-job']
+#         logged_fail = False
+#
+#         poditems = get_core_api().list_namespaced_pod('cykube', label_selector=f'job-name={name}').items
+#         if poditems:
+#             # there'll only be a single pod
+#             pod = poditems[0]
+#             phase = pod.status.phase.lower()
+#             if phase == 'running':
+#                 logger.info(f'Pod {pod.metadata.name} is running',
+#                             project_id=project_id, local_id=local_id)
+#             elif phase == 'failed':
+#                 # check for the reason
+#                 terminated = pod.status.container_statuses[0].state.terminated
+#                 if terminated and terminated.reason == 'OOMKilled':
+#                     post_job_status(project_id, local_id, name, f'{jobtype.capitalize()} job failed',
+#                                     'Job ran out of memory - try increasing the memory limit')
+#                     logged_fail = True
+#
+#         if job.status.failed:
+#             if not logged_fail:
+#                 post_job_status(project_id, local_id, name, f'{jobtype.capitalize()} job failed')
+#         elif not job.status.succeeded:
+#             # track the creation
+#             for event in json.loads(get_events_api().list_namespaced_event(
+#                 NAMESPACE,
+#                 field_selector=f"regarding.kind=Job,regarding.name={name}",
+#                         _preload_content=False).data.decode('utf8'))['items']:
+#
+#                 message = None
+#                 if event.reason == 'DeadlineExceeded':
+#                     message = 'Job exceeded deadline'
+#                 elif event.reason == 'BackoffLimitExceeded':
+#                     message = 'Backoff limit exceeded - job is probably crashing'
+#
+#                 if message:
+#                     post_job_status(project_id, local_id, name, f'{jobtype.capitalize()} job failed',
+#                                     message)
+#                     logged_fail = True
+#
+#         if logged_fail:
+#             messages.update_status(project_id, local_id, 'failed')
+#
+#
+# async def job_status_poll():
+#
+#     while is_running():
+#         try:
+#             await asyncio.sleep(1)
+#             await fetch_job_statuses()
+#         except:
+#             logger.exception("Failed to fetch Job statues")
+#         await asyncio.sleep(settings.JOB_STATUS_POLL_PERIOD)
+#
+#
+# if __name__ == "__main__":
+#     k8common.init()
+#     fetch_job_statuses()
     # asyncio.run(job_status_poll())

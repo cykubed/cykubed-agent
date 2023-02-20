@@ -17,7 +17,7 @@ from appstate import shutdown
 from common import k8common
 from common.enums import TestRunStatus, AgentEventType
 from common.schemas import CompletedBuild, AgentLogMessage, AgentCompletedBuildMessage, AgentSpecCompleted, SpecResult, \
-    AgentStatusChanged
+    AgentStatusChanged, NewTestRun
 from common.settings import settings
 from common.utils import disable_hc_logging
 from jobs import create_runner_jobs
@@ -105,7 +105,9 @@ async def build_complete(pk: int, build: CompletedBuild):
                                                             build=build))
 
     if settings.K8:
-        create_runner_jobs(build)
+        specfiles_count = await mongo.specfile_coll().count_documents({'trid': pk})
+        tr = NewTestRun.parse_obj(await mongo.runs_coll().find_one({'id': pk}))
+        create_runner_jobs(tr, specfiles_count, build.cache_hash)
     else:
         logger.info(f'Start runner with "./main.py run {pk} {build.cache_hash}', id=pk)
 

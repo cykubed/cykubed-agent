@@ -1,4 +1,5 @@
 import pytest
+from loguru import logger
 
 import messages
 from common.enums import PlatformEnum
@@ -9,6 +10,7 @@ from common.settings import settings
 @pytest.fixture(autouse=True)
 async def init():
     settings.TEST = True
+    logger.remove()
     await messages.queue.init()
 
 
