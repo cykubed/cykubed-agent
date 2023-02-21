@@ -40,9 +40,18 @@ def delete_jobs_for_branch(trid: int, branch: str):
             api.delete_namespaced_job(job.metadata.name, NAMESPACE)
 
 
+def delete_jobs_for_project(project_id):
+    api = client.BatchV1Api()
+    jobs = api.list_namespaced_job(NAMESPACE, label_selector=f'project_id={project_id}')
+    if jobs.items:
+        logger.info(f'Found {len(jobs.items)} existing Jobs - deleting them')
+        for job in jobs.items:
+            api.delete_namespaced_job(job.metadata.name, NAMESPACE)
+
+
 def delete_jobs(testrun_id: int):
     api = client.BatchV1Api()
-    jobs = api.list_namespaced_job(NAMESPACE, label_selector=f"testrnu_id={testrun_id}")
+    jobs = api.list_namespaced_job(NAMESPACE, label_selector=f"testrun_id={testrun_id}")
     for job in jobs.items:
         logger.info(f'Deleting job {job.metadata.name}', id=testrun_id)
         api.delete_namespaced_job(job.metadata.name, NAMESPACE)

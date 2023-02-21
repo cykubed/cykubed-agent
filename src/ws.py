@@ -30,6 +30,13 @@ async def start_run(newrun: NewTestRun):
                     tr=newrun)
 
 
+async def delete_project(project_id: int):
+    if settings.K8:
+        jobs.delete_jobs_for_project(project_id)
+
+    await mongo.delete_project(project_id)
+
+
 async def handle_message(data):
     """
     Handle a message from the websocket
@@ -45,6 +52,9 @@ async def handle_message(data):
         except:
             logger.exception(f"Failed to start test run {tr.id}", tr=tr)
             await queue.send_status_update(tr.id, 'failed')
+    elif cmd == 'delete_project':
+        project_id = payload['project_id']
+        await delete_project(project_id)
     elif cmd == 'cancel':
         testrun_id = payload['testrun_id']
         if settings.K8:

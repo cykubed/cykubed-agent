@@ -46,6 +46,16 @@ async def set_build_details(testrun_id: int, details: CompletedBuild):
                                                                         'cache_key': details.cache_hash}})
 
 
+async def delete_testrun(trid: int):
+    await specfile_coll().delete({'trid': trid})
+    await runs_coll().delete({'id': trid})
+
+
+async def delete_project(project_id: int):
+    trids = [doc['id'] for doc in await runs_coll().find({'project.id': project_id}, ['id'])]
+    await specfile_coll().delete({'trid': {'$in': trids}})
+
+
 async def get_testrun(testrun_id: int):
     return await runs_coll().find_one({'id': testrun_id})
 
