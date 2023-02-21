@@ -40,11 +40,11 @@ def delete_jobs_for_branch(trid: int, branch: str):
             api.delete_namespaced_job(job.metadata.name, NAMESPACE)
 
 
-def delete_jobs(project_id, local_id):
+def delete_jobs(testrun_id: int):
     api = client.BatchV1Api()
-    jobs = api.list_namespaced_job(NAMESPACE, label_selector=f"project_id={project_id},local_id={local_id}")
+    jobs = api.list_namespaced_job(NAMESPACE, label_selector=f"testrnu_id={testrun_id}")
     for job in jobs.items:
-        logger.info(f'Deleting job {job.metadata.name}', project_id=project_id, local_id=local_id)
+        logger.info(f'Deleting job {job.metadata.name}', id=testrun_id)
         api.delete_namespaced_job(job.metadata.name, NAMESPACE)
 
 
@@ -84,6 +84,7 @@ def create_build_job(testrun: schemas.NewTestRun):
                                    labels={"cykube-job": "builder",
                                            "project_id": str(testrun.project.id),
                                            "local_id": str(testrun.local_id),
+                                           "testrun_id": str(testrun.id),
                                            "branch": testrun.branch})
     jobcfg = client.V1Job(
         api_version="batch/v1",
@@ -133,6 +134,7 @@ def create_runner_jobs(testrun: NewTestRun, numfiles: int, cache_hash: str):
                                    labels={"cykube-job": "runner",
                                            "project_id": str(testrun.project.id),
                                            "local_id": str(testrun.local_id),
+                                           "testrun_id": str(testrun.id),
                                            "branch": testrun.branch})
     jobcfg = client.V1Job(
         api_version="batch/v1",

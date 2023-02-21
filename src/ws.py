@@ -5,14 +5,13 @@ from asyncio import sleep, exceptions
 
 import websockets
 from loguru import logger
-from websockets.exceptions import ConnectionClosedError, InvalidStatusCode
+from websockets.exceptions import ConnectionClosedError, InvalidStatusCode, ConnectionClosed
 
 import appstate
 import jobs
 import mongo
 from common.schemas import NewTestRun
 from common.settings import settings
-from common.utils import encode_testrun
 from messages import queue
 
 mainsocket = None
@@ -27,8 +26,7 @@ async def start_run(newrun: NewTestRun):
         # and create a new one
         jobs.create_build_job(newrun)
     else:
-        encoded_testrun = encode_testrun(newrun)
-        logger.info(f"Now run cykuberunner with options 'build {encoded_testrun}'",
+        logger.info(f"Now run cykuberunner with options 'build {newrun.id}'",
                     tr=newrun)
 
 
@@ -45,13 +43,12 @@ async def handle_message(data):
         try:
             await start_run(tr)
         except:
-            logger.exception(f"Failed to start test run {tr.local_id}", tr=tr)
+            logger.exception(f"Failed to start test run {tr.id}", tr=tr)
             await queue.send_status_update(tr.id, 'failed')
     elif cmd == 'cancel':
-        project_id = payload['project_id']
-        local_id = payload['local_id']
+        testrun_id = payload['testrun_id']
         if settings.K8:
-            jobs.delete_jobs(project_id, local_id)
+            jobs.delete_jobs(testrun_id)
 
 
 async def consumer_handler(websocket):
@@ -59,9 +56,9 @@ async def consumer_handler(websocket):
         try:
             message = await websocket.recv()
             await handle_message(json.loads(message))
-        except ConnectionClosedError:
-            if not appstate.is_running():
-                return
+        except ConnectionClosed:
+            return
+
 
 async def producer_handler(websocket):
     while appstate.is_running():

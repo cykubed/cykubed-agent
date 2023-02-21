@@ -68,6 +68,12 @@ def post_log(msg: AgentLogMessage):
     messages.queue.add_agent_msg(msg)
 
 
+@app.get('/testrun/{pk}', response_model=NewTestRun)
+async def get_test_run(pk: int) -> NewTestRun:
+    tr = await mongo.get_testrun(pk)
+    return NewTestRun.parse_obj(tr)
+
+
 @app.get('/testrun/{pk}/next', response_class=PlainTextResponse)
 async def get_next_spec(pk: int, response: Response, name: str = None) -> str:
     tr = await mongo.get_testrun(pk)
@@ -82,7 +88,7 @@ async def get_next_spec(pk: int, response: Response, name: str = None) -> str:
 
 
 @app.post('/testrun/{pk}/status/{status}')
-async def spec_completed(pk: int, status: TestRunStatus):
+async def status_changed(pk: int, status: TestRunStatus):
     messages.queue.add_agent_msg(AgentStatusChanged(testrun_id=pk,
                                                     type=AgentEventType.status,
                                                     status=status))
@@ -109,7 +115,7 @@ async def build_complete(pk: int, build: CompletedBuild):
         tr = NewTestRun.parse_obj(await mongo.runs_coll().find_one({'id': pk}))
         create_runner_jobs(tr, specfiles_count, build.cache_hash)
     else:
-        logger.info(f'Start runner with "./main.py run {pk} {build.cache_hash}', id=pk)
+        logger.info(f'Start runner with "./main.py run {pk}', id=pk)
 
     return {"message": "OK"}
 

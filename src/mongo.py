@@ -42,7 +42,8 @@ async def new_run(tr: NewTestRun):
 
 async def set_build_details(testrun_id: int, details: CompletedBuild):
     await specfile_coll().insert_many([{'trid': testrun_id, 'file': f, 'started': None, 'finished': None} for f in details.specs])
-    await runs_coll().find_one_and_update({'id': testrun_id}, {'$set': {'status': 'running'}})
+    await runs_coll().find_one_and_update({'id': testrun_id}, {'$set': {'status': 'running',
+                                                                        'cache_key': details.cache_hash}})
 
 
 async def get_testrun(testrun_id: int):
