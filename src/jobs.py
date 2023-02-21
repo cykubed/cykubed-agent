@@ -123,7 +123,7 @@ def create_runner_jobs(testrun: NewTestRun, numfiles: int, cache_hash: str):
                     "memory": testrun.project.runner_memory,
                     "ephemeral-storage": "4Gi"}
         ),
-        args=['run', str(testrun.project.id), str(testrun.local_id), cache_hash],
+        args=['run', str(testrun.id)],
     )
     pod_template = client.V1PodTemplateSpec(
         spec=client.V1PodSpec(restart_policy="Never",
