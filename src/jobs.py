@@ -61,7 +61,11 @@ def create_job(jobcfg: client.V1Job):
     get_batch_api().create_namespaced_job(NAMESPACE, jobcfg)
 
 
-def create_build_job(testrun: schemas.NewTestRun):
+def create_build_job_old(testrun: schemas.NewTestRun):
+    pass
+
+
+def create_build_job_old(testrun: schemas.NewTestRun):
     """
     Create a Job to clone and build the app
     :param testrun:
