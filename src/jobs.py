@@ -1,8 +1,8 @@
-from kubernetes import client
+from kubernetes import client, utils
 from loguru import logger
 
 from common import schemas
-from common.k8common import NAMESPACE, get_job_env, get_batch_api
+from common.k8common import NAMESPACE
 from common.schemas import NewTestRun
 from common.settings import settings
 
@@ -28,7 +28,6 @@ from common.settings import settings
 
 
 def delete_jobs_for_branch(trid: int, branch: str):
-
     # delete any job already running
     api = client.BatchV1Api()
     jobs = api.list_namespaced_job(NAMESPACE, label_selector=f'branch={branch}')
@@ -57,111 +56,40 @@ def delete_jobs(testrun_id: int):
         api.delete_namespaced_job(job.metadata.name, NAMESPACE)
 
 
-def create_job(jobcfg: client.V1Job):
-    get_batch_api().create_namespaced_job(NAMESPACE, jobcfg)
+def create_job(jobtype: str, testrun: schemas.NewTestRun):
+    context = dict(project_name=testrun.project.name,
+                   project_id=testrun.project.id,
+                   local_id=testrun.local_id,
+                   testrun_id=testrun.id,
+                   branch=testrun.branch,
+                   runner_image=testrun.project.runner_image,
+                   token=settings.API_TOKEN)
+    if jobtype == 'builder':
+        template = testrun.project.templates.builder
+        context.update(dict(parallelism=testrun.project.parallelism,
+                            cpu_request=testrun.project.build_cpu,
+                            cpu_limit=testrun.project.build_cpu,
+                            memory_request=testrun.project.build_memory,
+                            memory_limit=testrun.project.build_memory))
+    else:
+        template = testrun.project.templates.runner
+        context.update(dict(cpu_request=testrun.project.runner_cpu,
+                            cpu_limit=testrun.project.runner_memory,
+                            memory_request=testrun.project.runner_cpu,
+                            memory_limit=testrun.project.runner_memory))
+
+    jobyaml = template.format(context)
+    k8sclient = client.ApiClient()
+    utils.create_from_yaml(k8sclient, jobyaml, namespace=NAMESPACE)
+    logger.info(f"Created {jobtype} job")
 
 
-def create_build_job_old(testrun: schemas.NewTestRun):
-    pass
+def create_build_job(testrun: schemas.NewTestRun):
+    create_job('builder', testrun)
 
 
-def create_build_job_old(testrun: schemas.NewTestRun):
-    """
-    Create a Job to clone and build the app
-    :param testrun:
-    :return:
-    """
-    job_name = f'cykube-build-{testrun.project.name}-{testrun.local_id}'
-    container = client.V1Container(
-        image=testrun.project.runner_image,
-        name='cykube-builder',
-        image_pull_policy='IfNotPresent',
-        env=get_job_env(),
-        resources=client.V1ResourceRequirements(
-            requests={"cpu": testrun.project.build_cpu,
-                      "memory": testrun.project.build_memory,
-                      "ephemeral-storage": "2Gi"},
-            limits={"cpu": testrun.project.build_cpu,
-                    "memory": testrun.project.build_memory,
-                    "ephemeral-storage": "4Gi"}
-        ),
-        args=["build", str(testrun.id)],
-    )
-    pod_template = client.V1PodTemplateSpec(
-        spec=client.V1PodSpec(restart_policy="Never",
-                              containers=[container]),
-        metadata=client.V1ObjectMeta(name='cykube-builder',
-                                     labels={"job-name": job_name})
-    )
-    metadata = client.V1ObjectMeta(name=job_name,
-                                   labels={"cykube-job": "builder",
-                                           "project_id": str(testrun.project.id),
-                                           "local_id": str(testrun.local_id),
-                                           "testrun_id": str(testrun.id),
-                                           "branch": testrun.branch})
-    jobcfg = client.V1Job(
-        api_version="batch/v1",
-        kind="Job",
-        metadata=metadata,
-        spec=client.V1JobSpec(backoff_limit=0, template=pod_template,
-                              active_deadline_seconds=testrun.project.build_deadline or
-                                                      settings.DEFAULT_BUILD_JOB_DEADLINE,
-                              ttl_seconds_after_finished=settings.JOB_TTL),
-    )
-    logger.info(f"Creating build job {job_name}", tr=testrun)
-    create_job(jobcfg)
-
-
-def create_runner_jobs(testrun: NewTestRun, numfiles: int, cache_hash: str):
-    """
-    Create runner jobs
-    :return:
-    """
-    # remove build job first
-    # delete_jobs(build.testrun.id)
-
-    # now create run jobs
-    job_name = f'cykube-run-{testrun.project.name}-{testrun.local_id}'
-
-    container = client.V1Container(
-        image=testrun.project.runner_image,
-        name='cykube-runner',
-        image_pull_policy='IfNotPresent',
-        env=get_job_env(),
-        resources=client.V1ResourceRequirements(
-            requests={"cpu": testrun.project.runner_cpu,
-                      "memory": testrun.project.runner_memory,
-                      "ephemeral-storage": "2Gi"},
-            limits={"cpu": testrun.project.runner_cpu,
-                    "memory": testrun.project.runner_memory,
-                    "ephemeral-storage": "4Gi"}
-        ),
-        args=['run', str(testrun.id)],
-    )
-    pod_template = client.V1PodTemplateSpec(
-        spec=client.V1PodSpec(restart_policy="Never",
-                              containers=[container]),
-        metadata=client.V1ObjectMeta(name='cykube-runner')
-    )
-    metadata = client.V1ObjectMeta(name=job_name,
-                                   labels={"cykube-job": "runner",
-                                           "project_id": str(testrun.project.id),
-                                           "local_id": str(testrun.local_id),
-                                           "testrun_id": str(testrun.id),
-                                           "branch": testrun.branch})
-    jobcfg = client.V1Job(
-        api_version="batch/v1",
-        kind="Job",
-        metadata=metadata,
-        spec=client.V1JobSpec(backoff_limit=0, template=pod_template,
-                              active_deadline_seconds=testrun.project.runner_deadline or
-                                                      settings.DEFAULT_RUNNER_JOB_DEADLINE,
-                              parallelism=min(numfiles, testrun.project.parallelism),
-                              ttl_seconds_after_finished=settings.JOB_TTL),
-    )
-    create_job(jobcfg)
-    logger.info(f'Creating running job {job_name}', tr=testrun)
-
+def create_runner_jobs(testrun: NewTestRun):
+    create_job('runner', testrun)
 #
 # @lru_cache(maxsize=1000)
 # def post_job_status(project_id: int, local_id: int, name: str, status: str, message: str = None):
@@ -301,4 +229,4 @@ def create_runner_jobs(testrun: NewTestRun, numfiles: int, cache_hash: str):
 # if __name__ == "__main__":
 #     k8common.init()
 #     fetch_job_statuses()
-    # asyncio.run(job_status_poll())
+# asyncio.run(job_status_poll())
