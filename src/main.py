@@ -105,15 +105,13 @@ async def spec_completed(pk: int, result: SpecResult):
 
 @app.post('/testrun/{pk}/build-complete')
 async def build_complete(pk: int, build: CompletedBuild):
-    await mongo.set_build_details(pk, build)
+    tr = await mongo.set_build_details(pk, build)
     messages.queue.add_agent_msg(AgentCompletedBuildMessage(testrun_id=pk,
                                                             type=AgentEventType.build_completed,
                                                             build=build))
 
     if settings.K8:
-        specfiles_count = await mongo.specfile_coll().count_documents({'trid': pk})
-        tr = NewTestRun.parse_obj(await mongo.runs_coll().find_one({'id': pk}))
-        create_runner_jobs(tr, specfiles_count, build.cache_hash)
+        create_runner_jobs(tr)
     else:
         logger.info(f'Start runner with "./main.py run {pk}', id=pk)
 

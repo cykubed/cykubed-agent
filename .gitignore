@@ -143,3 +143,4 @@ cython_debug/
 
 /secrets.yaml
 /k8config/secrets.yaml
+/scripts/local-configmap.yaml

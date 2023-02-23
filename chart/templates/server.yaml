@@ -11,16 +11,23 @@ spec:
       storage: {{ .Values.cacheStorage }}
 ---
 apiVersion: v1
+kind: Secret
+metadata:
+  name: cykube-secrets
+  namespace: {{ .Release.Namespace }}
+type: Opaque
+data:
+  API_TOKEN: {{ .Values.token | b64enc }}
+---
+apiVersion: v1
 kind: ConfigMap
 metadata:
   namespace: {{ .Release.Namespace }}
-  name: {{ .Release.Name }}-agent-configmap
+  name: cykube-configmap
 data:
-  API_TOKEN: {{ .Values.token }}
   CACHE_URL: {{ .Values.agentUrl }}
   AGENT_URL: {{ .Values.cacheUrl }}
   MAIN_API_URL: {{ .Values.apiUrl }}
-  JOB_MODE: "k8"
   CACHE_DIR: "/var/lib/cykubecache"
   MONGO_URL: "mongodb://mongo:27017"
 ---
@@ -78,7 +85,9 @@ spec:
               memory: 0.5G
           envFrom:
             - configMapRef:
-                name: {{ .Release.Name }}-agent-configmap
+                name: cykube-configmap
+            - secretRef:
+                name: cykube-secrets
           ports:
             - containerPort: 5000
               name: cykube-server

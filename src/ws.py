@@ -51,7 +51,8 @@ async def handle_message(data):
             await start_run(tr)
         except:
             logger.exception(f"Failed to start test run {tr.id}", tr=tr)
-            await queue.send_status_update(tr.id, 'failed')
+            if queue and tr:
+                await queue.send_status_update(tr.id, 'failed')
     elif cmd == 'delete_project':
         project_id = payload['project_id']
         await delete_project(project_id)

@@ -3,6 +3,7 @@ from functools import cache
 
 import pymongo
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import ReturnDocument
 
 from common.schemas import NewTestRun, CompletedBuild
 from common.settings import settings
@@ -40,10 +41,12 @@ async def new_run(tr: NewTestRun):
     await runs_coll().insert_one(tr.dict())
 
 
-async def set_build_details(testrun_id: int, details: CompletedBuild):
+async def set_build_details(testrun_id: int, details: CompletedBuild) -> NewTestRun:
     await specfile_coll().insert_many([{'trid': testrun_id, 'file': f, 'started': None, 'finished': None} for f in details.specs])
-    await runs_coll().find_one_and_update({'id': testrun_id}, {'$set': {'status': 'running',
-                                                                        'cache_key': details.cache_hash}})
+    tr = await runs_coll().find_one_and_update({'id': testrun_id}, {'$set': {'status': 'running',
+                                                                        'cache_key': details.cache_hash}},
+                                               return_document = ReturnDocument.AFTER)
+    return NewTestRun.parse_obj(tr)
 
 
 async def delete_testrun(trid: int):

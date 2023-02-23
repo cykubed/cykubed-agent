@@ -1,3 +1,4 @@
+import yaml
 from kubernetes import client, utils
 from loguru import logger
 
@@ -65,22 +66,25 @@ def create_job(jobtype: str, testrun: schemas.NewTestRun):
                    runner_image=testrun.project.runner_image,
                    token=settings.API_TOKEN)
     if jobtype == 'builder':
-        template = testrun.project.templates.builder
+        template = testrun.project.builder_template
         context.update(dict(parallelism=testrun.project.parallelism,
                             cpu_request=testrun.project.build_cpu,
                             cpu_limit=testrun.project.build_cpu,
                             memory_request=testrun.project.build_memory,
                             memory_limit=testrun.project.build_memory))
     else:
-        template = testrun.project.templates.runner
+        template = testrun.project.runner_template
         context.update(dict(cpu_request=testrun.project.runner_cpu,
-                            cpu_limit=testrun.project.runner_memory,
-                            memory_request=testrun.project.runner_cpu,
-                            memory_limit=testrun.project.runner_memory))
+                            cpu_limit=testrun.project.runner_cpu,
+                            memory_request=testrun.project.runner_memory,
+                            memory_limit=testrun.project.runner_memory,
+                            parallelism=testrun.project.parallelism))
 
-    jobyaml = template.format(context)
+    jobyaml = template.format(**context)
+
     k8sclient = client.ApiClient()
-    utils.create_from_yaml(k8sclient, jobyaml, namespace=NAMESPACE)
+    yamlobjects = yaml.safe_load(jobyaml)
+    utils.create_from_yaml(k8sclient, yaml_objects=[yamlobjects], namespace=NAMESPACE)
     logger.info(f"Created {jobtype} job")
 
 
