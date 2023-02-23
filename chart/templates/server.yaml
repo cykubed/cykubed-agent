@@ -25,10 +25,9 @@ metadata:
   namespace: {{ .Release.Namespace }}
   name: cykube-configmap
 data:
-  CACHE_URL: {{ .Values.agentUrl }}
-  AGENT_URL: {{ .Values.cacheUrl }}
+  CACHE_URL: {{ .Values.cacheUrl }}
+  AGENT_URL: {{ .Values.agentUrl }}
   MAIN_API_URL: {{ .Values.apiUrl }}
-  CACHE_DIR: "/var/lib/cykubecache"
   MONGO_URL: "mongodb://mongo:27017"
 ---
 apiVersion: v1

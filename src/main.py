@@ -45,8 +45,8 @@ async def shutdown_event():
 @app.post('/upload')
 def upload_cache(file: UploadFile):
     logger.info(f"Uploading file {file.filename} to cache")
-    os.makedirs(settings.CACHE_DIR, exist_ok=True)
-    path = os.path.join(settings.CACHE_DIR, file.filename)
+    os.makedirs(settings.CYKUBE_CACHE_DIR, exist_ok=True)
+    path = os.path.join(settings.CYKUBE_CACHE_DIR, file.filename)
     if os.path.exists(path):
         return {"message": "Exists"}
     try:
