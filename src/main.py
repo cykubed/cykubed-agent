@@ -23,7 +23,7 @@ from common.schemas import CompletedBuild, AgentLogMessage, AgentCompletedBuildM
     AgentStatusChanged, NewTestRun
 from common.settings import settings
 from common.utils import disable_hc_logging
-from jobs import create_runner_jobs
+from jobs import create_runner_jobs, is_pod_running
 from logs import configure_logging
 
 app = FastAPI()
@@ -131,7 +131,7 @@ async def build_complete(pk: int, build: CompletedBuild):
 
 @app.on_event("startup")
 @repeat_every(seconds=300)
-async def cleanup():
+async def cleanup_cache():
     # remove inactive testruns
     trids = await mongo.get_inactive_testrun_ids()
     if trids:
@@ -152,12 +152,41 @@ async def cleanup():
             await aiofiles.os.remove(path)
 
 
+@app.on_event("startup")
+@repeat_every(seconds=60)
+async def cleanup_testruns():
+    # check for specs that are marked as running but have no pod
+    if settings.K8:
+        loop = asyncio.get_running_loop()
+        for doc in await mongo.get_active_specfile_docs():
+            is_running = await loop.run_in_executor(None, is_pod_running, doc['pod_name'])
+            if not is_running:
+                tr = await mongo.get_testrun(doc['trid'])
+                if tr and tr['status'] == 'running':
+                    # let another Job take this - this handles crashes and Spot Jobs
+                    await mongo.reset_specfile(doc)
+
+    # now check for builds that have gone on for too long
+    for tr in await mongo.get_testruns_with_status(TestRunStatus.building):
+        duration = (datetime.datetime.utcnow() - tr['started']).seconds
+        if duration > tr['project']['build_deadline']:
+            await mongo.delete_testrun(tr['id'])
+
+    # ditto for runners
+    try:
+        for tr in await mongo.get_testruns_with_status(TestRunStatus.running):
+            duration = (datetime.datetime.utcnow() - tr['started']).seconds
+            if duration > tr['project']['runner_deadline']:
+                await mongo.delete_testrun(tr['id'])
+    except:
+        logger.exception("Failed to cleanup testruns")
+
+
 async def init():
     """
     Run the websocket and server concurrently
     """
     await mongo.init()
-    await cleanup()
     config = Config(app, port=5000, host='0.0.0.0')
     config.setup_event_loop()
     server = Server(config=config)

@@ -41,7 +41,9 @@ async def init():
 
 
 async def new_run(tr: NewTestRun):
-    await runs_coll().insert_one(tr.dict())
+    trdict = tr.dict()
+    trdict['started'] = datetime.utcnow()
+    await runs_coll().insert_one(trdict)
 
 
 async def set_status(trid: int, status: TestRunStatus):
@@ -62,15 +64,18 @@ async def set_build_details(testrun_id: int, details: CompletedBuild) -> NewTest
 
 
 async def delete_testrun(trid: int):
-    await specfile_coll().delete({'trid': trid})
-    await runs_coll().delete({'id': trid})
+    await specfile_coll().delete_one({'trid': trid})
+    await runs_coll().delete_one({'id': trid})
+    await remove_testrun_artifacts(trid)
 
 
 async def delete_project(project_id: int):
     trids = []
     async for doc in runs_coll().find({'project.id': project_id}, ['id']):
         trids.append(doc['id'])
-    await specfile_coll().delete({'trid': {'$in': trids}})
+    await specfile_coll().delete_one({'trid': {'$in': trids}})
+    for id in trids:
+        await remove_testrun_artifacts(id)
 
 
 async def get_testrun(testrun_id: int):
@@ -88,6 +93,20 @@ async def get_inactive_testrun_ids():
 async def remove_testruns(ids):
     await specfile_coll().delete_many({'trid': {'$in': ids}})
     await runs_coll().delete_many({id: {'$in': ids}})
+
+
+async def get_active_specfile_docs():
+    specs = []
+    async for doc in specfile_coll().find({'started': {'$ne': None}, 'finished': None, 'pod_name': {'$ne': None}}):
+        specs.append(doc)
+    return specs
+
+
+async def get_testruns_with_status(status: TestRunStatus) -> list[dict]:
+    runs = []
+    async for doc in runs_coll().find({'status': status}):
+        runs.append(doc)
+    return runs
 
 
 async def assign_next_spec(testrun_id: int, pod_name: str = None) -> str | None:
@@ -111,7 +130,16 @@ async def spec_completed(trid: int, file: str):
     await specfile_coll().delete_one({'trid': trid, 'file': file})
     cnt = await specfile_coll().count_documents({'trid': trid})
     if not cnt:
-        path = os.path.join(settings.CYKUBE_CACHE_DIR, f'{trid}.tar.lz4')
-        if os.path.exists(path):
-            await aiofiles.os.remove(path)
-        await runs_coll().delete_one({'id': trid})
+        await remove_testrun_artifacts(trid)
+
+
+async def remove_testrun_artifacts(trid: int):
+    path = os.path.join(settings.CYKUBE_CACHE_DIR, f'{trid}.tar.lz4')
+    if os.path.exists(path):
+        await aiofiles.os.remove(path)
+    await runs_coll().delete_one({'id': trid})
+
+
+async def reset_specfile(specdoc):
+    await specfile_coll().find_one_and_update({'_id': specdoc['_id']}, {'$set': {'started': None}})
+

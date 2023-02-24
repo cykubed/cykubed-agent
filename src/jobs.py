@@ -1,5 +1,6 @@
 import yaml
 from kubernetes import client, utils
+from kubernetes.client import ApiException
 from loguru import logger
 
 from common import schemas
@@ -162,6 +163,14 @@ def create_runner_jobs(testrun: NewTestRun):
 #
 #     return failed
 
+
+def is_pod_running(podname: str):
+    v1 = client.CoreV1Api()
+    try:
+        v1.read_namespaced_pod(podname, NAMESPACE)
+        return True
+    except ApiException:
+        return False
 
 # FIXME replace this will mongo
 # async def fetch_job_statuses():
