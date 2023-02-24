@@ -1,8 +1,11 @@
 import asyncio
+import datetime
 import os
 import shutil
 
+import aiofiles.os
 from fastapi import FastAPI, UploadFile
+from fastapi_utils.tasks import repeat_every
 from loguru import logger
 from starlette.responses import Response, PlainTextResponse
 from uvicorn.config import (
@@ -69,14 +72,21 @@ def post_log(msg: AgentLogMessage):
 
 
 @app.get('/testrun/{pk}', response_model=NewTestRun)
-async def get_test_run(pk: int) -> NewTestRun:
+async def get_test_run(pk: int, response: Response) -> NewTestRun:
     tr = await mongo.get_testrun(pk)
+    if not tr:
+        response.status_code = 404
+        return
     return NewTestRun.parse_obj(tr)
 
 
 @app.get('/testrun/{pk}/next', response_class=PlainTextResponse)
 async def get_next_spec(pk: int, response: Response, name: str = None) -> str:
     tr = await mongo.get_testrun(pk)
+    if not tr:
+        response.status_code = 404
+        return
+
     if tr['status'] != 'running':
         response.status_code = 204
         return
@@ -89,6 +99,7 @@ async def get_next_spec(pk: int, response: Response, name: str = None) -> str:
 
 @app.post('/testrun/{pk}/status/{status}')
 async def status_changed(pk: int, status: TestRunStatus):
+    await mongo.set_status(pk, status)
     messages.queue.add_agent_msg(AgentStatusChanged(testrun_id=pk,
                                                     type=AgentEventType.status,
                                                     status=status))
@@ -118,11 +129,35 @@ async def build_complete(pk: int, build: CompletedBuild):
     return {"message": "OK"}
 
 
+@app.on_event("startup")
+@repeat_every(seconds=300)
+async def cleanup():
+    # remove inactive testruns
+    trids = await mongo.get_inactive_testrun_ids()
+    if trids:
+        # delete the distro
+        for name in await aiofiles.os.listdir(settings.CYKUBE_CACHE_DIR):
+            trid = int(name.split('.')[0])
+            if trid in trids:
+                await aiofiles.os.remove(os.path.join(settings.CYKUBE_CACHE_DIR, name))
+        # and remove them from the local mongo: it's only need to retain state while a testrun is active
+        await mongo.remove_testruns(trids)
+    # finally just remove any files (i.e dist caches) that haven't been read in a while
+    today = datetime.datetime.utcnow()
+    for name in await aiofiles.os.listdir(settings.CYKUBE_CACHE_DIR):
+        path = os.path.join(settings.CYKUBE_CACHE_DIR, name)
+        st = await aiofiles.os.stat(path)
+        last_read_estimate = datetime.datetime.fromtimestamp(st.st_atime)
+        if (today - last_read_estimate).days > settings.DIST_CACHE_STATENESS_WINDOW_DAYS:
+            await aiofiles.os.remove(path)
+
+
 async def init():
     """
     Run the websocket and server concurrently
     """
     await mongo.init()
+    await cleanup()
     config = Config(app, port=5000, host='0.0.0.0')
     config.setup_event_loop()
     server = Server(config=config)

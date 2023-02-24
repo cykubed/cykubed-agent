@@ -1,3 +1,6 @@
+import shutil
+import tempfile
+
 import pytest
 from loguru import logger
 
@@ -11,9 +14,12 @@ from mongo import client
 @pytest.fixture(autouse=True)
 async def init():
     settings.TEST = True
+    settings.CYKUBE_CACHE_DIR = tempfile.mkdtemp()
     await client().drop_database(settings.MONGO_DATABASE)
     logger.remove()
     await messages.queue.init()
+    yield
+    shutil.rmtree(settings.CYKUBE_CACHE_DIR)
 
 
 @pytest.fixture()

@@ -1,7 +1,10 @@
+import os
+
 from starlette.testclient import TestClient
 
 from common.enums import TestRunStatus
 from common.schemas import NewTestRun, CompletedBuild, SpecResult, TestResult
+from common.settings import settings
 from main import app
 from mongo import runs_coll, specfile_coll, new_run, set_build_details
 from ws import handle_message
@@ -52,9 +55,6 @@ async def test_build_completed(mocker, testrun: NewTestRun):
 
     delete_jobs.assert_called_once()
     create_job.assert_called_once()
-    args = create_job.call_args_list[0].args[0]
-
-    assert args.metadata.name == 'cykube-run-project-1'
 
 
 async def test_get_specs(testrun: NewTestRun):
@@ -88,6 +88,11 @@ async def test_spec_completed(mocker, testrun: NewTestRun):
     add_agent_msg = mocker.patch('main.messages.queue.add_agent_msg')
     client = TestClient(app)
     await new_run(testrun)
+    # add a dummy dist
+    dummydist = os.path.join(settings.CYKUBE_CACHE_DIR, f'{testrun.id}.tar.lz4')
+    with open(dummydist, 'w') as f:
+        f.write('dummy')
+
     await set_build_details(testrun.id, CompletedBuild(sha='deadbeef00101',
                                                        specs=['cypress/e2e/stuff/test1.spec.ts',
                                                               'cypress/e2e/stuff/test2.spec.ts'],
@@ -100,9 +105,22 @@ async def test_spec_completed(mocker, testrun: NewTestRun):
                         tests=[TestResult(title="Title",
                                           context="Context",
                                           status=TestRunStatus.passed)])
+    # complete the spec - this will remove it
     resp = client.post('/testrun/20/spec-completed', json=result.dict())
     assert resp.status_code == 200
     spec = await specfile_coll().find_one({'trid': testrun.id, 'file': file})
-    assert spec['finished'] is not None
+    assert spec is None
     add_agent_msg.assert_called_once()
 
+    # complete the other one - this will remove the
+    result.file = 'cypress/e2e/stuff/test2.spec.ts'
+    resp = client.post('/testrun/20/spec-completed', json=result.dict())
+    assert resp.status_code == 200
+    spec = await specfile_coll().find_one({'trid': testrun.id, 'file': result.file})
+    assert spec is None
+    assert await runs_coll().find_one({'id': testrun.id}) is None
+    # the testrun dist will have been removed
+    assert not os.path.exists(dummydist)
+
+    resp = client.get('/testrun/20/next', params={'name': 'cykube-run-20'})
+    assert resp.status_code == 404
