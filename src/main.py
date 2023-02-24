@@ -122,7 +122,7 @@ async def build_complete(pk: int, build: CompletedBuild):
                                                             build=build))
 
     if settings.K8:
-        create_runner_jobs(tr)
+        create_runner_jobs(tr, build)
     else:
         logger.info(f'Start runner with "./main.py run {pk}', id=pk)
 

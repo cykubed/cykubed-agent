@@ -2,10 +2,9 @@ FROM python:3.10-slim-buster as build
 
 WORKDIR /usr/app
 
-RUN useradd -m cykube && chown cykube /usr/app
-USER cykube
+# FIXME switch to non-root https://elastisys.com/howto-stop-running-containers-as-root-in-kubernetes/
+RUN mkdir /var/lib/cykubecache
 
-RUN mkdir -p /tmp/cykube/build
 ENV PATH="/home/cykube/.local/bin:$PATH"
 
 RUN pip install poetry==1.3.1

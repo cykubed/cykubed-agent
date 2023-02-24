@@ -58,7 +58,7 @@ def delete_jobs(testrun_id: int):
         api.delete_namespaced_job(job.metadata.name, NAMESPACE)
 
 
-def create_job(jobtype: str, testrun: schemas.NewTestRun):
+def create_job(jobtype: str, testrun: schemas.NewTestRun, build: schemas.CompletedBuild = None):
     context = dict(project_name=testrun.project.name,
                    project_id=testrun.project.id,
                    local_id=testrun.local_id,
@@ -79,7 +79,7 @@ def create_job(jobtype: str, testrun: schemas.NewTestRun):
                             cpu_limit=testrun.project.runner_cpu,
                             memory_request=testrun.project.runner_memory,
                             memory_limit=testrun.project.runner_memory,
-                            parallelism=testrun.project.parallelism))
+                            parallelism=min(len(build.specs), testrun.project.parallelism)))
 
     jobyaml = template.format(**context)
 
@@ -93,8 +93,8 @@ def create_build_job(testrun: schemas.NewTestRun):
     create_job('builder', testrun)
 
 
-def create_runner_jobs(testrun: NewTestRun):
-    create_job('runner', testrun)
+def create_runner_jobs(testrun: NewTestRun, build: schemas.CompletedBuild):
+    create_job('runner', testrun, build)
 #
 # @lru_cache(maxsize=1000)
 # def post_job_status(project_id: int, local_id: int, name: str, status: str, message: str = None):
