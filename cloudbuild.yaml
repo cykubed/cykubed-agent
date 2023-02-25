@@ -7,21 +7,25 @@ steps:
      git config -f .gitmodules submodule.src/common.url https://source.developers.google.com/p/iron-lodge-372417/r/github_cykube_cykube-common
      git submodule init
      git submodule update
+
  - name: 'gcr.io/cloud-builders/docker'
    entrypoint: 'bash'
    args: ['-c', 'docker login --username=$$USERNAME --password=$$PASSWORD']
    secretEnv: ['USERNAME', 'PASSWORD']
+
  - name: 'gcr.io/cloud-builders/docker'
    entrypoint: 'bash'
    args: ['-c', 'docker build -t $$USERNAME/cykube-agent:$TAG_NAME .']
    secretEnv: ['USERNAME']
+
  - name: 'gcr.io/cloud-builders/docker'
    entrypoint: 'bash'
    args: ['-c', 'docker push $$USERNAME/cykube-agent:$TAG_NAME']
    secretEnv: ['USERNAME']
+
 availableSecrets:
-   secretManager:
-   - versionName: projects/1090211518452/secrets/docker-username/versions/1
-     env: 'USERNAME'
-   - versionName: projects/1090211518452/secrets/docker-password/versions/1
-     env: 'PASSWORD'
+  secretManager:
+    - versionName: projects/1090211518452/secrets/docker-username/versions/1
+      env: 'USERNAME'
+    - versionName: projects/1090211518452/secrets/docker-hub-password/versions/1
+      env: 'PASSWORD'
