@@ -64,6 +64,9 @@ def configure_logging():
     logger.add(rest_logsink,
                format="{message}", level="INFO")
     # if we're running in GCP, use structured logging
-    resp = httpx.get('http://metadata.google.internal')
-    if resp.status_code == 200 and resp.headers['metadata-flavor'] == 'Google':
-        logger.add(StackDriverSink())
+    try:
+        resp = httpx.get('http://metadata.google.internal')
+        if resp.status_code == 200 and resp.headers['metadata-flavor'] == 'Google':
+            logger.add(StackDriverSink())
+    except:
+        pass

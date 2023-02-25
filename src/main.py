@@ -6,6 +6,7 @@ import shutil
 import aiofiles.os
 import sentry_sdk
 from fastapi import FastAPI, UploadFile
+from fastapi_exceptions.exceptions import NotFound
 from fastapi_utils.tasks import repeat_every
 from loguru import logger
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
@@ -87,11 +88,10 @@ def post_log(msg: AgentLogMessage):
 
 
 @app.get('/testrun/{pk}', response_model=NewTestRun)
-async def get_test_run(pk: int, response: Response) -> NewTestRun:
+async def get_test_run(pk: int) -> NewTestRun:
     tr = await mongo.get_testrun(pk)
     if not tr:
-        response.status_code = 404
-        return
+        raise NotFound()
     return NewTestRun.parse_obj(tr)
 
 
@@ -99,8 +99,7 @@ async def get_test_run(pk: int, response: Response) -> NewTestRun:
 async def get_next_spec(pk: int, response: Response, name: str = None) -> str:
     tr = await mongo.get_testrun(pk)
     if not tr:
-        response.status_code = 404
-        return
+        raise NotFound()
 
     if tr['status'] != 'running':
         response.status_code = 204
@@ -168,33 +167,36 @@ async def cleanup_cache():
 
 
 @app.on_event("startup")
-@repeat_every(seconds=60)
+@repeat_every(seconds=120)
 async def cleanup_testruns():
     # check for specs that are marked as running but have no pod
     if settings.K8:
         loop = asyncio.get_running_loop()
         for doc in await mongo.get_active_specfile_docs():
-            is_running = await loop.run_in_executor(None, is_pod_running, doc['pod_name'])
+            podname = doc['pod_name']
+            is_running = await loop.run_in_executor(None, is_pod_running, podname)
             if not is_running:
                 tr = await mongo.get_testrun(doc['trid'])
                 if tr and tr['status'] == 'running':
+                    file = doc['file']
                     # let another Job take this - this handles crashes and Spot Jobs
+                    logger.info(f'Cannot find a running pod for {podname}: returning {file} to the pool')
                     await mongo.reset_specfile(doc)
 
-    # now check for builds that have gone on for too long
-    for tr in await mongo.get_testruns_with_status(TestRunStatus.building):
-        duration = (datetime.datetime.utcnow() - tr['started']).seconds
-        if duration > tr['project']['build_deadline']:
-            await mongo.delete_testrun(tr['id'])
-
-    # ditto for runners
-    try:
-        for tr in await mongo.get_testruns_with_status(TestRunStatus.running):
-            duration = (datetime.datetime.utcnow() - tr['started']).seconds
-            if duration > tr['project']['runner_deadline']:
-                await mongo.delete_testrun(tr['id'])
-    except:
-        logger.exception("Failed to cleanup testruns")
+    # # now check for builds that have gone on for too long
+    # for tr in await mongo.get_testruns_with_status(TestRunStatus.building):
+    #     duration = (datetime.datetime.utcnow() - tr['started']).seconds
+    #     if duration > tr['project']['build_deadline']:
+    #         await mongo.delete_testrun(tr['id'])
+    #
+    # # ditto for runners
+    # try:
+    #     for tr in await mongo.get_testruns_with_status(TestRunStatus.running):
+    #         duration = (datetime.datetime.utcnow() - tr['started']).seconds
+    #         if duration > tr['project']['runner_deadline']:
+    #             await mongo.delete_testrun(tr['id'])
+    # except:
+    #     logger.exception("Failed to cleanup testruns")
 
 
 async def init():
