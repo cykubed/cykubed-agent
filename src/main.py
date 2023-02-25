@@ -8,6 +8,8 @@ import sentry_sdk
 from fastapi import FastAPI, UploadFile
 from fastapi_utils.tasks import repeat_every
 from loguru import logger
+from sentry_sdk.integrations.asyncio import AsyncioIntegration
+from sentry_sdk.integrations.httpx import HttpxIntegration
 from starlette.responses import Response, PlainTextResponse
 from uvicorn.config import (
     Config,
@@ -27,8 +29,11 @@ from common.utils import disable_hc_logging
 from jobs import create_runner_jobs, is_pod_running
 from logs import configure_logging
 
-if settings.SENTRY_DSN:
-    sentry_sdk.init(dns=settings.SENTRY_DSN)
+if os.environ.get('SENTRY_DSN'):
+    sentry_sdk.init(integrations=[
+        HttpxIntegration(),
+        AsyncioIntegration(),
+    ],)
 
 
 app = FastAPI()
