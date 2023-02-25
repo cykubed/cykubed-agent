@@ -1,7 +1,8 @@
 cacheStorage: 100G
 namespace: cykube
-agentImage: "nickbrookck/cykube-agent:1.37"
+agentImage: "nickbrookck/cykube-agent:1.39"
 apiUrl: "https://app.cykube.net/api"
 agentUrl: "http://agent:5000"
 cacheUrl: "http://cache"
 token: "dummy"
+sentryDsn: "https://aa340c820e424f4bafddd9b378b18493@o4504740483432448.ingest.sentry.io/4504740484743168"

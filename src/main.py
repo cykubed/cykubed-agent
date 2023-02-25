@@ -4,6 +4,7 @@ import os
 import shutil
 
 import aiofiles.os
+import sentry_sdk
 from fastapi import FastAPI, UploadFile
 from fastapi_utils.tasks import repeat_every
 from loguru import logger
@@ -26,11 +27,20 @@ from common.utils import disable_hc_logging
 from jobs import create_runner_jobs, is_pod_running
 from logs import configure_logging
 
+if settings.SENTRY_DSN:
+    sentry_sdk.init(dns=settings.SENTRY_DSN)
+
+
 app = FastAPI()
 
 disable_hc_logging()
 
 logger.info("** Started server **")
+
+
+@app.get("/sentry-debug")
+async def trigger_error():
+    division_by_zero = 1 / 0
 
 
 @app.get('/hc')

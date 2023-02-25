@@ -18,6 +18,7 @@ metadata:
 type: Opaque
 data:
   API_TOKEN: {{ .Values.token | b64enc }}
+  SENTRY_DSN: {{ .Values.sentryDsn }}
 ---
 apiVersion: v1
 kind: ConfigMap
