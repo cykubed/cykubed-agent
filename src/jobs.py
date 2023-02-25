@@ -86,7 +86,7 @@ def create_job(jobtype: str, testrun: schemas.NewTestRun, build: schemas.Complet
     k8sclient = client.ApiClient()
     yamlobjects = yaml.safe_load(jobyaml)
     utils.create_from_yaml(k8sclient, yaml_objects=[yamlobjects], namespace=NAMESPACE)
-    logger.info(f"Created {jobtype} job")
+    logger.info(f"Created {jobtype} job", id=testrun.id)
 
 
 def create_build_job(testrun: schemas.NewTestRun):
