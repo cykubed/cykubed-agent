@@ -25,6 +25,11 @@ async def start_run(newrun: NewTestRun):
         jobs.delete_jobs_for_branch(newrun.id, newrun.branch)
         # and create a new one
         jobs.create_build_job(newrun)
+
+        if newrun.project.start_runners_first:
+            await sleep(10)
+            jobs.create_runner_jobs(newrun)
+
     else:
         logger.info(f"Now run cykuberunner with options 'build {newrun.id}'",
                     tr=newrun)

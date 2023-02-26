@@ -64,10 +64,7 @@ async def shutdown_event():
 @app.post('/upload')
 def upload_cache(file: UploadFile):
     logger.info(f"Uploading file {file.filename} to cache")
-    os.makedirs(settings.CYKUBE_CACHE_DIR, exist_ok=True)
     path = os.path.join(settings.CYKUBE_CACHE_DIR, file.filename)
-    if os.path.exists(path):
-        return {"message": "Exists"}
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "wb") as dest:
@@ -136,7 +133,8 @@ async def build_complete(pk: int, build: CompletedBuild):
                                                             build=build))
 
     if settings.K8:
-        create_runner_jobs(tr, build)
+        if not tr.project.start_runners_first:
+            create_runner_jobs(tr, build)
     else:
         logger.info(f'Start runner with "./main.py run {pk}', id=pk)
 

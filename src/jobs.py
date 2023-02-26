@@ -4,7 +4,7 @@ from kubernetes.client import ApiException
 from loguru import logger
 
 from common import schemas
-from common.k8common import NAMESPACE
+from common.k8common import NAMESPACE, get_core_api
 from common.schemas import NewTestRun
 from common.settings import settings
 
@@ -28,6 +28,16 @@ from common.settings import settings
 #
 # active_jobs: list[JobStatus] = []
 
+def delete_job(job, trid: int = None):
+    logger.info(f"Deleting existing job {job.metadata.name}", trid=trid)
+    client.BatchV1Api().delete_namespaced_job(job.metadata.name, NAMESPACE)
+    poditems = get_core_api().list_namespaced_pod(NAMESPACE,
+                                                  label_selector=f"job-name={job.metadata.name}").items
+    if poditems:
+        for pod in poditems:
+            logger.info(f'Deleting pod {pod.metadata.name}', id=trid)
+            get_core_api().delete_namespaced_pod(pod.metadata.name, NAMESPACE)
+
 
 def delete_jobs_for_branch(trid: int, branch: str):
     # delete any job already running
@@ -37,8 +47,7 @@ def delete_jobs_for_branch(trid: int, branch: str):
         logger.info(f'Found {len(jobs.items)} existing Jobs - deleting them', trid=trid)
         # delete it (there should just be one, but iterate anyway)
         for job in jobs.items:
-            logger.info(f"Deleting existing job {job.metadata.name}", trid=trid)
-            api.delete_namespaced_job(job.metadata.name, NAMESPACE)
+            delete_job(job, trid)
 
 
 def delete_jobs_for_project(project_id):
@@ -47,15 +56,15 @@ def delete_jobs_for_project(project_id):
     if jobs.items:
         logger.info(f'Found {len(jobs.items)} existing Jobs - deleting them')
         for job in jobs.items:
-            api.delete_namespaced_job(job.metadata.name, NAMESPACE)
+            delete_job(job)
 
 
 def delete_jobs(testrun_id: int):
+    logger.info(f"Deleting jobs for testrun {testrun_id}")
     api = client.BatchV1Api()
     jobs = api.list_namespaced_job(NAMESPACE, label_selector=f"testrun_id={testrun_id}")
     for job in jobs.items:
-        logger.info(f'Deleting job {job.metadata.name}', id=testrun_id)
-        api.delete_namespaced_job(job.metadata.name, NAMESPACE)
+        delete_job(job, testrun_id)
 
 
 def create_job(jobtype: str, testrun: schemas.NewTestRun, build: schemas.CompletedBuild = None):
@@ -75,11 +84,14 @@ def create_job(jobtype: str, testrun: schemas.NewTestRun, build: schemas.Complet
                             memory_limit=testrun.project.build_memory))
     else:
         template = testrun.project.runner_template
+        parallelism = testrun.project.parallelism
+        if build:
+            parallelism = min(len(build.specs), parallelism)
         context.update(dict(cpu_request=testrun.project.runner_cpu,
                             cpu_limit=testrun.project.runner_cpu,
                             memory_request=testrun.project.runner_memory,
                             memory_limit=testrun.project.runner_memory,
-                            parallelism=min(len(build.specs), testrun.project.parallelism)))
+                            parallelism=parallelism))
 
     jobyaml = template.format(**context)
 
@@ -93,7 +105,7 @@ def create_build_job(testrun: schemas.NewTestRun):
     create_job('builder', testrun)
 
 
-def create_runner_jobs(testrun: NewTestRun, build: schemas.CompletedBuild):
+def create_runner_jobs(testrun: NewTestRun, build: schemas.CompletedBuild = None):
     create_job('runner', testrun, build)
 #
 # @lru_cache(maxsize=1000)
