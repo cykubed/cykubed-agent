@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: cykube-cache
+  name: cykube-agent-cache
   namespace: {{ .Release.Namespace }}
 spec:
   accessModes:
@@ -59,7 +59,7 @@ data:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: cykube-server
+  name: cykube-agent
   namespace: {{ .Release.Namespace }}
 spec:
   replicas: 1
@@ -67,12 +67,13 @@ spec:
     type: Recreate
   selector:
     matchLabels:
-      app: cykube-server
+      app: cykube-agent
   template:
     metadata:
       labels:
-        app: cykube-server
+        app: cykube-agent
     spec:
+      serviceAccountName: cykube
       containers:
         - name: server
           image: "{{ .Values.agentImage }}"
@@ -91,12 +92,12 @@ spec:
                 name: cykube-secrets
           ports:
             - containerPort: 5000
-              name: cykube-server
+              name: cykube-agent
               protocol: TCP
           readinessProbe:
             httpGet:
               path: /hc
-              port: cykube-server
+              port: cykube-agent
           volumeMounts:
             - name: cykube-cache
               mountPath: /var/lib/cykubecache
@@ -123,7 +124,7 @@ spec:
       volumes:
         - name: cykube-cache
           persistentVolumeClaim:
-            claimName: cykube-cache
+            claimName: cykube-agent-cache
         - name: nginx-conf
           configMap:
             name: nginx-conf
@@ -137,9 +138,9 @@ spec:
   ports:
   - port: 5000
     protocol: TCP
-    targetPort: cykube-server
+    targetPort: cykube-agent
   selector:
-    app: cykube-server
+    app: cykube-agent
 ---
 apiVersion: v1
 kind: Service
@@ -152,4 +153,4 @@ spec:
     protocol: TCP
     targetPort: nginx-port
   selector:
-    app: cykube-server
+    app: cykube-agent
