@@ -23,12 +23,12 @@ import ws
 from appstate import shutdown
 from common import k8common
 from common.enums import TestRunStatus, AgentEventType
-from common.logs import configure_logging
 from common.schemas import CompletedBuild, AgentLogMessage, AgentCompletedBuildMessage, AgentSpecCompleted, SpecResult, \
     AgentStatusChanged, NewTestRun
 from common.settings import settings
 from common.utils import disable_hc_logging
 from jobs import create_runner_jobs, is_pod_running
+from logs import configure_logging
 
 if os.environ.get('SENTRY_DSN'):
     sentry_sdk.init(integrations=[
