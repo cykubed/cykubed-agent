@@ -103,7 +103,9 @@ async def connect():
             protocol = 'wss' if settings.MAIN_API_URL.startswith('https') else 'ws'
             url = f'{protocol}://{domain}/agent/ws'
             async with websockets.connect(url,
-                                          extra_headers={'Authorization': f'Bearer {settings.API_TOKEN}'}) as ws:
+                                          extra_headers={
+                                              'AgentName': settings.AGENT_NAME,
+                                              'Authorization': f'Bearer {settings.API_TOKEN}'}) as ws:
                 global mainsocket
                 mainsocket = ws
                 logger.info("Connected")
