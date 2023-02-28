@@ -21,6 +21,10 @@ steps:
    entrypoint: 'bash'
    args: ['-c', 'docker push nickbrookck/cykube-agent:$SHORT_SHA']
 
+  - name: gcr.io/cloud-builders/curl
+    id: Notify
+    args: ['-X', 'POST', '-H', 'Content-type: application/json', '--data', '{"text":"Cykube Agent $SHORT_SHA built "}', 'https://hooks.slack.com/services/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']
+
 availableSecrets:
   secretManager:
     - versionName: projects/1090211518452/secrets/docker-hub-password/versions/1
