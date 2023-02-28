@@ -23,6 +23,7 @@ steps:
    args: ['-c', 'docker push nickbrookck/cykube-agent:$SHORT_SHA']
    secretEnv: ['USERNAME']
 
+
 availableSecrets:
   secretManager:
     - versionName: projects/1090211518452/secrets/docker-hub-password/versions/1
