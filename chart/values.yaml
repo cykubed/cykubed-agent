@@ -1,7 +1,7 @@
 cacheStorage: 10G
 namespace: cykube
 agentName: "default"
-agentImage: "nickbrookck/cykube-agent:1.42"
+agentImage: "nickbrookck/cykube-agent:1.46"
 apiUrl: "https://app.cykube.net/api"
 agentUrl: "http://agent:5000"
 cacheUrl: "http://cache"
