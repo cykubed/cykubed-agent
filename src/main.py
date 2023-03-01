@@ -23,8 +23,8 @@ import ws
 from appstate import shutdown
 from common import k8common
 from common.enums import TestRunStatus, AgentEventType
-from common.schemas import CompletedBuild, AgentLogMessage, AgentCompletedBuildMessage, AgentSpecCompleted, SpecResult, \
-    AgentStatusChanged, NewTestRun
+from common.schemas import CompletedBuild, AgentLogMessage, AgentCompletedBuildMessage, AgentSpecCompleted, \
+    AgentStatusChanged, NewTestRun, CompletedSpecFile, AgentSpecStarted
 from common.settings import settings
 from common.utils import disable_hc_logging
 from jobs import create_runner_jobs
@@ -105,6 +105,12 @@ async def get_next_spec(pk: int, response: Response, name: str = None) -> str:
     if not spec:
         response.status_code = 204
         return
+
+    messages.queue.add_agent_msg(AgentSpecStarted(testrun_id=pk,
+                                                  type=AgentEventType.spec_started,
+                                                  started=datetime.datetime.utcnow(),
+                                                  pod_name=name,
+                                                  file=spec))
     return spec
 
 
@@ -117,12 +123,15 @@ async def status_changed(pk: int, status: TestRunStatus):
 
 
 @app.post('/testrun/{pk}/spec-completed')
-async def spec_completed(pk: int, result: SpecResult):
+async def spec_completed(pk: int, item: CompletedSpecFile):
     # for now we assume file uploads go straight to cykubemain
-    await mongo.spec_completed(pk, result.file)
+    await mongo.spec_completed(pk, item.spec.file)
+    item.spec.finished = datetime.datetime.utcnow()
+    item.spec.duration = (item.spec.finished - item.spec.started).seconds
     messages.queue.add_agent_msg(AgentSpecCompleted(testrun_id=pk,
                                                     type=AgentEventType.spec_completed,
-                                                    result=result))
+                                                    spec=item.spec,
+                                                    result=item.result))
 
 
 @app.post('/testrun/{pk}/build-complete')
