@@ -125,13 +125,8 @@ async def status_changed(pk: int, status: TestRunStatus):
 @app.post('/testrun/{pk}/spec-completed')
 async def spec_completed(pk: int, item: CompletedSpecFile):
     # for now we assume file uploads go straight to cykubemain
-    await mongo.spec_completed(pk, item.spec.file)
-    item.spec.finished = datetime.datetime.utcnow()
-    item.spec.duration = (item.spec.finished - item.spec.started).seconds
-    messages.queue.add_agent_msg(AgentSpecCompleted(testrun_id=pk,
-                                                    type=AgentEventType.spec_completed,
-                                                    spec=item.spec,
-                                                    result=item.result))
+    await mongo.spec_completed(pk, item.file)
+    messages.queue.add_agent_msg(AgentSpecCompleted(type=AgentEventType.spec_completed, testrun_id=pk, spec=item))
 
 
 @app.post('/testrun/{pk}/build-complete')
