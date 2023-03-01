@@ -27,7 +27,7 @@ from common.schemas import CompletedBuild, AgentLogMessage, AgentCompletedBuildM
     AgentStatusChanged, NewTestRun
 from common.settings import settings
 from common.utils import disable_hc_logging
-from jobs import create_runner_jobs, is_pod_running
+from jobs import create_runner_jobs
 from logs import configure_logging
 
 if os.environ.get('SENTRY_DSN'):
@@ -164,22 +164,22 @@ async def cleanup_cache():
             await aiofiles.os.remove(path)
 
 
-@app.on_event("startup")
-@repeat_every(seconds=120)
-async def cleanup_testruns():
-    # check for specs that are marked as running but have no pod
-    if settings.K8:
-        loop = asyncio.get_running_loop()
-        for doc in await mongo.get_active_specfile_docs():
-            podname = doc['pod_name']
-            is_running = await loop.run_in_executor(None, is_pod_running, podname)
-            if not is_running:
-                tr = await mongo.get_testrun(doc['trid'])
-                if tr and tr['status'] == 'running':
-                    file = doc['file']
-                    # let another Job take this - this handles crashes and Spot Jobs
-                    logger.info(f'Cannot find a running pod for {podname}: returning {file} to the pool')
-                    await mongo.reset_specfile(doc)
+# @app.on_event("startup")
+# @repeat_every(seconds=120)
+# async def cleanup_testruns():
+#     # check for specs that are marked as running but have no pod
+#     if settings.K8:
+#         loop = asyncio.get_running_loop()
+#         for doc in await mongo.get_active_specfile_docs():
+#             podname = doc['pod_name']
+#             is_running = await loop.run_in_executor(None, is_pod_running, podname)
+#             if not is_running:
+#                 tr = await mongo.get_testrun(doc['trid'])
+#                 if tr and tr['status'] == 'running':
+#                     file = doc['file']
+#                     # let another Job take this - this handles crashes and Spot Jobs
+#                     logger.info(f'Cannot find a running pod for {podname}: returning {file} to the pool')
+#                     await mongo.reset_specfile(doc)
 
     # # now check for builds that have gone on for too long
     # for tr in await mongo.get_testruns_with_status(TestRunStatus.building):
