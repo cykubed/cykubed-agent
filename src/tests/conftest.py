@@ -28,6 +28,8 @@ async def project() -> Project:
     return Project(id=10,
                    name='project',
                    default_branch='master',
+                   agent_id=1,
+                   start_runners_first=False,
                    platform=PlatformEnum.GITHUB,
                    url='git@github.org/dummy.git',
                    organisation=org)

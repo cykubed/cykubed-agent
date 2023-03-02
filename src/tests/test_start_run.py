@@ -1,9 +1,11 @@
+import datetime
 import os
 
 from starlette.testclient import TestClient
 
-from common.enums import TestRunStatus
-from common.schemas import NewTestRun, CompletedBuild, SpecResult, TestResult
+from common.enums import TestRunStatus, AgentEventType
+from common.schemas import NewTestRun, CompletedBuild, SpecResult, TestResult, CompletedSpecFile, AgentSpecStarted, \
+    AgentSpecCompleted
 from common.settings import settings
 from main import app
 from mongo import runs_coll, specfile_coll, new_run, set_build_details
@@ -97,24 +99,42 @@ async def test_spec_completed(mocker, testrun: NewTestRun):
                                                        specs=['cypress/e2e/stuff/test1.spec.ts',
                                                               'cypress/e2e/stuff/test2.spec.ts'],
                                                        cache_hash='deadbeef0101'))
+    dt = datetime.datetime(2023, 3, 2, 10, 16, 0, 0, tzinfo=datetime.timezone.utc)
+    mocker.patch('main.utcnow', return_value=dt)
     resp = client.get('/testrun/20/next', params={'name': 'cykube-run-20'})
     assert resp.status_code == 200
     file = resp.text
     assert file == 'cypress/e2e/stuff/test1.spec.ts'
-    result = SpecResult(file=file,
-                        tests=[TestResult(title="Title",
-                                          context="Context",
-                                          status=TestRunStatus.passed)])
+    # this will send a AgentSpecStarted msg
+    add_agent_msg.assert_called_once_with(AgentSpecStarted(file=file,
+                                                           testrun_id=20,
+                                                           type=AgentEventType.spec_started,
+                                                           started=dt,
+                                                           pod_name='cykube-run-20'))
+    add_agent_msg.reset_mock()
+
+    dt2 = dt + datetime.timedelta(minutes=5)
+    result = CompletedSpecFile(
+        file=file,
+        finished=dt2,
+        result=SpecResult(tests=[TestResult(title="Title",
+                                            context="Context",
+                                            status=TestRunStatus.passed)]))
+
     # complete the spec - this will remove it
-    resp = client.post('/testrun/20/spec-completed', json=result.dict())
+    resp = client.post('/testrun/20/spec-completed', content=result.json())
     assert resp.status_code == 200
     spec = await specfile_coll().find_one({'trid': testrun.id, 'file': file})
     assert spec is None
-    add_agent_msg.assert_called_once()
+
+    add_agent_msg.assert_called_once_with(AgentSpecCompleted(
+        testrun_id=20,
+        type=AgentEventType.spec_completed,
+        spec=result))
 
     # complete the other one - this will remove the
     result.file = 'cypress/e2e/stuff/test2.spec.ts'
-    resp = client.post('/testrun/20/spec-completed', json=result.dict())
+    resp = client.post('/testrun/20/spec-completed', content=result.json())
     assert resp.status_code == 200
     spec = await specfile_coll().find_one({'trid': testrun.id, 'file': result.file})
     assert spec is None

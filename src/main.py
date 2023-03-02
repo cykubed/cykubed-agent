@@ -1,7 +1,7 @@
 import asyncio
-import datetime
 import os
 import shutil
+from datetime import datetime
 
 import aiofiles.os
 import sentry_sdk
@@ -26,7 +26,7 @@ from common.enums import TestRunStatus, AgentEventType
 from common.schemas import CompletedBuild, AgentLogMessage, AgentCompletedBuildMessage, AgentSpecCompleted, \
     AgentStatusChanged, NewTestRun, CompletedSpecFile, AgentSpecStarted
 from common.settings import settings
-from common.utils import disable_hc_logging
+from common.utils import disable_hc_logging, utcnow
 from jobs import create_runner_jobs
 from logs import configure_logging
 
@@ -108,7 +108,7 @@ async def get_next_spec(pk: int, response: Response, name: str = None) -> str:
 
     messages.queue.add_agent_msg(AgentSpecStarted(testrun_id=pk,
                                                   type=AgentEventType.spec_started,
-                                                  started=datetime.datetime.utcnow(),
+                                                  started=utcnow(),
                                                   pod_name=name,
                                                   file=spec))
     return spec
@@ -159,11 +159,11 @@ async def cleanup_cache():
         # and remove them from the local mongo: it's only need to retain state while a testrun is active
         await mongo.remove_testruns(trids)
     # finally just remove any files (i.e dist caches) that haven't been read in a while
-    today = datetime.datetime.utcnow()
+    today = utcnow()
     for name in await aiofiles.os.listdir(settings.CYKUBE_CACHE_DIR):
         path = os.path.join(settings.CYKUBE_CACHE_DIR, name)
         st = await aiofiles.os.stat(path)
-        last_read_estimate = datetime.datetime.fromtimestamp(st.st_atime)
+        last_read_estimate = datetime.fromtimestamp(st.st_atime)
         if (today - last_read_estimate).days > settings.DIST_CACHE_STATENESS_WINDOW_DAYS:
             await aiofiles.os.remove(path)
 
