@@ -24,7 +24,7 @@ from appstate import shutdown
 from common import k8common
 from common.enums import TestRunStatus, AgentEventType
 from common.schemas import CompletedBuild, AgentLogMessage, AgentCompletedBuildMessage, AgentSpecCompleted, \
-    AgentStatusChanged, NewTestRun, CompletedSpecFile, AgentSpecStarted
+    AgentStatusChanged, NewTestRun, CompletedSpecFile, AgentSpecStarted, SpecTerminated, AgentSpecTerminated
 from common.settings import settings
 from common.utils import disable_hc_logging, utcnow
 from jobs import create_runner_jobs
@@ -120,6 +120,14 @@ async def status_changed(pk: int, status: TestRunStatus):
     messages.queue.add_agent_msg(AgentStatusChanged(testrun_id=pk,
                                                     type=AgentEventType.status,
                                                     status=status))
+
+
+@app.post('/testrun/{pk}/spec-terminated')
+async def spec_terminated(pk: int, item: SpecTerminated):
+    # for now we assume file uploads go straight to cykubemain
+    await mongo.spec_terminated(pk, item.file)
+    messages.queue.add_agent_msg(AgentSpecTerminated(type=AgentEventType.spec_terminated, testrun_id=pk,
+                                                     file=item.file))
 
 
 @app.post('/testrun/{pk}/spec-completed')

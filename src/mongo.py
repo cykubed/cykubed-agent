@@ -133,6 +133,16 @@ async def spec_completed(trid: int, file: str):
         await remove_testrun_artifacts(trid)
 
 
+async def spec_terminated(trid: int, file: str):
+    """
+    Make it available again
+    :param trid:
+    :param file:
+    :return:
+    """
+    await specfile_coll().update_one({'trid': trid, 'file': file}, {'$set': {'started': None}})
+
+
 async def remove_testrun_artifacts(trid: int):
     path = os.path.join(settings.CYKUBE_CACHE_DIR, f'{trid}.tar.lz4')
     if os.path.exists(path):
