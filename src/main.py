@@ -84,6 +84,15 @@ def post_log(msg: AgentLogMessage):
     messages.queue.add_agent_msg(msg)
 
 
+@app.post('/testrun/reset/{local_id}')
+async def reset_testrun(local_id: int):
+    """
+    For testing: reset the testrun from the archive
+    :param local_id: local ID
+    """
+    await mongo.reset_testrun(local_id)
+
+
 @app.get('/testrun/{pk}', response_model=NewTestRun)
 async def get_test_run(pk: int) -> NewTestRun:
     tr = await mongo.get_testrun(pk)

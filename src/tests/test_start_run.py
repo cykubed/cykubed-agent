@@ -8,7 +8,7 @@ from common.schemas import NewTestRun, CompletedBuild, SpecResult, TestResult, C
     AgentSpecCompleted
 from common.settings import settings
 from main import app
-from mongo import runs_coll, specfile_coll, new_run, set_build_details
+from mongo import runs_coll, specs_coll, new_run, set_build_details
 from ws import handle_message
 
 
@@ -51,7 +51,7 @@ async def test_build_completed(mocker, testrun: NewTestRun):
     assert resp.status_code == 200
 
     all_files = set()
-    for doc in await specfile_coll().find({'trid': testrun.id}).to_list():
+    for doc in await specs_coll().find({'trid': testrun.id}).to_list():
         all_files.add(doc['file'])
     assert all_files == {'cypress/e2e/fish/test1.spec.ts', 'cypress/e2e/fowl/test2.spec.ts'}
 
@@ -75,7 +75,7 @@ async def test_get_specs(testrun: NewTestRun):
     resp = client.get('/testrun/20/next', params={'name': 'cykube-run-20'})
     assert resp.status_code == 200
     assert resp.text == 'cypress/e2e/stuff/test1.spec.ts'
-    f = await specfile_coll().find_one({'file': 'cypress/e2e/stuff/test1.spec.ts'})
+    f = await specs_coll().find_one({'file': 'cypress/e2e/stuff/test1.spec.ts'})
     assert f['started'] is not None
 
     resp = client.get('/testrun/20/next', params={'name': 'cykube-run-20'})
@@ -124,7 +124,7 @@ async def test_spec_completed(mocker, testrun: NewTestRun):
     # complete the spec - this will remove it
     resp = client.post('/testrun/20/spec-completed', content=result.json())
     assert resp.status_code == 200
-    spec = await specfile_coll().find_one({'trid': testrun.id, 'file': file})
+    spec = await specs_coll().find_one({'trid': testrun.id, 'file': file})
     assert spec is None
 
     add_agent_msg.assert_called_once_with(AgentSpecCompleted(
@@ -136,7 +136,7 @@ async def test_spec_completed(mocker, testrun: NewTestRun):
     result.file = 'cypress/e2e/stuff/test2.spec.ts'
     resp = client.post('/testrun/20/spec-completed', content=result.json())
     assert resp.status_code == 200
-    spec = await specfile_coll().find_one({'trid': testrun.id, 'file': result.file})
+    spec = await specs_coll().find_one({'trid': testrun.id, 'file': result.file})
     assert spec is None
     assert await runs_coll().find_one({'id': testrun.id}) is None
     # the testrun dist will have been removed
