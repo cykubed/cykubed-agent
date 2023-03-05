@@ -107,15 +107,6 @@ def create_build_job(testrun: schemas.NewTestRun):
 
 def create_runner_jobs(testrun: NewTestRun, build: schemas.CompletedBuild = None):
     create_job('runner', testrun, build)
-#
-# @lru_cache(maxsize=1000)
-# def post_job_status(project_id: int, local_id: int, name: str, status: str, message: str = None):
-#     r = httpx.post(f'{settings.MAIN_API_URL}/agent/testrun/{project_id}/{local_id}/job/status',
-#                    json=TestRunJobStatus(name=name,
-#                                          status=status,
-#                                          message=message).dict(), headers=get_headers())
-#     if r.status_code != 200:
-#         logger.error(f"Failed to update cykube about job status: {r.status_code}: {r.text}")
 
 #
 # async def get_job_info(job_int: JobStatus):
