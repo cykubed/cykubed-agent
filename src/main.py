@@ -55,6 +55,7 @@ def health_check():
 
 @app.on_event("shutdown")
 async def shutdown_event():
+    logger.error("Received shutdown event")
     shutdown()
     if ws.mainsocket:
         await ws.mainsocket.close()
