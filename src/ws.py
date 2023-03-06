@@ -65,7 +65,7 @@ async def handle_message(data):
         testrun_id = payload['testrun_id']
         if settings.K8:
             jobs.delete_jobs(testrun_id)
-            await mongo.delete_testrun(testrun_id)
+            await mongo.cancel_testrun(testrun_id)
 
 
 async def consumer_handler(websocket):

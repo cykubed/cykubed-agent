@@ -1,5 +1,4 @@
-import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import cache
 
 import aiofiles
@@ -7,9 +6,11 @@ import pymongo
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import ReturnDocument
 
+from cache import get_app_distro_filename
 from common.enums import INACTIVE_STATES, TestRunStatus
-from common.schemas import NewTestRun, CompletedBuild
+from common.schemas import NewTestRun, CompletedBuild, CompletedSpecFile
 from common.settings import settings
+from common.utils import utcnow
 
 
 @cache
@@ -31,18 +32,8 @@ def runs_coll():
 
 
 @cache
-def archive_runs_coll():
-    return db().archive_runs
-
-
-@cache
 def specs_coll():
     return db().spec
-
-
-@cache
-def archive_specs_coll():
-    return db().archive_specs
 
 
 async def init():
@@ -52,10 +43,8 @@ async def init():
 
 async def new_run(tr: NewTestRun):
     trdict = tr.dict()
-    trdict['started'] = datetime.utcnow()
+    trdict['started'] = utcnow()
     await runs_coll().insert_one(trdict)
-    if settings.ARCHIVE:
-        await archive_runs_coll().insert_one(trdict)
 
 
 async def set_status(trid: int, status: TestRunStatus):
@@ -68,49 +57,47 @@ async def set_status(trid: int, status: TestRunStatus):
 
 
 async def set_build_details(testrun_id: int, details: CompletedBuild) -> NewTestRun:
-    await specs_coll().insert_many([{'trid': testrun_id, 'file': f, 'started': None, 'finished': None} for f in details.specs])
+    await specs_coll().insert_many([{'trid': testrun_id, 'file': f, 'started': None, 'finished': None}
+                                    for f in details.specs])
     tr = await runs_coll().find_one_and_update({'id': testrun_id}, {'$set': {'status': 'running',
-                                                                        'cache_key': details.cache_hash}},
+                                                                             'sha': details.sha,
+                                                                             'cache_key': details.cache_hash}},
                                                return_document=ReturnDocument.AFTER)
-    if settings.ARCHIVE:
-        await archive_specs_coll().insert_many(
-            [{'trid': testrun_id, 'file': f, 'started': None, 'finished': None} for f in details.specs])
-        await archive_runs_coll().find_one_and_update({'id': testrun_id}, {'$set': {'status': 'running',
-                                                                   'cache_key': details.cache_hash}})
-
     return NewTestRun.parse_obj(tr)
 
 
-async def delete_testrun(trid: int):
-    await specs_coll().delete_one({'trid': trid})
-    await runs_coll().delete_one({'id': trid})
-    await remove_testrun_artifacts(trid)
+async def cancel_testrun(trid: int):
+    await specs_coll().delete_many({'trid': trid})
+    await runs_coll().update_one({'id': trid}, {'$set': {'status': 'cancelled'}})
 
 
 async def delete_project(project_id: int):
-    trids = []
-    async for doc in runs_coll().find({'project.id': project_id}, ['id']):
-        trids.append(doc['id'])
-    await specs_coll().delete_one({'trid': {'$in': trids}})
-    for id in trids:
-        await remove_testrun_artifacts(id)
+    trs = []
+    async for doc in runs_coll().find({'project.id': project_id}):
+        trs.append(doc)
+    await specs_coll().delete_one({'trid': {'$in': [x['id'] for x in trs]}})
+    for tr in trs:
+        path = get_app_distro_filename(tr)
+        if await aiofiles.os.path.exists(path):
+            await aiofiles.os.remove(path)
+        await runs_coll().delete_one({'_id': tr['_id']})
 
 
 async def get_testrun(testrun_id: int):
     return await runs_coll().find_one({'id': testrun_id})
 
 
-async def get_inactive_testrun_ids():
-    trids = []
-    async for doc in runs_coll().find({'status': {'$in': INACTIVE_STATES}}, ['id']):
-        trids.append(doc['id'])
-
-    return trids
+async def get_stale_testruns():
+    testruns = []
+    dt = utcnow() - timedelta(seconds=settings.APP_DISTRIBUTION_CACHE_TTL)
+    async for doc in runs_coll().find({'finished': {'$ne': None}, 'started': {'$lt': dt}}):
+        testruns.append(doc)
+    return testruns
 
 
 async def remove_testruns(ids):
     await specs_coll().delete_many({'trid': {'$in': ids}})
-    await runs_coll().delete_many({id: {'$in': ids}})
+    await runs_coll().delete_many({'id': {'$in': ids}})
 
 
 async def get_active_specfile_docs():
@@ -138,17 +125,21 @@ async def assign_next_spec(testrun_id: int, pod_name: str = None) -> str | None:
         return s['file']
 
 
-async def spec_completed(trid: int, file: str):
+async def spec_completed(trid: int, item: CompletedSpecFile):
     """
-    Remove the spec
+    Remove the spec and update the test run
     :param trid:
-    :param file:
+    :param item:
     :return:
     """
-    await specs_coll().delete_one({'trid': trid, 'file': file})
+    await specs_coll().delete_one({'trid': trid, 'file': item.file})
     cnt = await specs_coll().count_documents({'trid': trid})
-    if not cnt and not settings.ARCHIVE:
-        await remove_testrun_artifacts(trid)
+    failures = len([t for t in item.result.tests if t.error])
+    await runs_coll().update_one({'id': trid}, {'$inc': {'failures': failures}})
+    if not cnt:
+        tr = await runs_coll().find_one({'id': trid}, ['failures'])
+        status = 'passed' if not tr.get('failures') else 'failed'
+        await runs_coll().update_one({'id': trid}, {'$set': {'finished': utcnow(), 'status': status}})
 
 
 async def spec_terminated(trid: int, file: str):
@@ -159,25 +150,5 @@ async def spec_terminated(trid: int, file: str):
     :return:
     """
     await specs_coll().update_one({'trid': trid, 'file': file}, {'$set': {'started': None}})
+    await specs_coll().update_one({'trid': trid, 'file': file}, {'$set': {'started': None}})
 
-
-async def remove_testrun_artifacts(trid: int):
-    path = os.path.join(settings.CYKUBE_CACHE_DIR, f'{trid}.tar.lz4')
-    if os.path.exists(path):
-        await aiofiles.os.remove(path)
-    await runs_coll().delete_one({'id': trid})
-
-
-async def reset_specfile(specdoc):
-    await specs_coll().find_one_and_update({'_id': specdoc['_id']}, {'$set': {'started': None}})
-
-
-async def reset_testrun(local_id):
-    tr = await archive_runs_coll().find_one({'local_id': local_id})
-    pk = tr['id']
-    await runs_coll().delete_one({'id': pk})
-    await runs_coll().insert_one(tr)
-
-    specs = await archive_specs_coll().find({'trid': pk}).to_list(1000)
-    await specs_coll().delete_many({'trid': pk})
-    await specs_coll().insert_many(specs)

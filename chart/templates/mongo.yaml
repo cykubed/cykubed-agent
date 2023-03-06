@@ -42,6 +42,7 @@ spec:
       labels:
         app: cykube-agent-mongo
     spec:
+      priorityClassName: cykube-high-priority
       terminationGracePeriodSeconds: 10
       containers:
         - name: cykube-agent-mongo

@@ -56,6 +56,7 @@ data:
         }
       }
     }
+
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -74,6 +75,7 @@ spec:
       labels:
         app: cykube-agent
     spec:
+      priorityClassName: cykube-high-priority
       serviceAccountName: cykube
       containers:
         - name: server

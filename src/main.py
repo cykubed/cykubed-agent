@@ -1,9 +1,7 @@
 import asyncio
 import os
 import shutil
-from datetime import datetime
 
-import aiofiles.os
 import sentry_sdk
 from fastapi import FastAPI, UploadFile
 from fastapi_exceptions.exceptions import NotFound
@@ -21,6 +19,7 @@ import messages
 import mongo
 import ws
 from appstate import shutdown
+from cache import cleanup
 from common import k8common
 from common.enums import TestRunStatus, AgentEventType
 from common.schemas import CompletedBuild, AgentLogMessage, AgentCompletedBuildMessage, AgentSpecCompleted, \
@@ -84,15 +83,6 @@ def post_log(msg: AgentLogMessage):
     messages.queue.add_agent_msg(msg)
 
 
-@app.post('/testrun/reset/{local_id}')
-async def reset_testrun(local_id: int):
-    """
-    For testing: reset the testrun from the archive
-    :param local_id: local ID
-    """
-    await mongo.reset_testrun(local_id)
-
-
 @app.get('/testrun/{pk}', response_model=NewTestRun)
 async def get_test_run(pk: int) -> NewTestRun:
     tr = await mongo.get_testrun(pk)
@@ -142,7 +132,7 @@ async def spec_terminated(pk: int, item: SpecTerminated):
 @app.post('/testrun/{pk}/spec-completed')
 async def spec_completed(pk: int, item: CompletedSpecFile):
     # for now we assume file uploads go straight to cykubemain
-    await mongo.spec_completed(pk, item.file)
+    await mongo.spec_completed(pk, item)
     messages.queue.add_agent_msg(AgentSpecCompleted(type=AgentEventType.spec_completed, testrun_id=pk, spec=item))
 
 
@@ -165,24 +155,7 @@ async def build_complete(pk: int, build: CompletedBuild):
 @app.on_event("startup")
 @repeat_every(seconds=300)
 async def cleanup_cache():
-    # remove inactive testruns
-    trids = await mongo.get_inactive_testrun_ids()
-    if trids:
-        # delete the distro
-        for name in await aiofiles.os.listdir(settings.CYKUBE_CACHE_DIR):
-            trid = int(name.split('.')[0])
-            if trid in trids:
-                await aiofiles.os.remove(os.path.join(settings.CYKUBE_CACHE_DIR, name))
-        # and remove them from the local mongo: it's only need to retain state while a testrun is active
-        await mongo.remove_testruns(trids)
-    # finally just remove any files (i.e dist caches) that haven't been read in a while
-    today = utcnow()
-    for name in await aiofiles.os.listdir(settings.CYKUBE_CACHE_DIR):
-        path = os.path.join(settings.CYKUBE_CACHE_DIR, name)
-        st = await aiofiles.os.stat(path)
-        last_read_estimate = datetime.fromtimestamp(st.st_atime)
-        if (today - last_read_estimate).days > settings.DIST_CACHE_STATENESS_WINDOW_DAYS:
-            await aiofiles.os.remove(path)
+    await cleanup()
 
 
 # @app.on_event("startup")
@@ -206,14 +179,14 @@ async def cleanup_cache():
     # for tr in await mongo.get_testruns_with_status(TestRunStatus.building):
     #     duration = (datetime.datetime.utcnow() - tr['started']).seconds
     #     if duration > tr['project']['build_deadline']:
-    #         await mongo.delete_testrun(tr['id'])
+    #         await mongo.cancel_testrun(tr['id'])
     #
     # # ditto for runners
     # try:
     #     for tr in await mongo.get_testruns_with_status(TestRunStatus.running):
     #         duration = (datetime.datetime.utcnow() - tr['started']).seconds
     #         if duration > tr['project']['runner_deadline']:
-    #             await mongo.delete_testrun(tr['id'])
+    #             await mongo.cancel_testrun(tr['id'])
     # except:
     #     logger.exception("Failed to cleanup testruns")
 
