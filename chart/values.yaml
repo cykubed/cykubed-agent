@@ -1,10 +1,10 @@
 cacheStorage: 10G
 namespace: cykube
 agentName: "default"
-agentImage: "nickbrookck/cykube-agent:1.46"
+tag: "9625ad1"
 apiUrl: "https://app.cykube.net/api"
-agentUrl: "http://agent:5000"
-cacheUrl: "http://cache"
+agentUrl: "http://cykube-agent:5000"
+cacheUrl: "http://cykube-cache"
 token: "dummy"
 sentryDsn: "https://aa340c820e424f4bafddd9b378b18493@o4504740483432448.ingest.sentry.io/4504740484743168"
 gcpServiceAccount: null

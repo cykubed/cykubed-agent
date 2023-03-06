@@ -13,7 +13,7 @@ spec:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: cykube-secrets
+  name: cykube-agent-secrets
   namespace: {{ .Release.Namespace }}
 type: Opaque
 data:
@@ -24,13 +24,14 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   namespace: {{ .Release.Namespace }}
-  name: cykube-configmap
+  name: cykube-agent-configmap
 data:
   CACHE_URL: {{ .Values.cacheUrl }}
   AGENT_URL: {{ .Values.agentUrl }}
   MAIN_API_URL: {{ .Values.apiUrl }}
-  MONGO_URL: "mongodb://mongo:27017"
+  MONGO_URL: "mongodb://cykube-agent-mongo:27017"
   AGENT_NAME: {{ .Values.agentName }}
+  NAMESPACE: {{ .Values.namespace }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -76,7 +77,7 @@ spec:
       serviceAccountName: cykube
       containers:
         - name: server
-          image: "{{ .Values.agentImage }}"
+          image: "nickbrookck/cykube-agent:{{ .Values.tag }}"
           imagePullPolicy: IfNotPresent
           resources:
             requests:
@@ -87,9 +88,9 @@ spec:
               memory: 0.5G
           envFrom:
             - configMapRef:
-                name: cykube-configmap
+                name: cykube-agent-configmap
             - secretRef:
-                name: cykube-secrets
+                name: cykube-agent-secrets
           ports:
             - containerPort: 5000
               name: cykube-agent
@@ -132,7 +133,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: agent
+  name: cykube-agent
   namespace: {{ .Release.Namespace }}
 spec:
   ports:
@@ -145,7 +146,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: cache
+  name: cykube-cache
   namespace: {{ .Release.Namespace }}
 spec:
   ports:

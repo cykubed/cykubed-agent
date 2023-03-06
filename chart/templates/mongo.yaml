@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: mongo-pvc
+  name: cykube-agent-mongo-pvc
   namespace: cykube
 spec:
   accessModes:
@@ -14,37 +14,37 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: mongo
+  name: cykube-agent-mongo
   namespace: cykube
 spec:
   clusterIP: None
   ports:
   - port: 27017
   selector:
-    app: mongo
+    app: cykube-agent-mongo
 
 ---
 
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: mongo
+  name: cykube-agent-mongo
   namespace: cykube
 spec:
   selector:
     matchLabels:
-      app: mongo
+      app: cykube-agent-mongo
   replicas: 1
   strategy:
     type: Recreate
   template:
     metadata:
       labels:
-        app: mongo
+        app: cykube-agent-mongo
     spec:
       terminationGracePeriodSeconds: 10
       containers:
-        - name: mongo
+        - name: cykube-agent-mongo
           image: mongo:4.2.23
           resources:
             limits:
@@ -74,4 +74,4 @@ spec:
       volumes:
       - name: mongo-storage
         persistentVolumeClaim:
-          claimName: mongo-pvc
+          claimName: cykube-agent-mongo-pvc
