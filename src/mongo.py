@@ -1,10 +1,12 @@
+import asyncio
 from datetime import datetime, timedelta
 from functools import cache
 
 import aiofiles
 import pymongo
+from loguru import logger
 from motor.motor_asyncio import AsyncIOMotorClient
-from pymongo import ReturnDocument
+from pymongo import ReturnDocument, MongoClient
 
 from cache import get_app_distro_filename
 from common.enums import INACTIVE_STATES, TestRunStatus
@@ -18,7 +20,12 @@ def client():
     if settings.TEST:
         from mongomock_motor import AsyncMongoMockClient
         return AsyncMongoMockClient()
-    return AsyncIOMotorClient(settings.MONGO_URL)
+    if settings.MONGO_ROOT_PASSWORD:
+        # in-cluster
+        return AsyncIOMotorClient(host='cykube-mongodb-0.cykube-mongodb-headless',
+                                  username='root',
+                                  password=settings.MONGO_ROOT_PASSWORD)
+    return AsyncIOMotorClient()
 
 
 @cache
@@ -37,6 +44,19 @@ def specs_coll():
 
 
 async def init():
+    if settings.MONGO_ROOT_PASSWORD:
+        # we're running in a cluster: wait till we can see 3 nodes
+        cl = MongoClient(host='cykube-mongodb-0.cykube-mongodb-headless',
+                         username='root',
+                         password=settings.MONGO_ROOT_PASSWORD)
+        num_nodes = len(cl.nodes)
+        while num_nodes < 3:
+            logger.info(f"Only {num_nodes} available: waiting...")
+            await asyncio.sleep(10)
+            num_nodes = len(cl.nodes)
+
+        logger.info(f"Connected to MongoDB replicaset")
+
     await runs_coll().create_index([("id", pymongo.ASCENDING)])
     await specs_coll().create_index([("trid", pymongo.ASCENDING), ("started", pymongo.ASCENDING)])
 

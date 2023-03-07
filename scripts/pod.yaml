@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: testpod
+  namespace: cykube
+spec:
+  containers:
+    - name: shell
+      image: nickbrookck/cykube-shell:1.0
+
+

@@ -5,7 +5,17 @@ tag: "c024906"
 apiUrl: "https://app.cykube.net/api"
 agentUrl: "http://cykube-agent:5000"
 cacheUrl: "http://cykube-cache"
+mongodbPassword: "fishfish1234"
 token: "dummy"
 sentryDsn: "https://aa340c820e424f4bafddd9b378b18493@o4504740483432448.ingest.sentry.io/4504740484743168"
 gcpServiceAccount: null
 platform: null
+mongodb:
+  architecture: replicaset
+  namespaceOverride: cykube
+  image:
+    tag: 6.0.4-debian-11-r14
+  persistence:
+    size:
+      "10Gi"
+

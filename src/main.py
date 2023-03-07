@@ -196,7 +196,10 @@ async def init():
     """
     Run the websocket and server concurrently
     """
-    await mongo.init()
+    try:
+        await mongo.init()
+    except:
+        logger.exception("Failed to initialise MongoDB")
     config = Config(app, port=5000, host='0.0.0.0')
     config.setup_event_loop()
     server = Server(config=config)

@@ -1,16 +1,4 @@
 apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: cykube-agent-cache
-  namespace: {{ .Release.Namespace }}
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: {{ .Values.cacheStorage }}
----
-apiVersion: v1
 kind: Secret
 metadata:
   name: cykube-agent-secrets
@@ -29,33 +17,8 @@ data:
   CACHE_URL: {{ .Values.cacheUrl }}
   AGENT_URL: {{ .Values.agentUrl }}
   MAIN_API_URL: {{ .Values.apiUrl }}
-  MONGO_URL: "mongodb://cykube-agent-mongo:27017"
   AGENT_NAME: {{ .Values.agentName }}
   NAMESPACE: {{ .Values.namespace }}
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: nginx-conf
-  namespace: {{ .Release.Namespace }}
-data:
-  nginx.conf: |
-    worker_processes  1;
-    events {
-        worker_connections  1024;
-    }
-    http {
-      server {
-          access_log /var/log/nginx/access.log;
-          error_log /var/log/nginx/error.log;
-          listen       80;
-          server_name  localhost;
-          location / {
-            root   /var/lib/cykubecache;
-            client_max_body_size 200M;
-        }
-      }
-    }
 
 ---
 apiVersion: apps/v1
@@ -88,6 +51,12 @@ spec:
             limits:
               cpu: 250m
               memory: 0.5G
+          env:
+            - name: MONGO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "cykube-mongodb"
+                  key: "mongodb-root-password"
           envFrom:
             - configMapRef:
                 name: cykube-agent-configmap
@@ -97,40 +66,7 @@ spec:
             - containerPort: 5000
               name: cykube-agent
               protocol: TCP
-          readinessProbe:
-            httpGet:
-              path: /hc
-              port: cykube-agent
-          volumeMounts:
-            - name: cykube-cache
-              mountPath: /var/lib/cykubecache
 
-        - name: nginx
-          image: nginx
-          resources:
-            requests:
-              cpu: 250m
-              memory: 0.5G
-            limits:
-              cpu: 250m
-              memory: 0.5G
-          ports:
-          - containerPort: 80
-            name: nginx-port
-          volumeMounts:
-          - name: nginx-conf
-            mountPath: /etc/nginx/nginx.conf
-            subPath: nginx.conf
-          - name: cykube-cache
-            mountPath: /var/lib/cykubecache
-
-      volumes:
-        - name: cykube-cache
-          persistentVolumeClaim:
-            claimName: cykube-agent-cache
-        - name: nginx-conf
-          configMap:
-            name: nginx-conf
 ---
 apiVersion: v1
 kind: Service
@@ -142,18 +78,5 @@ spec:
   - port: 5000
     protocol: TCP
     targetPort: cykube-agent
-  selector:
-    app: cykube-agent
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: cykube-cache
-  namespace: {{ .Release.Namespace }}
-spec:
-  ports:
-  - port: 80
-    protocol: TCP
-    targetPort: nginx-port
   selector:
     app: cykube-agent
