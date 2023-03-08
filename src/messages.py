@@ -55,7 +55,7 @@ class MessageQueue:
 
     def task_done(self):
         """
-        Called by the websocket client when the task has been sent
+        Called by the websocket async_client when the task has been sent
         :return:
         """
         self.queue.task_done()

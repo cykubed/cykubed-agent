@@ -21,7 +21,7 @@ async def init():
     Run the websocket and server concurrently
     """
     try:
-        await mongo.connect()
+        mongo.connect()
         await mongo.init()
     except:
         logger.exception("Failed to initialise MongoDB")

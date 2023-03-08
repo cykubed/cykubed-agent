@@ -6,7 +6,7 @@ from loguru import logger
 
 import messages
 from common.enums import PlatformEnum
-from common.mongo import client
+from common.mongo import async_client
 from common.schemas import Project, OrganisationSummary, NewTestRun
 from common.settings import settings
 
@@ -15,7 +15,7 @@ from common.settings import settings
 async def init():
     settings.TEST = True
     settings.CYKUBE_CACHE_DIR = tempfile.mkdtemp()
-    await client().drop_database(settings.MONGO_DATABASE)
+    await async_client().drop_database(settings.MONGO_DATABASE)
     logger.remove()
     await messages.queue.init()
     yield
