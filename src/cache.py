@@ -3,7 +3,7 @@ from datetime import datetime
 
 import aiofiles
 
-import mongo
+from common import mongo
 from common.settings import settings
 from common.utils import utcnow
 

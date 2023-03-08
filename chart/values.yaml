@@ -1,7 +1,6 @@
-cacheStorage: 10G
 namespace: cykube
 agentName: "default"
-tag: "c024906"
+tag: "ca76ca2"
 apiUrl: "https://app.cykube.net/api"
 agentUrl: "http://cykube-agent:5000"
 cacheUrl: "http://cykube-cache"

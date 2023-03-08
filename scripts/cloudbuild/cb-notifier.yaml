@@ -1,0 +1,18 @@
+apiVersion: cloud-build-notifiers/v1
+kind: SlackNotifier
+metadata:
+  name: cykube-agent-slack-notifier
+spec:
+  notification:
+    params:
+      buildStatus: $(build.status)
+      buildName: "Agent"
+    delivery:
+      webhookUrl:
+        secretRef: webhook-url
+    template:
+      type: golang
+      uri: gs://cykube-scripts/slack/cloudbuild-message.json
+  secrets:
+  - name: webhook-url
+    value: projects/1090211518452/secrets/slack-webhook/versions/latest

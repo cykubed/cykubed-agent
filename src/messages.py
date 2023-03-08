@@ -1,27 +1,11 @@
 import asyncio
 from asyncio import QueueFull
-from functools import lru_cache
 
-import httpx
 from loguru import logger
 
 from common import schemas
 from common.enums import TestRunStatus, AgentEventType
 from common.schemas import AgentStatusChanged, AppLogMessage
-from common.settings import settings
-from common.utils import get_headers
-
-
-def post_testrun_status(tr: schemas.NewTestRun, status: str):
-    update_status(tr.project.id, tr.local_id, status)
-
-
-@lru_cache(maxsize=10000)
-def update_status(project_id: int, local_id: int, status: str):
-    resp = httpx.put(f'{settings.MAIN_API_URL}/agent/testrun/{project_id}/{local_id}/status/{status}',
-                     headers=get_headers())
-    if resp.status_code != 200:
-        raise Exception(f"Failed to update status for run {local_id} on project {project_id}")
 
 
 class MessageQueue:

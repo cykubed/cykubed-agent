@@ -5,12 +5,12 @@ from starlette.testclient import TestClient
 
 from cache import get_app_distro_filename, cleanup
 from common.enums import TestRunStatus, AgentEventType
+from common.mongo import runs_coll, specs_coll, new_run, set_build_details, spec_completed
 from common.schemas import NewTestRun, CompletedBuild, SpecResult, TestResult, CompletedSpecFile, AgentSpecStarted, \
     AgentSpecCompleted
 from common.settings import settings
 from common.utils import utcnow
 from main import app
-from mongo import runs_coll, specs_coll, new_run, set_build_details, spec_completed
 from ws import handle_message
 
 

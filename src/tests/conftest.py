@@ -6,9 +6,9 @@ from loguru import logger
 
 import messages
 from common.enums import PlatformEnum
+from common.mongo import client
 from common.schemas import Project, OrganisationSummary, NewTestRun
 from common.settings import settings
-from mongo import client
 
 
 @pytest.fixture(autouse=True)

@@ -9,7 +9,7 @@ from websockets.exceptions import ConnectionClosedError, InvalidStatusCode, Conn
 
 import appstate
 import jobs
-import mongo
+from common import mongo
 from common.schemas import NewTestRun
 from common.settings import settings
 from messages import queue
