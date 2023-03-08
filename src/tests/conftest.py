@@ -5,7 +5,7 @@ import pytest
 from loguru import logger
 
 import messages
-from common.asyncmongo import async_client
+from asyncmongo import async_client
 from common.enums import PlatformEnum
 from common.schemas import Project, OrganisationSummary, NewTestRun
 from common.settings import settings

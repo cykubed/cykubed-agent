@@ -8,8 +8,8 @@ from loguru import logger
 from websockets.exceptions import ConnectionClosedError, InvalidStatusCode, ConnectionClosed
 
 import appstate
+import asyncmongo
 import jobs
-from common import asyncmongo
 from common.schemas import NewTestRun
 from common.settings import settings
 from messages import queue
