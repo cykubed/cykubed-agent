@@ -9,7 +9,7 @@ from websockets.exceptions import ConnectionClosedError, InvalidStatusCode, Conn
 
 import appstate
 import jobs
-from common import mongo
+from common import asyncmongo
 from common.schemas import NewTestRun
 from common.settings import settings
 from messages import queue
@@ -18,7 +18,7 @@ mainsocket = None
 
 
 async def start_run(newrun: NewTestRun):
-    await mongo.new_run(newrun)
+    await asyncmongo.new_run(newrun)
 
     if settings.K8:
         # stop existing jobs
@@ -39,7 +39,7 @@ async def delete_project(project_id: int):
     if settings.K8:
         jobs.delete_jobs_for_project(project_id)
 
-    await mongo.delete_project(project_id)
+    await asyncmongo.delete_project(project_id)
 
 
 async def handle_message(data):
@@ -65,7 +65,7 @@ async def handle_message(data):
         testrun_id = payload['testrun_id']
         if settings.K8:
             jobs.delete_jobs(testrun_id)
-            await mongo.cancel_testrun(testrun_id)
+            await asyncmongo.cancel_testrun(testrun_id)
 
 
 async def consumer_handler(websocket):
@@ -124,7 +124,7 @@ async def connect():
         except ConnectionRefusedError:
             await sleep(10)
         except OSError:
-            logger.warning("Cannot connect to cykube - sleep for 60 secs")
+            logger.warning("Cannot ensure_connection to cykube - sleep for 60 secs")
             await sleep(10)
         except InvalidStatusCode:
             await sleep(10)

@@ -6,7 +6,7 @@ from loguru import logger
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
 
 import ws
-from common import k8common, mongo
+from common import k8common, asyncmongo, mongo
 from common.settings import settings
 from logs import configure_logging
 
@@ -21,8 +21,8 @@ async def init():
     Run the websocket and server concurrently
     """
     try:
-        mongo.connect()
-        await mongo.init()
+        mongo.ensure_connection()
+        await asyncmongo.init()
     except:
         logger.exception("Failed to initialise MongoDB")
 

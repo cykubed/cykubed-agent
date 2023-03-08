@@ -4,8 +4,8 @@ import os
 from starlette.testclient import TestClient
 
 from cache import get_app_distro_filename, cleanup
+from common.asyncmongo import async_runs_coll, async_specs_coll, new_run, set_build_details, spec_completed
 from common.enums import TestRunStatus, AgentEventType
-from common.mongo import runs_coll, specs_coll, new_run, set_build_details, spec_completed
 from common.schemas import NewTestRun, CompletedBuild, SpecResult, TestResult, CompletedSpecFile, AgentSpecStarted, \
     AgentSpecCompleted
 from common.settings import settings
@@ -25,7 +25,7 @@ async def test_start_run(mocker, testrun: NewTestRun):
     create_build_job = mocker.patch('jobs.create_job')
     await handle_message(dict(command='start', payload=testrun.json()))
     # this will add an entry to the testrun collection
-    doc = await runs_coll().find_one({'id': 20})
+    doc = await async_runs_coll().find_one({'id': 20})
     assert doc['url'] == 'git@github.org/dummy.git'
     # and create the build Job
     deletejobs.assert_called_once()
@@ -39,7 +39,7 @@ async def test_build_completed(mocker, testrun: NewTestRun):
     create_job = mocker.patch('jobs.create_job')
     mocker.patch('main.messages')
     await handle_message(dict(command='start', payload=testrun.json()))
-    doc = await runs_coll().find_one({'id': testrun.id})
+    doc = await async_runs_coll().find_one({'id': testrun.id})
     assert doc.get('sha') is None
 
     create_build_job.assert_called_once()
@@ -53,7 +53,7 @@ async def test_build_completed(mocker, testrun: NewTestRun):
     assert resp.status_code == 200
 
     all_files = set()
-    for doc in await specs_coll().find({'trid': testrun.id}).to_list():
+    for doc in await async_specs_coll().find({'trid': testrun.id}).to_list():
         all_files.add(doc['file'])
     assert all_files == {'cypress/e2e/fish/test1.spec.ts', 'cypress/e2e/fowl/test2.spec.ts'}
 
@@ -77,7 +77,7 @@ async def test_get_specs(testrun: NewTestRun):
     resp = client.get('/testrun/20/next', params={'name': 'cykube-run-20'})
     assert resp.status_code == 200
     assert resp.text == 'cypress/e2e/stuff/test1.spec.ts'
-    f = await specs_coll().find_one({'file': 'cypress/e2e/stuff/test1.spec.ts'})
+    f = await async_specs_coll().find_one({'file': 'cypress/e2e/stuff/test1.spec.ts'})
     assert f['started'] is not None
 
     resp = client.get('/testrun/20/next', params={'name': 'cykube-run-20'})
@@ -126,7 +126,7 @@ async def test_spec_completed(mocker, testrun: NewTestRun):
     # complete the spec - this will remove it
     resp = client.post('/testrun/20/spec-completed', content=result.json())
     assert resp.status_code == 200
-    spec = await specs_coll().find_one({'trid': testrun.id, 'file': file})
+    spec = await async_specs_coll().find_one({'trid': testrun.id, 'file': file})
     assert spec is None
 
     add_agent_msg.assert_called_once_with(AgentSpecCompleted(
@@ -138,9 +138,9 @@ async def test_spec_completed(mocker, testrun: NewTestRun):
     result.file = 'cypress/e2e/stuff/test2.spec.ts'
     resp = client.post('/testrun/20/spec-completed', content=result.json())
     assert resp.status_code == 200
-    spec = await specs_coll().find_one({'trid': testrun.id, 'file': result.file})
+    spec = await async_specs_coll().find_one({'trid': testrun.id, 'file': result.file})
     assert spec is None
-    tr = await runs_coll().find_one({'id': testrun.id})
+    tr = await async_runs_coll().find_one({'id': testrun.id})
     assert tr['status'] == 'passed'
 
     # the testrun dist will still be there - it will be cleaned up later
@@ -153,7 +153,7 @@ async def test_spec_completed(mocker, testrun: NewTestRun):
 async def test_cache_cleanup(mocker, testrun: NewTestRun):
     trdict = testrun.dict()
     trdict['started'] = utcnow() - datetime.timedelta(seconds=settings.APP_DISTRIBUTION_CACHE_TTL + 10)
-    await runs_coll().insert_one(trdict)
+    await async_runs_coll().insert_one(trdict)
 
     await set_build_details(testrun.id, CompletedBuild(sha='deadbeef0101',
                                                        cache_hash='abcdef',
@@ -165,7 +165,7 @@ async def test_cache_cleanup(mocker, testrun: NewTestRun):
                                                                                context="Context",
                                                                                status=TestRunStatus.passed)])))
 
-    tr = await runs_coll().find_one({'id': testrun.id})
+    tr = await async_runs_coll().find_one({'id': testrun.id})
     assert tr['sha'] == 'deadbeef0101'
     assert tr['status'] == 'passed'
     dummydist = get_app_distro_filename(tr)
@@ -178,7 +178,7 @@ async def test_cache_cleanup(mocker, testrun: NewTestRun):
     assert not os.path.exists(dummydist)
 
     # and the state in the database
-    tr = await runs_coll().find_one({'id': testrun.id})
+    tr = await async_runs_coll().find_one({'id': testrun.id})
     assert tr is None
-    specs = await specs_coll().find({'trid': testrun.id}).to_list()
+    specs = await async_specs_coll().find({'trid': testrun.id}).to_list()
     assert specs == []
