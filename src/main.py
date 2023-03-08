@@ -6,12 +6,12 @@ import sentry_sdk
 from loguru import logger
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
 
-import asyncmongo
 import messages
 import ws
+from asyncmongo import specs_coll, messages_coll, runs_coll, init_indexes
 from common import k8common, mongo
 from common.enums import AgentEventType
-from common.schemas import AgentStatusChanged, AgentSpecCompleted
+from common.schemas import AgentEvent
 from common.settings import settings
 from logs import configure_logging
 
@@ -21,41 +21,37 @@ if os.environ.get('SENTRY_DSN'):
     ],)
 
 
-async def poll_testrun_status():
-    coll = asyncmongo.runs_coll()
-    async with coll.watch(pipeline=[{'$match': {'operationType': 'update',
-                                                'updateDescription.updatedFields.status': {'$ne': None}}}],
-                          full_document='updateLookup') as stream:
-        async for change in stream:
-            tr = change['fullDocument']
-            messages.queue.add_agent_msg(AgentStatusChanged(testrun_id=tr['id'],
-                                                            type=AgentEventType.status,
-                                                            status=tr['status']))
+async def check_for_completion(testrun_id: int):
+    # have we finished all specs?
+    cnt = await specs_coll().count_documents({'trid': testrun_id, 'finished': None})
+    if not cnt:
+        # yep - collate the number of failures
+        tr = await runs_coll().find_one({'id': testrun_id}, ['failures'])
+        status = 'passed' if not tr.get('failures') else 'failed'
+        await runs_coll().update_one({'id': testrun_id},
+                                     {'$set': {'finished': datetime.utcnow(), 'status': status}})
 
 
-async def poll_specs():
-    async with asyncmongo.specs_coll().watch(full_document='updateLookup') as stream:
-        async for change in stream:
-            optype = change['operationType']
-            if optype == 'update':
-                doc = change['fullDocument']['trid']
-                trid = doc['trid']
-                file = doc['file']
+async def poll_messages(max_messages=None):
+    """
+    Poll the message queue, forwarding them all to the websocket
+    :param max_messages: limit the number of messages sent (for unit testing)
+    """
+    sent = 0
+    while True:
+        msgdoc = await messages_coll().find_one_and_delete({}, projection={'_id': False})
+        if msgdoc:
+            msg = msgdoc['msg']
+            messages.queue.add_agent_msg(msg)
+            event = AgentEvent.parse_raw(msg)
+            if event.type == AgentEventType.spec_completed:
+                await check_for_completion(event.testrun_id)
 
-                finished = change['updateDescription']['updatedFields'].get('finished')
-                if finished:
-                    messages.queue.add_agent_msg(
-                        AgentSpecCompleted(type=AgentEventType.spec_completed,
-                                           testrun_id=trid,
-                                           file=file,
-                                           result=doc['result']))
-                    # have we finished all specs?
-                    cnt = await asyncmongo.specs_coll().count_documents({'trid': trid, 'finished': None})
-                    if not cnt:
-                        tr = await asyncmongo.runs_coll().find_one({'id': trid}, ['failures'])
-                        status = 'passed' if not tr.get('failures') else 'failed'
-                        await asyncmongo.runs_coll().update_one({'id': trid},
-                                               {'$set': {'finished': datetime.utcnow(), 'status': status}})
+            # this is just to make it easier to test
+            sent += 1
+            if max_messages and sent >= max_messages:
+                return
+        await asyncio.sleep(settings.MESSAGE_POLL_PERIOD)
 
 
 async def init():
@@ -64,13 +60,11 @@ async def init():
     """
     try:
         mongo.ensure_connection()
-        await asyncmongo.init()
+        await init_indexes()
     except:
         logger.exception("Failed to initialise MongoDB")
 
-    # I'll need to watch collections in mongo and act accordingly: this will replace the server
-    #
-    await asyncio.gather(ws.connect(), poll_testrun_status(), poll_specs())
+    await asyncio.gather(ws.connect(), poll_messages())
 
 
 if __name__ == "__main__":

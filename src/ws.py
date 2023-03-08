@@ -1,6 +1,5 @@
 import asyncio
 import json
-import sys
 from asyncio import sleep, exceptions
 
 import websockets
@@ -129,22 +128,3 @@ async def connect():
         except InvalidStatusCode:
             await sleep(10)
 
-
-async def test_logging():
-    i = 0
-    while appstate.is_running():
-        await asyncio.sleep(5)
-        logger.info(f'Test {i}', project_id=11, local_id=12)
-        i += 1
-
-
-async def run():
-    await asyncio.gather(connect(),
-                         test_logging())
-
-
-if __name__ == '__main__':
-    try:
-        asyncio.run(run())
-    except KeyboardInterrupt:
-        sys.exit(0)

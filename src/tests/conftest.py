@@ -15,6 +15,7 @@ from common.settings import settings
 async def init():
     settings.TEST = True
     settings.MONGO_DATABASE = 'unittest'
+    settings.MESSAGE_POLL_PERIOD = 0.1
     settings.CYKUBE_CACHE_DIR = tempfile.mkdtemp()
     await async_client().drop_database(settings.MONGO_DATABASE)
     logger.remove()

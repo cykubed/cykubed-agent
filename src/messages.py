@@ -19,9 +19,9 @@ class MessageQueue:
         """
         self.queue = asyncio.Queue(maxsize=1000)
 
-    def add_agent_msg(self, msg: schemas.AgentEvent):
+    def add_agent_msg(self, msg):
         try:
-            self.queue.put_nowait(msg.json())
+            self.queue.put_nowait(msg)
         except QueueFull:
             logger.error("Log message queue full - dropping message")
 
