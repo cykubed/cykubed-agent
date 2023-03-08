@@ -14,6 +14,7 @@ from common.settings import settings
 @pytest.fixture(autouse=True)
 async def init():
     settings.TEST = True
+    settings.MONGO_DATABASE = 'unittest'
     settings.CYKUBE_CACHE_DIR = tempfile.mkdtemp()
     await async_client().drop_database(settings.MONGO_DATABASE)
     logger.remove()
