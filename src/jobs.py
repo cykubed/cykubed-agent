@@ -1,3 +1,5 @@
+from asyncio import sleep
+
 import yaml
 from kubernetes import client, utils
 from kubernetes.client import ApiException
@@ -48,7 +50,7 @@ def delete_jobs(testrun_id: int):
         delete_job(job, testrun_id)
 
 
-def create_job(jobtype: str, testrun: schemas.NewTestRun, build: schemas.CompletedBuild = None):
+def create_job(jobtype: str, testrun: schemas.NewTestRun, build: schemas.AgentCompletedBuildMessage = None):
     context = dict(project_name=testrun.project.name,
                    project_id=testrun.project.id,
                    local_id=testrun.local_id,
@@ -82,12 +84,27 @@ def create_job(jobtype: str, testrun: schemas.NewTestRun, build: schemas.Complet
     logger.info(f"Created {jobtype} job", id=testrun.id)
 
 
-def create_build_job(testrun: schemas.NewTestRun):
-    create_job('builder', testrun)
+async def create_build_job(newrun: schemas.NewTestRun):
+    if settings.K8:
+        # stop existing jobs
+        delete_jobs_for_branch(newrun.id, newrun.branch)
+        # and create a new one
+        create_job('builder', newrun)
+
+        if newrun.project.start_runners_first:
+            await sleep(10)
+            create_runner_jobs(newrun)
+    else:
+        logger.info(f"Now run cykuberunner with options 'build {newrun.id}'",
+                    tr=newrun)
 
 
-def create_runner_jobs(testrun: NewTestRun, build: schemas.CompletedBuild = None):
-    create_job('runner', testrun, build)
+def create_runner_jobs(testrun: NewTestRun, build: schemas.AgentCompletedBuildMessage = None):
+    if settings.K8:
+        create_job('runner', testrun, build)
+    else:
+        logger.info(f"Now run cykuberunner with options 'run {testrun.id}'",
+                    tr=testrun)
 
 
 def is_pod_running(podname: str):

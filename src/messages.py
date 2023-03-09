@@ -19,16 +19,16 @@ class MessageQueue:
         """
         self.queue = asyncio.Queue(maxsize=1000)
 
-    def add_agent_msg(self, msg):
+    def add(self, msg):
         try:
-            self.queue.put_nowait(msg.json())
+            self.queue.put_nowait(msg)
         except QueueFull:
             logger.error("Log message queue full - dropping message")
 
     def send_status_update(self, trid: int, status: TestRunStatus):
-        self.add_agent_msg(AgentStatusChanged(type=AgentEventType.status,
+        self.add(AgentStatusChanged(type=AgentEventType.status,
                                               testrun_id=trid,
-                                              status=status))
+                                              status=status).json())
 
     def send_log(self, source: str, testrun_id: int, msg):
         """
@@ -44,7 +44,7 @@ class MessageQueue:
                                                          level=msg.record['level'].name.lower(),
                                                          msg=msg,
                                                          source=source))
-        self.add_agent_msg(item)
+        self.add(item.json())
 
     async def get(self):
         """

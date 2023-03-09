@@ -6,13 +6,15 @@ import sentry_sdk
 from loguru import logger
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
 
+import jobs
 import messages
 import ws
 from asyncmongo import specs_coll, messages_coll, runs_coll, init_indexes
-from common import k8common, mongo
+from common import k8common
 from common.enums import AgentEventType
-from common.schemas import AgentEvent
+from common.schemas import AgentEvent, AgentCompletedBuildMessage, NewTestRun
 from common.settings import settings
+from common.utils import ensure_mongo_connection
 from logs import configure_logging
 
 if os.environ.get('SENTRY_DSN'):
@@ -32,6 +34,10 @@ async def check_for_completion(testrun_id: int):
                                      {'$set': {'finished': datetime.utcnow(), 'status': status}})
 
 
+async def build_completed(build: AgentCompletedBuildMessage):
+    pass
+
+
 async def poll_messages(max_messages=None):
     """
     Poll the message queue, forwarding them all to the websocket
@@ -39,13 +45,21 @@ async def poll_messages(max_messages=None):
     """
     sent = 0
     while True:
-        msgdoc = await messages_coll().find_one_and_delete({}, projection={'_id': False})
-        if msgdoc:
-            msg = msgdoc['msg']
-            messages.queue.add_agent_msg(msg)
-            event = AgentEvent.parse_raw(msg)
-            if event.type == AgentEventType.spec_completed:
-                await check_for_completion(event.testrun_id)
+        docs = await messages_coll().find().to_list(length=200)
+        if docs:
+            try:
+                for msgdoc in docs:
+                    msg = msgdoc['msg']
+                    event = AgentEvent.parse_raw(msg)
+                    messages.queue.add(msg)
+                    if event.type == AgentEventType.spec_completed:
+                        await check_for_completion(event.testrun_id)
+                    elif event.type == AgentEventType.build_completed:
+                        buildmsg: AgentCompletedBuildMessage = AgentCompletedBuildMessage.parse_raw(msg)
+                        testrun = NewTestRun.parse_obj(await runs_coll().find_one({'id': buildmsg.testrun_id}))
+                        jobs.create_runner_jobs(testrun, buildmsg)
+            finally:
+                await messages_coll().delete_many({'_id': {'$in': [x['_id'] for x in docs]}})
 
             # this is just to make it easier to test
             sent += 1
@@ -59,7 +73,7 @@ async def init():
     Run the websocket and server concurrently
     """
     try:
-        mongo.ensure_connection()
+        ensure_mongo_connection()
         await init_indexes()
     except:
         logger.exception("Failed to initialise MongoDB")
@@ -76,5 +90,5 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         pass
     except Exception as ex:
-        print(ex)
+        logger.exception("Agent quit expectedly")
 

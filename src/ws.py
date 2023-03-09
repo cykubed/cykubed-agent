@@ -17,21 +17,10 @@ mainsocket = None
 
 
 async def start_run(newrun: NewTestRun):
+    # Store in Mongo and kick off a new build job
     await asyncmongo.new_run(newrun)
-
-    if settings.K8:
-        # stop existing jobs
-        jobs.delete_jobs_for_branch(newrun.id, newrun.branch)
-        # and create a new one
-        jobs.create_build_job(newrun)
-
-        if newrun.project.start_runners_first:
-            await sleep(10)
-            jobs.create_runner_jobs(newrun)
-
-    else:
-        logger.info(f"Now run cykuberunner with options 'build {newrun.id}'",
-                    tr=newrun)
+    # and create a new one
+    await jobs.create_build_job(newrun)
 
 
 async def delete_project(project_id: int):
