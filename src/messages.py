@@ -12,6 +12,7 @@ class MessageQueue:
     """
     Queue for messages to be sent to cykube via the websocket
     """
+
     async def init(self):
         """
         We can't do this in the constructor as it needs to be inside an event loop
@@ -19,7 +20,11 @@ class MessageQueue:
         """
         self.queue = asyncio.Queue(maxsize=1000)
 
-    def add(self, msg):
+    def add(self, msg: str):
+        """
+        Add a string message
+        :param msg: serialised message
+        """
         try:
             self.queue.put_nowait(msg)
         except QueueFull:
@@ -27,8 +32,8 @@ class MessageQueue:
 
     def send_status_update(self, trid: int, status: TestRunStatus):
         self.add(AgentStatusChanged(type=AgentEventType.status,
-                                              testrun_id=trid,
-                                              status=status).json())
+                                    testrun_id=trid,
+                                    status=status).json())
 
     def send_log(self, source: str, testrun_id: int, msg):
         """
