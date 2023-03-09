@@ -21,7 +21,7 @@ class MessageQueue:
 
     def add_agent_msg(self, msg):
         try:
-            self.queue.put_nowait(msg)
+            self.queue.put_nowait(msg.json())
         except QueueFull:
             logger.error("Log message queue full - dropping message")
 

@@ -73,6 +73,8 @@ if __name__ == "__main__":
             k8common.init()
         configure_logging()
         asyncio.run(init())
+    except KeyboardInterrupt:
+        pass
     except Exception as ex:
         print(ex)
 
