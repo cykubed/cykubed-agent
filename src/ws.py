@@ -27,8 +27,6 @@ async def delete_project(project_id: int):
     if settings.K8:
         jobs.delete_jobs_for_project(project_id)
 
-    await asyncmongo.delete_project(project_id)
-
 
 async def handle_message(data):
     """

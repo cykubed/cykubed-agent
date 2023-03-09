@@ -11,7 +11,7 @@ from sentry_sdk.integrations.asyncio import AsyncioIntegration
 import jobs
 import messages
 import ws
-from asyncmongo import specs_coll, messages_coll, runs_coll, init_indexes
+from asyncmongo import specs_coll, messages_coll, runs_coll, init_indexes, cleanup_cache
 from common import k8common
 from common.enums import AgentEventType
 from common.schemas import AgentEvent, AgentCompletedBuildMessage, NewTestRun
@@ -70,6 +70,12 @@ async def poll_messages(max_messages=None):
         await asyncio.sleep(settings.MESSAGE_POLL_PERIOD)
 
 
+async def cleanup_cache_poll():
+    while True:
+        await asyncio.sleep(300)
+        await cleanup_cache()
+
+
 async def init():
     """
     Run the websocket and server concurrently
@@ -82,7 +88,7 @@ async def init():
         sys.exit(1)
 
     await init_indexes()
-    await asyncio.gather(ws.connect(), poll_messages())
+    await asyncio.gather(ws.connect(), poll_messages(), cleanup_cache_poll())
 
 
 if __name__ == "__main__":
