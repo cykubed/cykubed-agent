@@ -19,8 +19,8 @@ def async_client():
 
     if settings.MONGO_ROOT_PASSWORD:
         # in-cluster
-        return AsyncIOMotorClient(host='cykube-mongodb-0.cykube-mongodb-headless',
-                                  username='root',
+        return AsyncIOMotorClient(host=settings.MONGO_HOST.split(','),
+                                  username=settings.MONGO_USER,
                                   password=settings.MONGO_ROOT_PASSWORD)
     return AsyncIOMotorClient()
 

@@ -1,6 +1,8 @@
 import asyncio
 import os
+import sys
 from datetime import datetime
+from time import sleep
 
 import sentry_sdk
 from loguru import logger
@@ -74,10 +76,12 @@ async def init():
     """
     try:
         ensure_mongo_connection()
-        await init_indexes()
     except:
-        logger.exception("Failed to initialise MongoDB")
+        logger.exception("Failed to connect to MongoDB")
+        sleep(3600)
+        sys.exit(1)
 
+    await init_indexes()
     await asyncio.gather(ws.connect(), poll_messages())
 
 

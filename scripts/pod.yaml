@@ -6,6 +6,8 @@ metadata:
 spec:
   containers:
     - name: shell
-      image: nickbrookck/cykube-shell:1.0
+      image: nickbrookck/cykube-agent:1.56
+      command:
+        - sleep 3600
 
 
