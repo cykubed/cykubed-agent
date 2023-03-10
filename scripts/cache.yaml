@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: cache
+  namespace: cykube
+spec:
+  selector:
+    matchLabels:
+      app: server # has to match .spec.template.metadata.labels
+  serviceName: "cache"
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: server # has to match .spec.selector.matchLabels
+    spec:
+      containers:
+        - name: server
+          image: nickbrookck/cykube-agent:54bd671
+          command: ["/bin/sleep", "3600"]
+          ports:
+            - containerPort: 8200
+              name: cache
+          env:
+            - name: PORT
+              value: "8200"
+          volumeMounts:
+            - name: cache
+              mountPath: /usr/share/nginx/cache
+  volumeClaimTemplates:
+  - metadata:
+      name: cache
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: cache
+  namespace: cykube
+spec:
+  clusterIP: None
+  ports:
+    - protocol: TCP
+      port: 8200
+      targetPort: 8200
+  selector:
+    app: server
