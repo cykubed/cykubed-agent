@@ -14,7 +14,7 @@ metadata:
   namespace: {{ .Release.Namespace }}
   name: cykube-agent-configmap
 data:
-  MONGO_HOST: "cykube-mongodb-0.cykube-mongodb-headless.cykube.svc.cluster.local,cykube-mongodb-1.cykube-mongodb-headless.cykube.svc.cluster.local,cykube-mongodb-2.cykube-mongodb-headless.cykube.svc.cluster.local"
+  MONGO_HOST: "cykube-mongodb-0.cykube-mongodb-headless.cykube.svc.cluster.local,cykube-mongodb-1.cykube-mongodb-headless.cykube.svc.cluster.local"
   AGENT_URL: {{ .Values.agentUrl }}
   MAIN_API_URL: {{ .Values.apiUrl }}
   AGENT_NAME: {{ .Values.agentName }}

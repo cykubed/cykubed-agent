@@ -1,13 +1,12 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: testpod
+  name: shell
   namespace: cykube
 spec:
   containers:
     - name: shell
-      image: nickbrookck/cykube-agent:1.56
-      command:
-        - sleep 3600
+      image: nickbrookck/cykube-agent:54bd671
+      command: ["/bin/sleep", "3600"]
 
 

@@ -9,10 +9,14 @@ sentryDsn: "https://aa340c820e424f4bafddd9b378b18493@o4504740483432448.ingest.se
 gcpServiceAccount: null
 platform: null
 mongodb:
+  arbiter:
+    enabled: false
+  replicaCount: 3
+  resources:
+    limits:
+      cpu: "1"
+      memory: "1G"
   architecture: replicaset
-  namespaceOverride: cykube
-  image:
-    tag: 6.0.4-debian-11-r14
   persistence:
     size:
       "10Gi"
