@@ -6,7 +6,17 @@ metadata:
 spec:
   containers:
     - name: shell
-      image: nickbrookck/cykube-agent:54bd671
+      image: nickbrookck/cykube-agent:9b667fb
       command: ["/bin/sleep", "3600"]
+      resources:
+        requests:
+          cpu: "1"
+          memory: "256Mi"
+      env:
+      - name: REDIS_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: "redis-redis-cluster"
+            key: "redis-password"
 
 
