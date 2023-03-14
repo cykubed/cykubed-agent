@@ -7,6 +7,7 @@ from functools import cache
 import aiofiles
 import aiofiles.os
 import aiohttp
+import aioshutil
 from aiofiles.ospath import exists
 from aiohttp import web
 from loguru import logger
@@ -44,6 +45,21 @@ async def get_directory(request):
     return web.json_response([x for x in os.listdir(settings.CACHE_DIR) if not x.startswith('.')])
 
 
+async def prune_cache(app, size: int):
+    target_size = settings.FILESTORE_CACHE_SIZE - size
+    file_and_stat = []
+    for f in await aiofiles.os.listdir(settings.CACHE_DIR):
+        st = await aiofiles.os.stat(os.path.join(settings.CACHE_DIR, f))
+        file_and_stat.append((f, st))
+    # sort by reverse access
+    lru = sorted(file_and_stat, key=lambda x: x[1].st_atime, reverse=True)
+    while app['stats']['size'] > target_size:
+        file, fstat = lru.pop()
+        logger.info(f'Pruning {file} of size {fstat.st_size}')
+        await aiofiles.os.remove(os.path.join(settings.CACHE_DIR, file))
+        app['stats']['size'] -= fstat.st_size
+
+
 @routes.post('/')
 async def upload(request):
     reader = await request.multipart()
@@ -57,18 +73,22 @@ async def upload(request):
         logger.info(f'Ignoring {destfile} - we already have it')
         return web.Response()
 
-    # You cannot rely on Content-Length if transfer is chunked.
     size = 0
-    tmpname = f'{settings.CACHE_DIR}/.{filename}'
-    async with aiofiles.open(tmpname, 'wb') as f:
+    async with aiofiles.tempfile.NamedTemporaryFile('wb', delete=False) as f:
         while True:
             chunk = await field.read_chunk()  # 8192 bytes by default.
             if not chunk:
                 break
             size += len(chunk)
             await f.write(chunk)
-    # rename file
-    await aiofiles.os.rename(tmpname, destfile)
+        # check if we have space in the cache, and prune if not
+        if size > settings.FILESTORE_CACHE_SIZE:
+            return web.Response(status=400, reason="Too large")
+        if request.app['stats']['size'] + size >= settings.FILESTORE_CACHE_SIZE:
+            await prune_cache(request.app, size)
+        # now move to the cache
+        await aioshutil.move(f.name, destfile)
+        request.app['stats']['size'] += size
     logger.info(f"Saved file {filename}")
     return web.Response()
 
@@ -146,7 +166,7 @@ async def background_tasks(app):
     await app['catch_up']
 
 
-async def app_factory():
+async def app_factory(cache_size: int):
     if not os.path.exists(settings.CACHE_DIR):
         os.makedirs(settings.CACHE_DIR)
 
@@ -157,7 +177,9 @@ async def app_factory():
         with open('/etc/hostname', 'r') as f:
             hostname = f.read().strip()
     app['hostname'] = hostname
+    app['stats'] = {'size': cache_size}
 
+    logger.info(f'Cache is currently {cache_size} bytes ({settings.FILESTORE_CACHE_SIZE - cache_size} remaining)')
     logger_format = (
         "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
         "<level>{level: <8}</level> | "
@@ -179,10 +201,14 @@ async def app_factory():
 
 
 def start(port: int):
+    sz = 0
     for f in os.listdir(settings.CACHE_DIR):
         if f.startswith('.'):
             os.remove(os.path.join(settings.CACHE_DIR, f))
-    web.run_app(app_factory(), port=port)
+        st = os.stat(os.path.join(settings.CACHE_DIR, f))
+        sz += st.st_size
+
+    web.run_app(app_factory(sz), port=port)
 
 
 async def get_path_if_exists(filename):
