@@ -461,6 +461,26 @@ files = [
 python-dateutil = ">=2.4"
 
 [[package]]
+name = "fakeredis"
+version = "2.10.0"
+description = "Fake implementation of redis API for testing purposes."
+category = "dev"
+optional = false
+python-versions = ">=3.8,<4.0"
+files = [
+    {file = "fakeredis-2.10.0-py3-none-any.whl", hash = "sha256:7e66c96793688703a1da41256323ddaa1b3a2cab4ef793866839a937bb273915"},
+    {file = "fakeredis-2.10.0.tar.gz", hash = "sha256:722644759bba4ad61fa38f0bb34939b7657f166ba35892f747e282407a196845"},
+]
+
+[package.dependencies]
+redis = ">=4,<5"
+sortedcontainers = ">=2.4,<3.0"
+
+[package.extras]
+json = ["jsonpath-ng (>=1.5,<2.0)"]
+lua = ["lupa (>=1.14,<2.0)"]
+
+[[package]]
 name = "frozenlist"
 version = "1.3.3"
 description = "A list-like structure which implements collections.abc.MutableSequence"
@@ -770,37 +790,6 @@ files = [
 
 [package.dependencies]
 traitlets = "*"
-
-[[package]]
-name = "mongomock"
-version = "4.1.2"
-description = "Fake pymongo stub for testing simple MongoDB-dependent code"
-category = "dev"
-optional = false
-python-versions = "*"
-files = [
-    {file = "mongomock-4.1.2-py2.py3-none-any.whl", hash = "sha256:08a24938a05c80c69b6b8b19a09888d38d8c6e7328547f94d46cadb7f47209f2"},
-    {file = "mongomock-4.1.2.tar.gz", hash = "sha256:f06cd62afb8ae3ef63ba31349abd220a657ef0dd4f0243a29587c5213f931b7d"},
-]
-
-[package.dependencies]
-packaging = "*"
-sentinels = "*"
-
-[[package]]
-name = "mongomock-motor"
-version = "0.0.17"
-description = "Library for mocking AsyncIOMotorClient built on top of mongomock."
-category = "dev"
-optional = false
-python-versions = ">=3.6"
-files = [
-    {file = "mongomock_motor-0.0.17-py3-none-any.whl", hash = "sha256:64d703dd2e652928c2e40f930c1d0aee27aa4d11dcd34f55ac5c6951fec32386"},
-    {file = "mongomock_motor-0.0.17.tar.gz", hash = "sha256:4e7ecd77c65bddf00ee7d46c1e86189aa0c5e6a4885c62e2a7083bf0d7264b16"},
-]
-
-[package.dependencies]
-mongomock = ">=3.23.0,<5.0.0"
 
 [[package]]
 name = "motor"
@@ -1504,17 +1493,6 @@ files = [
 pyasn1 = ">=0.1.3"
 
 [[package]]
-name = "sentinels"
-version = "1.0.0"
-description = "Various objects to denote special meanings in python"
-category = "dev"
-optional = false
-python-versions = "*"
-files = [
-    {file = "sentinels-1.0.0.tar.gz", hash = "sha256:7be0704d7fe1925e397e92d18669ace2f619c92b5d4eb21a89f31e026f9ff4b1"},
-]
-
-[[package]]
 name = "sentry-sdk"
 version = "1.16.0"
 description = "Python client for Sentry (https://sentry.io)"
@@ -1595,6 +1573,18 @@ python-versions = ">=3.7"
 files = [
     {file = "sniffio-1.3.0-py3-none-any.whl", hash = "sha256:eecefdce1e5bbfb7ad2eeaabf7c1eeb404d7757c379bd1f7e5cce9d8bf425384"},
     {file = "sniffio-1.3.0.tar.gz", hash = "sha256:e60305c5e5d314f5389259b7f22aaa33d8f7dee49763119234af3755c55b9101"},
+]
+
+[[package]]
+name = "sortedcontainers"
+version = "2.4.0"
+description = "Sorted Containers -- Sorted List, Sorted Dict, Sorted Set"
+category = "dev"
+optional = false
+python-versions = "*"
+files = [
+    {file = "sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0"},
+    {file = "sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88"},
 ]
 
 [[package]]
@@ -1888,4 +1878,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "d23f8cdaf69355aafeaa4c092168f5771e8733de455426165f9cd32cb3619ba9"
+content-hash = "841a8b47a2b764ab257b625fb78ae1ce76b15f6f6967c5351a7924fe4abfc408"

@@ -16,7 +16,7 @@ spec:
       - name: REDIS_PASSWORD
         valueFrom:
           secretKeyRef:
-            name: "redis-redis-cluster"
+            name: "redis"
             key: "redis-password"
 
 
