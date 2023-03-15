@@ -11,7 +11,7 @@ from websockets.exceptions import ConnectionClosedError, InvalidStatusCode, Conn
 import jobs
 import messages
 from common import db
-from common.db import redis
+from common.db import async_redis
 from common.enums import AgentEventType
 from common.schemas import NewTestRun, AgentEvent, AgentCompletedBuildMessage
 from common.settings import settings
@@ -142,6 +142,11 @@ async def connect():
                 await sleep(10)
 
 
+async def handle_build_completed(msg: AgentCompletedBuildMessage):
+    tr = await db.get_testrun(msg.testrun_id)
+    jobs.create_runner_jobs(tr, msg)
+
+
 async def poll_messages(max_messages=None):
     """
     Poll the message queue, forwarding them all to the websocket
@@ -149,7 +154,7 @@ async def poll_messages(max_messages=None):
     """
     sent = 0
     logger.info("Start polling messages from Redis")
-    async with redis().pubsub() as pubsub:
+    async with async_redis().pubsub() as pubsub:
         await pubsub.psubscribe('messages')
         while is_running():
             message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
@@ -158,9 +163,7 @@ async def poll_messages(max_messages=None):
                 event = AgentEvent.parse_raw(msg)
                 messages.queue.add(msg)
                 if event.type == AgentEventType.build_completed:
-                    buildmsg: AgentCompletedBuildMessage = AgentCompletedBuildMessage.parse_raw(msg)
-                    tr = await db.get_testrun(buildmsg.testrun_id)
-                    jobs.create_runner_jobs(tr, buildmsg)
+                    await handle_build_completed(AgentCompletedBuildMessage.parse_raw(msg))
                 sent += 1
                 if max_messages and sent == max_messages:
                     # for easier testing
