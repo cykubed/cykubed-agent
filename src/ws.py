@@ -9,7 +9,6 @@ from websockets.exceptions import ConnectionClosedError, InvalidStatusCode, Conn
 import appstate
 import jobs
 from common import db
-from common.fsclient import AsyncFSClient
 from common.schemas import NewTestRun
 from common.settings import settings
 from messages import queue
@@ -35,16 +34,14 @@ async def delete_project(project_id: int):
 
 
 async def cancel_run(trid: int):
-    tr = await db.get_testrun(trid)
     if settings.K8:
         jobs.delete_jobs(trid)
-        await db.cancel_testrun(trid)
+    await db.cancel_testrun(trid)
 
 
 async def handle_message(data: dict):
     """
     Handle a message from the websocket
-    :param fs: FS client
     :param data:
     :return:
     """
@@ -59,11 +56,10 @@ async def handle_message(data: dict):
 
 
 async def consumer_handler(websocket):
-    fs = AsyncFSClient()
     while appstate.is_running():
         try:
             message = await websocket.recv()
-            await handle_message(fs, json.loads(message))
+            await handle_message(json.loads(message))
         except ConnectionClosed:
             return
 
