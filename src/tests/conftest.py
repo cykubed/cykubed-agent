@@ -2,10 +2,10 @@ import shutil
 import tempfile
 
 import pytest
+from asyncmongo import async_client
 from loguru import logger
 
-import messages
-from asyncmongo import async_client
+import ws
 from common.enums import PlatformEnum
 from common.schemas import Project, OrganisationSummary, NewTestRun
 from common.settings import settings
@@ -19,7 +19,7 @@ async def init():
     settings.CYKUBE_CACHE_DIR = tempfile.mkdtemp()
     await async_client().drop_database(settings.MONGO_DATABASE)
     logger.remove()
-    await messages.queue.init()
+    await ws.init()
     yield
     shutil.rmtree(settings.CYKUBE_CACHE_DIR)
 

@@ -1,14 +1,13 @@
 import asyncio
 import datetime
 
+from asyncmongo import runs_coll, specs_coll, messages_coll
 from bson import utc
 
-from asyncmongo import runs_coll, specs_coll, messages_coll
 from common.enums import AgentEventType, TestRunStatus
 from common.schemas import NewTestRun, AgentStatusChanged, AgentCompletedBuildMessage, AgentSpecCompleted, TestResult, \
     SpecResult
-from main import poll_messages
-from ws import handle_message
+from ws import handle_message, poll_messages
 
 
 async def test_start_run(mocker, testrun: NewTestRun):
