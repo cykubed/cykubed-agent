@@ -1,12 +1,13 @@
 import asyncio
 import json
-from asyncio import sleep, exceptions
+from asyncio import sleep, exceptions, create_task
 
+import httpx
 import websockets
+from httpx import HTTPError
 from loguru import logger
 from websockets.exceptions import ConnectionClosedError, InvalidStatusCode, ConnectionClosed
 
-import appstate
 import jobs
 import messages
 from common import db
@@ -16,7 +17,17 @@ from common.schemas import NewTestRun, AgentEvent, AgentCompletedBuildMessage
 from common.settings import settings
 from messages import queue
 
-mainsocket = None
+_running = True
+
+
+def is_running() -> bool:
+    global _running
+    return _running
+
+
+def shutdown():
+    global _running
+    _running = False
 
 
 async def start_run(tr: NewTestRun):
@@ -59,7 +70,7 @@ async def handle_message(data: dict):
 
 
 async def consumer_handler(websocket):
-    while appstate.is_running():
+    while is_running():
         try:
             message = await websocket.recv()
             await handle_message(json.loads(message))
@@ -68,16 +79,10 @@ async def consumer_handler(websocket):
 
 
 async def producer_handler(websocket):
-    while appstate.is_running():
+    while is_running():
         msg = await queue.get() + '\n'
         await websocket.send(msg)
         queue.task_done()
-
-
-async def close():
-    global mainsocket
-    if mainsocket:
-        await mainsocket.close()
 
 
 async def connect():
@@ -85,39 +90,56 @@ async def connect():
     Connect to the main cykube servers via a websocket
     """
 
-    # note that we must initialise the queue here so it refers to the correct event loop
-    await init()
-    while appstate.is_running():
-        logger.info("Starting websocket")
-        try:
-            domain = settings.MAIN_API_URL[settings.MAIN_API_URL.find('//') + 2:]
-            protocol = 'wss' if settings.MAIN_API_URL.startswith('https') else 'ws'
-            url = f'{protocol}://{domain}/agent/ws'
-            async with websockets.connect(url,
-                                          extra_headers={
-                                              'AgentName': settings.AGENT_NAME,
-                                              'Authorization': f'Bearer {settings.API_TOKEN}'}) as ws:
-                global mainsocket
-                mainsocket = ws
-                logger.info("Connected")
-                done, pending = await asyncio.wait([consumer_handler(ws), producer_handler(ws)],
-                                                   return_when=asyncio.FIRST_COMPLETED)
-                # we'll need to reconnect
-                for task in pending:
-                    task.cancel()
-        except ConnectionClosedError:
-            if not appstate.is_running():
-                return
-            await sleep(1)
-        except exceptions.TimeoutError:
-            await sleep(1)
-        except ConnectionRefusedError:
-            await sleep(10)
-        except OSError:
-            logger.warning("Cannot ensure_connection to cykube - sleep for 60 secs")
-            await sleep(10)
-        except InvalidStatusCode:
-            await sleep(10)
+    # fetch token
+    headers = {'Authorization': f'Bearer {settings.API_TOKEN}'}
+
+    # transport = httpx.AsyncHTTPTransport(retries=settings.MAX_HTTP_RETRIES)
+    async with httpx.AsyncClient(headers=headers) as client:
+
+        while is_running():
+
+            # grab a token
+            try:
+                resp = await client.post(f'{settings.MAIN_API_URL}/agent/wsconnect',
+                                         json={'name': settings.AGENT_NAME})
+                token = resp.text
+            except HTTPError as ex:
+                logger.warning(f"Failed to contact Cykube servers ({ex}): please check your token")
+                await asyncio.sleep(10)
+                continue
+
+            try:
+                logger.info("Try to connect websocket")
+                domain = settings.MAIN_API_URL[settings.MAIN_API_URL.find('//') + 2:]
+                protocol = 'wss' if settings.MAIN_API_URL.startswith('https') else 'ws'
+                url = f'{protocol}://{domain}/agent/ws?token={token}'
+                async with websockets.connect(url, extra_headers=headers) as ws:
+                    logger.info("Connected")
+                    done, pending = await asyncio.wait([create_task(consumer_handler(ws)),
+                                                        create_task(producer_handler(ws))],
+                                                       return_when=asyncio.FIRST_COMPLETED)
+                    # we'll need to reconnect
+                    for task in pending:
+                        task.cancel()
+            except ConnectionClosedError:
+                if not is_running():
+                    return
+                await sleep(1)
+            except exceptions.TimeoutError:
+                logger.debug('Could not connect: try later...')
+                await sleep(1)
+            except ConnectionRefusedError:
+                await sleep(10)
+            except OSError:
+                logger.warning("Cannot ensure_connection to cykube - sleep for 60 secs")
+                await sleep(10)
+            except InvalidStatusCode as ex:
+                if ex.status_code == 403:
+                    logger.error("Permission denied: please check that you have used the correct API token")
+                await sleep(10)
+            except Exception as ex:
+                logger.exception('Could not connect: try later...')
+                await sleep(10)
 
 
 async def poll_messages(max_messages=None):
@@ -126,9 +148,10 @@ async def poll_messages(max_messages=None):
     :param max_messages: limit the number of messages sent (for unit testing)
     """
     sent = 0
+    logger.info("Start polling messages from Redis")
     async with redis().pubsub() as pubsub:
         await pubsub.psubscribe('messages')
-        while True:
+        while is_running():
             message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
             if message is not None:
                 msg = message['data']
@@ -142,10 +165,17 @@ async def poll_messages(max_messages=None):
                 if max_messages and sent == max_messages:
                     # for easier testing
                     return
+            else:
+                await asyncio.sleep(5)
 
 
 async def init():
     """
     Run the websocket and server concurrently
     """
-    await asyncio.gather(connect(), poll_messages())
+    await messages.queue.init()
+    async with asyncio.TaskGroup() as tg:
+        tg.create_task(connect())
+        tg.create_task(poll_messages())
+
+

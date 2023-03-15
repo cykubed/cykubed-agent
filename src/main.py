@@ -10,7 +10,7 @@ from common import k8common
 from common.db import redis
 from common.settings import settings
 from logs import configure_logging
-from ws import init
+from ws import init, shutdown
 
 if __name__ == "__main__":
 
@@ -29,7 +29,7 @@ if __name__ == "__main__":
         configure_logging()
         asyncio.run(init())
     except KeyboardInterrupt:
-        pass
+        shutdown()
     except Exception as ex:
         logger.exception("Agent quit expectedly")
 
