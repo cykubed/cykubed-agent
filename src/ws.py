@@ -7,8 +7,9 @@ from loguru import logger
 from websockets.exceptions import ConnectionClosedError, InvalidStatusCode, ConnectionClosed
 
 import appstate
-import asyncmongo
 import jobs
+from common import db
+from common.fsclient import AsyncFSClient
 from common.schemas import NewTestRun
 from common.settings import settings
 from messages import queue
@@ -16,11 +17,16 @@ from messages import queue
 mainsocket = None
 
 
-async def start_run(newrun: NewTestRun):
-    # Store in Mongo and kick off a new build job
-    await asyncmongo.new_run(newrun)
-    # and create a new one
-    await jobs.create_build_job(newrun)
+async def start_run(tr: NewTestRun):
+    try:
+        # Store in Redis and kick off a new build job
+        await db.new_testrun(tr)
+        # and create a new one
+        await jobs.create_build_job(tr)
+    except:
+        logger.exception(f"Failed to start test run {tr.id}", tr=tr)
+        if queue and tr:
+            await queue.send_status_update(tr.id, 'failed')
 
 
 async def delete_project(project_id: int):
@@ -28,37 +34,36 @@ async def delete_project(project_id: int):
         jobs.delete_jobs_for_project(project_id)
 
 
-async def handle_message(data):
+async def cancel_run(trid: int):
+    tr = await db.get_testrun(trid)
+    if settings.K8:
+        jobs.delete_jobs(trid)
+        await db.cancel_testrun(trid)
+
+
+async def handle_message(data: dict):
     """
     Handle a message from the websocket
+    :param fs: FS client
     :param data:
     :return:
     """
     cmd = data['command']
     payload = data['payload']
     if cmd == 'start':
-        tr = NewTestRun.parse_raw(payload)
-        try:
-            await start_run(tr)
-        except:
-            logger.exception(f"Failed to start test run {tr.id}", tr=tr)
-            if queue and tr:
-                await queue.send_status_update(tr.id, 'failed')
+        await start_run(NewTestRun.parse_raw(payload))
     elif cmd == 'delete_project':
-        project_id = payload['project_id']
-        await delete_project(project_id)
+        await delete_project(payload['project_id'])
     elif cmd == 'cancel':
-        testrun_id = payload['testrun_id']
-        if settings.K8:
-            jobs.delete_jobs(testrun_id)
-            await asyncmongo.cancel_testrun(testrun_id)
+        await cancel_run(payload['testrun_id'])
 
 
 async def consumer_handler(websocket):
+    fs = AsyncFSClient()
     while appstate.is_running():
         try:
             message = await websocket.recv()
-            await handle_message(json.loads(message))
+            await handle_message(fs, json.loads(message))
         except ConnectionClosed:
             return
 
