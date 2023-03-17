@@ -26,21 +26,21 @@ def session():
     return aiohttp.ClientSession(timeout=timeout)
 
 
-@routes.get('/hc')
+@routes.get('/api/hc')
 async def hc(request):
     return web.Response(text="OK")
 
 
-@routes.get('/{filename}')
-async def server(request):
-    filename = request.match_info['filename']
-    path = await get_path_if_exists(filename)
-    if not path:
-        return web.Response(status=404)
-    return web.FileResponse(path)
+# @routes.get('/{filename}')
+# async def server(request):
+#     filename = request.match_info['filename']
+#     path = await get_path_if_exists(filename)
+#     if not path:
+#         return web.Response(status=404)
+#     return web.FileResponse(path)
 
 
-@routes.get('/')
+@routes.get('/api/ls')
 async def get_directory(request):
     return web.json_response([x for x in os.listdir(settings.CACHE_DIR) if not x.startswith('.')])
 
@@ -60,7 +60,7 @@ async def prune_cache(app, size: int):
         app['stats']['size'] -= fstat.st_size
 
 
-@routes.post('/')
+@routes.post('/api/upload')
 async def upload(request):
     reader = await request.multipart()
     field = await reader.next()
@@ -93,7 +93,7 @@ async def upload(request):
     return web.Response()
 
 
-@routes.delete('/{filename}')
+@routes.delete('/api/{filename}')
 async def delete_file(request):
     filename = request.match_info['filename']
     path = await get_path_if_exists(filename)
@@ -105,7 +105,12 @@ async def delete_file(request):
 
 def get_sync_hosts(app):
     # filter out ourselves
-    app['synchosts'] = [h for h in settings.FILESTORE_SERVERS.split(',') if not h.startswith(app['hostname'])]
+    hosts = app['synchosts'] = []
+    for h in settings.FILESTORE_SERVERS.split(','):
+        if not h.startswith(app['hostname']):
+            if not h.startswith('http'):
+                h = f'http://{h}'
+            hosts.append(h)
     logger.info(f"Sync hosts: {app['synchosts']}")
 
 
@@ -119,8 +124,12 @@ async def catch_up(app):
             incache = set(await aiofiles.os.listdir(settings.CACHE_DIR))
             try:
                 logger.info(f"Syncing with {host}:")
-                async with session().get(f'http://{host}') as resp:
-                    files = set(await resp.json())
+                async with session().get(f'{host}/api/ls') as resp:
+                    if resp.status == 200:
+                        files = set(await resp.json())
+                    else:
+                        logger.info(f"Can't connect {host}")
+                        continue
 
                 topull = files - incache
                 if not topull:
@@ -130,7 +139,7 @@ async def catch_up(app):
                     logger.info(f"Need to pull {len(topull)} files into local cache")
                     for fname in topull:
                         # load it from the cache
-                        async with session().get(f'http://{host}/{fname}') as resp:
+                        async with session().get(f'{host}/{fname}') as resp:
                             destpath = os.path.join(settings.CACHE_DIR, f'.{fname}')
                             async with aiofiles.open(destpath, 'wb') as f:
                                 async for chunk in resp.content.iter_chunked(settings.CHUNK_SIZE):
