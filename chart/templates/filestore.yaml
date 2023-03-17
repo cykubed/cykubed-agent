@@ -1,0 +1,83 @@
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: fs
+  labels:
+    app: fs
+spec:
+  ports:
+  - port: 8100
+    name: web
+  clusterIP: None
+  selector:
+    app: fs
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: fs
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 3
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: fs
+  serviceName: fs
+  template:
+    metadata:
+      labels:
+        app: fs
+    spec:
+      priorityClassName: cykube-high-priority
+      serviceAccountName: cykube
+      containers:
+        - name: fs
+          image: "nickbrookck/cykube-agent:{{ .Values.tag }}"
+          args: ["fs"]
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: 200m
+              memory: 200Mi
+            limits:
+              cpu: 200m
+              memory: 200Mi
+          livenessProbe:
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            httpGet:
+              port: 8100
+              path: "/hc"
+          env:
+            - name: CACHE_DIR
+              value: "/cache"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "redis"
+                  key: "redis-password"
+          envFrom:
+            - configMapRef:
+                name: cykube-agent-configmap
+            - secretRef:
+                name: cykube-agent-secrets
+          volumeMounts:
+          - name: cache
+            mountPath: /cache
+          ports:
+            - containerPort: 8100
+              name: fs
+              protocol: TCP
+  volumeClaimTemplates:
+  - metadata:
+      name: cache
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: {{ .Values.cacheSize }}

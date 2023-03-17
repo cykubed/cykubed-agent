@@ -1,35 +1,14 @@
-apiVersion: v1
-kind: Secret
-metadata:
-  name: cykube-agent-secrets
-  namespace: {{ .Release.Namespace }}
-type: Opaque
-data:
-  API_TOKEN: {{ .Values.token | b64enc }}
-  SENTRY_DSN: {{ .Values.sentryDsn | b64enc }}
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  namespace: {{ .Release.Namespace }}
-  name: cykube-agent-configmap
-data:
-  MONGO_HOST: "cykube-mongodb-0.cykube-mongodb-headless.cykube.svc.cluster.local,cykube-mongodb-1.cykube-mongodb-headless.cykube.svc.cluster.local"
-  AGENT_URL: {{ .Values.agentUrl }}
-  MAIN_API_URL: {{ .Values.apiUrl }}
-  AGENT_NAME: {{ .Values.agentName }}
-  NAMESPACE: {{ .Values.namespace }}
-
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: cykube-agent
   namespace: {{ .Release.Namespace }}
 spec:
-  replicas: 1
+  replicas: 2
   strategy:
-    type: Recreate
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: cykube-agent
@@ -44,19 +23,20 @@ spec:
         - name: server
           image: "nickbrookck/cykube-agent:{{ .Values.tag }}"
           imagePullPolicy: IfNotPresent
+          args: ["agent"]
           resources:
             requests:
-              cpu: 250m
-              memory: 0.5G
+              cpu: 200m
+              memory: 200Mi
             limits:
-              cpu: 250m
-              memory: 0.5G
+              cpu: 200m
+              memory: 200Mi
           env:
-            - name: MONGO_ROOT_PASSWORD
+            - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: "cykube-mongodb"
-                  key: "mongodb-root-password"
+                  name: "redis"
+                  key: "redis-password"
           envFrom:
             - configMapRef:
                 name: cykube-agent-configmap

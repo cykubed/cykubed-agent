@@ -8,16 +8,23 @@ token: "dummy"
 sentryDsn: "https://aa340c820e424f4bafddd9b378b18493@o4504740483432448.ingest.sentry.io/4504740484743168"
 gcpServiceAccount: null
 platform: null
-mongodb:
-  arbiter:
-    enabled: false
-  replicaCount: 3
-  resources:
-    limits:
-      cpu: "1"
-      memory: "1G"
-  architecture: replicaset
-  persistence:
-    size:
-      "10Gi"
+cacheSize: "10Gi"
+redis:
+  sentinel:
+    enabled: true
+    resources:
+      limits:
+        cpu: "100m"
+        memory: "100Mi"
+  master:
+    resources:
+      limits:
+        cpu: "100m"
+        memory: "100Mi"
+  replica:
+    resources:
+      limits:
+        cpu: "100m"
+        memory: "100Mi"
+
 
