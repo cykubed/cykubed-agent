@@ -60,6 +60,7 @@ spec:
       serviceAccountName: cykube
       securityContext:
         runAsNonRoot: true
+        fsGroup: 10000
         runAsUser: 10000
         runAsGroup: 10000
       containers:
