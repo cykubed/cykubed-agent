@@ -154,12 +154,11 @@ async def poll_messages(max_messages=None):
     """
     sent = 0
     logger.info("Start polling messages from Redis")
-    async with async_redis().pubsub() as pubsub:
-        await pubsub.psubscribe('messages')
-        while is_running():
-            message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
-            if message is not None:
-                msg = message['data']
+    r = async_redis()
+    while is_running():
+        msglist = await r.lpop('messages', 100)
+        if msglist is not None:
+            for msg in msglist:
                 event = AgentEvent.parse_raw(msg)
                 messages.queue.add(msg)
                 if event.type == AgentEventType.build_completed:
@@ -168,8 +167,7 @@ async def poll_messages(max_messages=None):
                 if max_messages and sent == max_messages:
                     # for easier testing
                     return
-            else:
-                await asyncio.sleep(5)
+        await asyncio.sleep(1)
 
 
 async def init():
