@@ -81,7 +81,7 @@ spec:
             periodSeconds: 10
             httpGet:
               port: 8100
-              path: "/hc"
+              path: "/api/hc"
           env:
             - name: CACHE_DIR
               value: "/cache"
