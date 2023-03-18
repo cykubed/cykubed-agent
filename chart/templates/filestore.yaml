@@ -7,12 +7,34 @@ metadata:
     app: fs
 spec:
   ports:
-  - port: 80
-    targetPort: 8000
+  - port: 8000
     name: web
   clusterIP: None
   selector:
     app: fs
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fs-nginx-conf
+  namespace: {{ .Release.Namespace }}
+data:
+  fs.conf: |
+    server {
+      listen       8000;
+      server_name  localhost;
+
+      location /api {
+        proxy_pass http://localhost:8100/api;
+        client_max_body_size 500M;
+          proxy_http_version 1.1;
+      }
+
+      location / {
+        root   /cache;
+        client_max_body_size 200M;
+      }
+    }
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -74,7 +96,7 @@ spec:
               name: fs
               protocol: TCP
         - name: nginx
-          image: "nickbrookck/cykube-fs-nginx:1.1"
+          image: nginxinc/nginx-unprivileged:1.23
           resources:
             limits:
               cpu: 50m
@@ -83,8 +105,18 @@ spec:
           - containerPort: 8000
             name: nginx-port
           volumeMounts:
+          - name: nginx-conf
+            mountPath: /etc/nginx/conf.d
+            readOnly: true
           - name: cache
             mountPath: /cache
+      volumes:
+        - name: nginx-conf
+          configMap:
+            name: fs-nginx-conf
+            items:
+              - key: fs.conf
+                path: fs.conf
   volumeClaimTemplates:
   - metadata:
       name: cache
