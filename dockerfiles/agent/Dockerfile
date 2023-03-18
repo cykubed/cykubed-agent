@@ -1,10 +1,14 @@
 FROM python:3.11-slim-buster as build
 
+RUN apt-get update && apt-get install -y curl vim
 WORKDIR /usr/app
 
+RUN mkdir /cache
 # FIXME switch to non-root https://elastisys.com/howto-stop-running-containers-as-root-in-kubernetes/
-RUN mkdir /var/lib/cykubecache
+RUN useradd -m cykube --uid 10000 && chown cykube /usr/app
+RUN chown cykube /cache && chmod -R a+r /cache
 
+USER cykube
 ENV PATH="/home/cykube/.local/bin:$PATH"
 
 RUN pip install poetry==1.3.1
