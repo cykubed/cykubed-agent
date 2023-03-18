@@ -29,10 +29,10 @@ data:
           listen       80;
           server_name  localhost;
 
-          location /api/ {
+          location /api {
     	    proxy_pass http://localhost:8100/api;
     	    client_max_body_size 500M;
-	       proxy_http_version 1.1;
+              proxy_http_version 1.1;
           }
 
           location / {
@@ -85,11 +85,6 @@ spec:
           env:
             - name: CACHE_DIR
               value: "/cache"
-            - name: REDIS_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: "redis"
-                  key: "redis-password"
           envFrom:
             - configMapRef:
                 name: cykube-agent-configmap
@@ -107,16 +102,23 @@ spec:
           resources:
             limits:
               cpu: 50m
-              memory: 100m
+              memory: 100Mi
           ports:
           - containerPort: 80
             name: nginx-port
           volumeMounts:
           - name: nginx-conf
-            mountPath: /etc/nginx/nginx.conf
-            subPath: nginx.conf
+            mountPath: /etc/nginx
+            readOnly: true
           - name: cache
             mountPath: /cache
+      volumes:
+        - name: nginx-conf
+          configMap:
+            name: fs-nginx-conf
+            items:
+              - key: nginx.conf
+                path: nginx.conf
   volumeClaimTemplates:
   - metadata:
       name: cache
