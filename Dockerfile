@@ -5,9 +5,9 @@ WORKDIR /usr/app
 
 RUN mkdir /cache
 RUN useradd -m cykube --uid 10000 && chown cykube /usr/app
-RUN chown cykube /cache && chmod -R a+r /cache
+RUN chown 10000 /cache && chmod -R a+r /cache
 
-USER cykube
+USER 10000
 ENV PATH="/home/cykube/.local/bin:$PATH"
 
 RUN pip install poetry==1.3.1

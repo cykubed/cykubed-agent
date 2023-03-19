@@ -18,4 +18,4 @@ data:
   MAIN_API_URL: {{ .Values.apiUrl }}
   AGENT_NAME: {{ .Values.agentName }}
   NAMESPACE: {{ .Values.namespace }}
-  FILESTORE_SERVERS: "fs-0.fs.cykube.svc.cluster.local:8000,fs-1.fs.cykube.svc.cluster.local:8000,fs-2.fs.cykube.svc.cluster.local:8000"
+  FILESTORE_SERVERS: "fs-0.fs:8000,fs-1.fs:8000,fs-2.fs:8000"
