@@ -21,16 +21,18 @@ steps:
    entrypoint: 'bash'
    args: ['-c', 'docker push nickbrookck/cykube-agent:$SHORT_SHA']
 
-# - name: gcr.io/cloud-builders/kubectl
-#   id: Deploy
-#   entrypoint: /bin/sh
-#   args:
-#      - '-c'
-#      - |
-#        set -x && \
-#        gcloud container clusters get-credentials cykube --region europe-west2 --project iron-lodge-372417 && \
-#        kubectl set image -n cykube deployment/cykube-agent server=nickbrookck/cykube-agent:$SHORT_SHA && \
-#        kubectl rollout status -n cykube deployment/cykube-agent
+ - name: gcr.io/cloud-builders/kubectl
+   id: Deploy
+   entrypoint: /bin/sh
+   args:
+      - '-c'
+      - |
+        set -x && \
+        gcloud container clusters get-credentials cykube --region europe-west2 --project iron-lodge-372417 && \
+        kubectl set image -n cykube deployment/cykube-agent server=nickbrookck/cykube-agent:$SHORT_SHA && \
+        kubectl set image -n cykube statefulset/fs fs=nickbrookck/cykube-agent:$SHORT_SHA && \
+        kubectl rollout status -n cykube deployment/cykube-agent
+        kubectl rollout status -n cykube statefulset/fs
 
  - name: gcr.io/cloud-builders/curl
    id: Notify
