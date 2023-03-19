@@ -94,7 +94,7 @@ async def upload(request):
     return web.Response()
 
 
-@routes.delete('/api/{filename}')
+@routes.delete('/api/rm/{filename}')
 async def delete_file(request):
     filename = request.match_info['filename']
     path = await get_path_if_exists(filename)
