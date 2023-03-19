@@ -87,6 +87,7 @@ async def upload(request):
         if request.app['stats']['size'] + size >= settings.FILESTORE_CACHE_SIZE:
             await prune_cache(request.app, size)
         # now move to the cache
+        await f.fsync()
         await aioshutil.move(f.name, destfile)
         request.app['stats']['size'] += size
     logger.info(f"Saved file {filename}")
