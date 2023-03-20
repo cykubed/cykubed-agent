@@ -1,7 +1,5 @@
-import argparse
 import asyncio
 import os
-import sys
 from functools import cache
 
 import aiofiles
@@ -10,11 +8,34 @@ import aiohttp
 import aioshutil
 from aiofiles.ospath import exists
 from aiohttp import web
+from aiohttp.web_exceptions import HTTPForbidden
+from aiohttp.web_middlewares import middleware
 from loguru import logger
 
 from common.settings import settings
 
 routes = web.RouteTableDef()
+
+
+@middleware
+async def auth_middleware(request, handler):
+
+    if request.path != '/hc':
+
+        if request.version != aiohttp.HttpVersion11:
+            return
+
+        authval = request.headers.get('AUTHORIZATION')
+        if authval:
+            token = authval.split(' ')
+            if len(token) != 2 or token[0] != 'Bearer' or token[1] != settings.API_TOKEN:
+                raise HTTPForbidden()
+        else:
+            token = request.query.get('token')
+            if not token or token != settings.API_TOKEN:
+                raise HTTPForbidden()
+
+    return await handler(request)
 
 
 @cache
@@ -23,24 +44,15 @@ def session():
                                     connect=settings.FILESTORE_CONNECT_TIMEOUT,
                                     sock_connect=settings.FILESTORE_CONNECT_TIMEOUT,
                                     sock_read=settings.FILESTORE_READ_TIMEOUT)
-    return aiohttp.ClientSession(timeout=timeout)
+    return aiohttp.ClientSession(timeout=timeout, headers={'Authorization': f'Bearer {settings.API_TOKEN}'})
 
 
-@routes.get('/api/hc')
+@routes.get('/hc')
 async def hc(request):
     return web.Response(text="OK")
 
 
-# @routes.get('/{filename}')
-# async def server(request):
-#     filename = request.match_info['filename']
-#     path = await get_path_if_exists(filename)
-#     if not path:
-#         return web.Response(status=404)
-#     return web.FileResponse(path)
-
-
-@routes.get('/api/ls')
+@routes.get('/fs')
 async def get_directory(request):
     return web.json_response([x for x in os.listdir(settings.CACHE_DIR) if not x.startswith('.')])
 
@@ -60,7 +72,7 @@ async def prune_cache(app, size: int):
         app['stats']['size'] -= fstat.st_size
 
 
-@routes.post('/api/upload')
+@routes.post('/fs')
 async def upload(request):
     reader = await request.multipart()
     field = await reader.next()
@@ -94,7 +106,7 @@ async def upload(request):
     return web.Response()
 
 
-@routes.post('/api/rm/{filename}')
+@routes.delete('/fs/{filename}')
 async def delete_file(request):
     filename = request.match_info['filename']
     path = await get_path_if_exists(filename)
@@ -125,7 +137,7 @@ async def catch_up(app):
             incache = set(await aiofiles.os.listdir(settings.CACHE_DIR))
             try:
                 logger.info(f"Syncing with {host}:")
-                async with session().get(f'{host}/api/ls') as resp:
+                async with session().get(f'{host}/fs') as resp:
                     if resp.status == 200:
                         files = set(await resp.json())
                     else:
@@ -140,7 +152,7 @@ async def catch_up(app):
                     logger.info(f"Need to pull {len(topull)} files into local cache")
                     for fname in topull:
                         # load it from the cache
-                        async with session().get(f'{host}/{fname}') as resp:
+                        async with session().get(f'{host}/fs/{fname}') as resp:
                             destpath = os.path.join(settings.CACHE_DIR, f'.{fname}')
                             async with aiofiles.open(destpath, 'wb') as f:
                                 async for chunk in resp.content.iter_chunked(settings.CHUNK_SIZE):
@@ -167,58 +179,6 @@ async def catch_up(app):
 #         await asyncio.sleep(CACHE_PRUNE_PERIOD)
 
 
-async def background_tasks(app):
-    app['catch_up'] = asyncio.create_task(catch_up(app))
-
-    yield
-
-    app['catch_up'].cancel()
-    await app['catch_up']
-
-
-async def app_factory(cache_size: int):
-    if not os.path.exists(settings.CACHE_DIR):
-        os.makedirs(settings.CACHE_DIR)
-
-    app = web.Application()
-    if settings.HOSTNAME:
-        hostname = settings.HOSTNAME
-    else:
-        with open('/etc/hostname', 'r') as f:
-            hostname = f.read().strip()
-    app['hostname'] = hostname
-    app['stats'] = {'size': cache_size}
-
-    logger.info(f'Cache is currently {cache_size} bytes ({settings.FILESTORE_CACHE_SIZE - cache_size} remaining)')
-    logger_format = (
-        "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
-        "<level>{level: <8}</level> | "
-        "{extra[hostname]: ^12} | "
-        # "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
-        "<level>{message}</level>"
-    )
-    logger.configure(extra=dict(hostname=hostname))
-    logger.remove()
-    logger.add(sys.stderr, format=logger_format)
-
-    logger.info("Starting cache replica")
-
-    get_sync_hosts(app)
-    app.add_routes(routes)
-    app.cleanup_ctx.append(background_tasks)
-    app.on_shutdown.append(on_shutdown)
-    return app
-
-
-def start(port: int):
-    sz = 0
-    for f in os.listdir(settings.CACHE_DIR):
-        if f.startswith('.'):
-            os.remove(os.path.join(settings.CACHE_DIR, f))
-        st = os.stat(os.path.join(settings.CACHE_DIR, f))
-        sz += st.st_size
-
-    web.run_app(app_factory(sz), port=port)
 
 
 async def get_path_if_exists(filename):
@@ -226,10 +186,3 @@ async def get_path_if_exists(filename):
     if not await aiofiles.ospath.exists(path):
         return None
     return path
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-p', '--port', type=int, default=8100, help='Port')
-    args = parser.parse_args()
-    start(args.port)
