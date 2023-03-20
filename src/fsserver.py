@@ -52,6 +52,15 @@ async def hc(request):
     return web.Response(text="OK")
 
 
+@routes.get('/fs/{filename}')
+async def server(request):
+    filename = request.match_info['filename']
+    path = await get_path_if_exists(filename)
+    if not path:
+        return web.Response(status=404)
+    return web.FileResponse(path)
+
+
 @routes.get('/fs')
 async def get_directory(request):
     return web.json_response([x for x in os.listdir(settings.CACHE_DIR) if not x.startswith('.')])
@@ -67,7 +76,7 @@ async def prune_cache(app, size: int):
     lru = sorted(file_and_stat, key=lambda x: x[1].st_atime, reverse=True)
     while app['stats']['size'] > target_size:
         file, fstat = lru.pop()
-        logger.info(f'Pruning {file} of size {fstat.st_size}')
+        logger.debug(f'Pruning {file} of size {fstat.st_size}')
         await aiofiles.os.remove(os.path.join(settings.CACHE_DIR, file))
         app['stats']['size'] -= fstat.st_size
 
@@ -78,11 +87,11 @@ async def upload(request):
     field = await reader.next()
     assert field.name == 'file'
     filename = field.filename
-    logger.info(f'Storing file {filename}')
+    logger.debug(f'Storing file {filename}')
 
     destfile = os.path.join(settings.CACHE_DIR, filename)
     if await exists(destfile):
-        logger.info(f'Ignoring {destfile} - we already have it')
+        logger.debug(f'Ignoring {destfile} - we already have it')
         return web.Response()
 
     size = 0
@@ -102,7 +111,7 @@ async def upload(request):
         await f.flush()
         await aioshutil.move(f.name, destfile)
         request.app['stats']['size'] += size
-    logger.info(f"Saved file {filename}")
+    logger.debug(f"Saved file {filename}")
     return web.Response()
 
 
@@ -136,20 +145,17 @@ async def catch_up(app):
         for host in app['synchosts']:
             incache = set(await aiofiles.os.listdir(settings.CACHE_DIR))
             try:
-                logger.info(f"Syncing with {host}:")
+                logger.debug(f"Syncing with {host}:")
                 async with session().get(f'{host}/fs') as resp:
                     if resp.status == 200:
                         files = set(await resp.json())
                     else:
-                        logger.info(f"Can't connect {host}")
+                        logger.warning(f"Can't connect {host}")
                         continue
 
                 topull = files - incache
-                if not topull:
-                    logger.info(f"Cache is up to date")
-                else:
+                if topull:
                     # pull files from the load balancer if they are in the master index but not local
-                    logger.info(f"Need to pull {len(topull)} files into local cache")
                     for fname in topull:
                         # load it from the cache
                         async with session().get(f'{host}/fs/{fname}') as resp:
@@ -158,10 +164,8 @@ async def catch_up(app):
                                 async for chunk in resp.content.iter_chunked(settings.CHUNK_SIZE):
                                     await f.write(chunk)
                             await aiofiles.os.rename(destpath, os.path.join(settings.CACHE_DIR, fname))
-                        logger.info(f"Pulled file {fname} into cache")
-                    logger.info(f"Finished sync with {host}")
             except Exception as ex:
-                logger.warning(f"Failed to pull from {host}: {ex}")
+                logger.warning(f"Failed to sync from {host}: {ex}")
 
         await asyncio.sleep(settings.FILESTORE_SYNC_PERIOD)
 

@@ -1,21 +1,37 @@
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: v1
+kind: Service
 metadata:
-  name: cykube-agent
+  namespace: {{ .Release.Namespace }}
+  name: agent
+  labels:
+    app: fs
+spec:
+  ports:
+  - port: 8100
+    name: fs
+  clusterIP: None
+  selector:
+    app: server
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: fs
   namespace: {{ .Release.Namespace }}
 spec:
   replicas: 2
-  strategy:
+  updateStrategy:
     type: RollingUpdate
     rollingUpdate:
       maxUnavailable: 1
+  serviceName: agent
   selector:
     matchLabels:
-      app: cykube-agent
+      app: server
   template:
     metadata:
       labels:
-        app: cykube-agent
+        app: server
     spec:
       priorityClassName: cykube-high-priority
       serviceAccountName: cykube
@@ -23,40 +39,45 @@ spec:
         - name: server
           image: "nickbrookck/cykube-agent:{{ .Values.tag }}"
           imagePullPolicy: IfNotPresent
-          args: ["agent"]
           resources:
             requests:
-              cpu: 200m
-              memory: 200Mi
+              cpu: 250m
+              memory: 500Mi
             limits:
-              cpu: 200m
-              memory: 200Mi
+              cpu: 250m
+              memory: 500Mi
+          livenessProbe:
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            httpGet:
+              port: 8100
+              path: "/hc"
           env:
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: "cykube-redis"
                   key: "redis-password"
+            - name: CACHE_DIR
+              value: "/cache"
           envFrom:
             - configMapRef:
                 name: cykube-agent-configmap
             - secretRef:
                 name: cykube-agent-secrets
+          volumeMounts:
+          - name: cache
+            mountPath: /cache
           ports:
-            - containerPort: 5000
-              name: cykube-agent
+            - containerPort: 8100
+              name: fs
               protocol: TCP
+  volumeClaimTemplates:
+  - metadata:
+      name: cache
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: {{ .Values.cacheSize }}
 
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: cykube-agent
-  namespace: {{ .Release.Namespace }}
-spec:
-  ports:
-  - port: 5000
-    protocol: TCP
-    targetPort: cykube-agent
-  selector:
-    app: cykube-agent
