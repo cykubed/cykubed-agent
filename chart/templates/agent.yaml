@@ -35,6 +35,10 @@ spec:
     spec:
       priorityClassName: cykube-high-priority
       serviceAccountName: cykube
+      securityContext:
+        runAsUser: 10000
+        runAsGroup: 10000
+        fsGroup: 10000
       containers:
         - name: server
           image: "nickbrookck/cykube-agent:{{ .Values.tag }}"
@@ -47,8 +51,10 @@ spec:
               cpu: 150m
               memory: 200Mi
           livenessProbe:
-            initialDelaySeconds: 10
+            initialDelaySeconds: 30
             periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 20
             httpGet:
               port: 8100
               path: "/hc"
