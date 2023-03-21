@@ -145,7 +145,6 @@ async def catch_up(app):
         for host in app['synchosts']:
             incache = set(await aiofiles.os.listdir(settings.CACHE_DIR))
             try:
-                logger.debug(f"Syncing with {host}:")
                 async with session().get(f'{host}/fs') as resp:
                     if resp.status == 200:
                         files = set(await resp.json())
@@ -158,6 +157,7 @@ async def catch_up(app):
                     # pull files from the load balancer if they are in the master index but not local
                     for fname in topull:
                         # load it from the cache
+                        logger.debug(f"Pulling {fname } from {host}")
                         async with session().get(f'{host}/fs/{fname}') as resp:
                             destpath = os.path.join(settings.CACHE_DIR, f'.{fname}')
                             async with aiofiles.open(destpath, 'wb') as f:

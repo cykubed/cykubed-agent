@@ -41,11 +41,11 @@ spec:
           imagePullPolicy: IfNotPresent
           resources:
             requests:
-              cpu: 250m
-              memory: 500Mi
+              cpu: 150m
+              memory: 200Mi
             limits:
-              cpu: 250m
-              memory: 500Mi
+              cpu: 150m
+              memory: 200Mi
           livenessProbe:
             initialDelaySeconds: 10
             periodSeconds: 10
