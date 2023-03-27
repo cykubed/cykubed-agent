@@ -100,7 +100,7 @@ class Retry(object):
         self.delay = 10
 
 
-async def connect():
+async def connect(app):
     """
     Connect to the main cykube servers via a websocket
     """
@@ -116,7 +116,8 @@ async def connect():
             # grab a token
             try:
                 resp = await client.post(f'{settings.MAIN_API_URL}/agent/wsconnect',
-                                         json={'name': settings.AGENT_NAME})
+                                         json={'host_name': app['hostname'],
+                                               'agent_name': settings.AGENT_NAME})
                 if resp.status_code != 200:
                     await retrier.retry()
                     continue

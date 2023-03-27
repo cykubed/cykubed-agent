@@ -20,7 +20,7 @@ from ws import shutdown
 
 async def background_tasks(app):
     app['catch_up'] = asyncio.create_task(fsserver.catch_up(app))
-    app['connect'] = asyncio.create_task(ws.connect())
+    app['connect'] = asyncio.create_task(ws.connect(app))
     app['poll_messages'] = asyncio.create_task(ws.poll_messages())
 
     yield
