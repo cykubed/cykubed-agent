@@ -77,11 +77,10 @@ def start(port: int):
 
 if __name__ == "__main__":
 
-    if os.environ.get('SENTRY_DSN'):
-        sentry_sdk.init(integrations=[
-            RedisIntegration(),
-            AsyncioIntegration(),
-        ], )
+    if settings.SENTRY_DSN:
+        sentry_sdk.init(
+            dsn=settings.SENTRY_DSN,
+            integrations=[RedisIntegration(), AsyncioIntegration(),], )
 
     parser = argparse.ArgumentParser('CykubeAgent')
     parser.add_argument('--port', type=int, default=8100, help='Port')
