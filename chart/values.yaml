@@ -1,11 +1,10 @@
 namespace: cykube
 agentName: "default"
 tag: "ca76ca2"
-apiUrl: "https://app.cykube.net/api"
-agentUrl: "http://cykube-agent:5000"
+apiUrl: "https://api.cykube.net"
 mongodbPassword: "fishfish1234"
 token: "dummy"
-sentryDsn: "https://aa340c820e424f4bafddd9b378b18493@o4504740483432448.ingest.sentry.io/4504740484743168"
+sentryDsn: "https://29835f630a0c4eb1a249b19ba0c269b8@o4504740483432448.ingest.sentry.io/4504910389313536"
 gcpServiceAccount: null
 platform: null
 cacheSize: "10Gi"
