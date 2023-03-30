@@ -180,6 +180,7 @@ async def poll_messages(max_messages=None):
             msglist = await r.lpop('messages', 100)
             if msglist is not None:
                 for msg in msglist:
+                    logger.debug(f"Received message: {msg}")
                     event = AgentEvent.parse_raw(msg)
                     messages.queue.add(msg)
                     if event.type == AgentEventType.build_completed:
