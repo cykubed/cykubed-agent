@@ -103,7 +103,10 @@ async def create_build_job(newrun: schemas.NewTestRun):
 
 def create_runner_jobs(testrun: NewTestRun, build: schemas.AgentCompletedBuildMessage = None):
     if settings.K8:
-        create_job('runner', testrun, build)
+        try:
+            create_job('runner', testrun, build)
+        except Exception:
+            logger.exception(f"Failed to create runner job for testrun {testrun.id}")
     else:
         logger.info(f"Now run cykuberunner with options 'run {testrun.id}'",
                     tr=testrun)
