@@ -57,6 +57,8 @@ def create_job(jobtype: str, testrun: schemas.NewTestRun, build: schemas.AgentCo
                    testrun_id=testrun.id,
                    branch=testrun.branch,
                    runner_image=testrun.project.runner_image,
+                   retries=testrun.project.retries,
+                   timezone=testrun.project.timezone,
                    token=settings.API_TOKEN)
     if jobtype == 'builder':
         template = testrun.project.builder_template
