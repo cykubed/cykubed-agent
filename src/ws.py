@@ -80,7 +80,6 @@ async def consumer_handler(websocket):
 
 
 async def producer_handler(websocket):
-    await queue.init()
     while is_running():
         msg = await queue.get() + '\n'
         await websocket.send(msg)

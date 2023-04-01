@@ -15,10 +15,12 @@ from common import k8common
 from common.db import sync_redis
 from common.settings import settings
 from logs import configure_logging
+from messages import queue
 from ws import shutdown
 
 
 async def background_tasks(app):
+    await queue.init()
     app['catch_up'] = asyncio.create_task(fsserver.catch_up(app))
     app['connect'] = asyncio.create_task(ws.connect(app))
     app['poll_messages'] = asyncio.create_task(ws.poll_messages())
