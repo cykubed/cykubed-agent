@@ -77,10 +77,10 @@ async def create_build_job(newrun: schemas.NewTestRun):
                     tr=newrun)
 
 
-def create_runner_jobs(testrun: NewTestRun, build: schemas.AgentCompletedBuildMessage = None):
+def create_runner_jobs(testrun: NewTestRun):
     if settings.K8:
         try:
-            create_job('runner', testrun, build)
+            create_job('runner', testrun)
         except Exception:
             logger.exception(f"Failed to create runner job for testrun {testrun.id}")
     else:

@@ -19,7 +19,7 @@ metadata:
   name: fs
   namespace: {{ .Release.Namespace }}
 spec:
-  replicas: 2
+  replicas: {{ .Values.replicas }}
   updateStrategy:
     type: RollingUpdate
     rollingUpdate:

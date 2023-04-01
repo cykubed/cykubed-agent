@@ -163,7 +163,7 @@ async def connect(app):
 
 async def handle_build_completed(msg: AgentCompletedBuildMessage):
     tr = await db.get_testrun(msg.testrun_id)
-    jobs.create_runner_jobs(tr, msg)
+    jobs.create_runner_jobs(tr)
 
 
 async def poll_messages(max_messages=None):
