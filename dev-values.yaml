@@ -1,10 +1,12 @@
 namespace: cykube
 tag: "IMAGE_TAG"
-apiUrl: "https://api.cykube.net"
+apiUrl: "https://dev.cykube.net/api"
 replicas: 2
+mongodbPassword: ""
 token: ""
 sentryDsn: "https://29835f630a0c4eb1a249b19ba0c269b8@o4504740483432448.ingest.sentry.io/4504910389313536"
 gcpServiceAccount: null
+platform: null
 cacheSize: "10Gi"
 redis:
   sentinel:
