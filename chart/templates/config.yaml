@@ -15,7 +15,6 @@ metadata:
   name: cykube-agent-configmap
 data:
   MAIN_API_URL: {{ .Values.apiUrl }}
-  AGENT_NAME: {{ .Values.agentName }}
   NAMESPACE: {{ .Values.namespace }}
   FILESTORE_SERVERS: "fs-0.agent:8100,fs-1.agent:8100"
   FILESTORE_TOTAL_TIMEOUT: "600"

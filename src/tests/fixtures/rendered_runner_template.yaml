@@ -1,0 +1,63 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+    labels:
+        branch: master
+        cykube-job: runner
+        local_id: '1'
+        project_id: '10'
+        testrun_id: '20'
+    name: cykube-run-project-1
+    namespace: cykube
+spec:
+    activeDeadlineSeconds: 3600
+    backoffLimit: 5
+    parallelism: 2
+    template:
+        metadata:
+            labels:
+                branch: master
+                local_id: '1'
+                project_id: '10'
+                testrun_id: '20'
+        spec:
+            containers:
+            -   args:
+                - run
+                - '20'
+                env:
+                -   name: CYPRESS_RETRIES
+                    value: '2'
+                -   name: TZ
+                    value: UTC
+                -   name: REDIS_PASSWORD
+                    valueFrom:
+                        secretKeyRef:
+                            key: redis-password
+                            name: cykube-redis
+                envFrom:
+                -   configMapRef:
+                        name: cykube-agent-configmap
+                -   secretRef:
+                        name: cykube-agent-secrets
+                image: cykube-runner:1234
+                imagePullPolicy: IfNotPresent
+                name: cykube-runner
+                resources:
+                    limits:
+                        cpu: '2.0'
+                        ephemeral-storage: 4.0Gi
+                        memory: 4.0G
+                    requests:
+                        cpu: '2.0'
+                        ephemeral-storage: 4.0Gi
+                        memory: 4.0G
+            priorityClassName: cykube-low-priority
+            restartPolicy: OnFailure
+            securityContext:
+                fsGroup: 10000
+                runAsGroup: 10000
+                runAsNonRoot: true
+                runAsUser: 10000
+            serviceAccountName: cykube
+    ttlSecondsAfterFinished: 3600

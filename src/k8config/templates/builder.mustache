@@ -1,0 +1,49 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+    cykube-job: "builder"
+    project_id: "{{project_id}}"
+    local_id: "{{local_id}}"
+    testrun_id: "{{testrun_id}}"
+    branch: "{{branch}}"
+  name: "cykube-build-{{project_name}}-{{local_id}}"
+  namespace: cykube
+spec:
+  backoffLimit: 5
+  ttlSecondsAfterFinished: 1200
+  activeDeadlineSeconds: {{deadline}}
+  template:
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 10000
+        runAsUser: 10000
+        runAsGroup: 10000
+      restartPolicy: Never
+      priorityClassName: "cykube-low-priority"
+      containers:
+      - name: "cykube-builder"
+        image: "{{runner_image}}"
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: "cykube-redis"
+              key: "redis-password"
+        envFrom:
+          - configMapRef:
+              name: cykube-agent-configmap
+          - secretRef:
+              name: cykube-agent-secrets
+        args: [ "build", "{{testrun_id}}"]
+        imagePullPolicy: IfNotPresent
+        resources:
+          limits:
+            cpu: "{{cpu_limit}}"
+            memory: "{{memory_limit}}G"
+            ephemeral-storage: "{{storage}}Gi"
+          requests:
+            cpu: "{{cpu_request}}"
+            memory: "{{memory_request}}G"
+            ephemeral-storage: "{{storage}}Gi"

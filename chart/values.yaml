@@ -1,5 +1,4 @@
 namespace: cykube
-agentName: "default"
 tag: "ca76ca2"
 apiUrl: "https://api.cykube.net"
 replicas: 2

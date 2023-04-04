@@ -1,16 +1,27 @@
-import asyncio
-import datetime
+import json
+import os.path
 
-from asyncmongo import runs_coll, specs_coll, messages_coll
-from bson import utc
+import yaml
+from freezegun import freeze_time
 
-from common.enums import AgentEventType, TestRunStatus
-from common.schemas import NewTestRun, AgentStatusChanged, AgentCompletedBuildMessage, AgentSpecCompleted, TestResult, \
-    SpecResult
+import messages
+from common.db import send_build_started_message, set_build_details
+from common.enums import TestRunStatus
+from common.schemas import NewTestRun
 from ws import handle_message, poll_messages
 
+FIXTURES_DIR = os.path.join(os.path.dirname(__file__), 'fixtures')
 
-async def test_start_run(mocker, testrun: NewTestRun):
+
+def compare_rendered_template(create_from_yaml_mock, jobtype: str):
+    yamlobjects = create_from_yaml_mock.call_args[1]['yaml_objects'][0]
+    asyaml = yaml.dump(yamlobjects, indent=4, sort_keys=True)
+    with open(os.path.join(FIXTURES_DIR, f'rendered_{jobtype}_template.yaml'), 'r') as f:
+        expected = f.read()
+        assert expected == asyaml
+
+
+async def test_start_run(aredis, mocker, testrun: NewTestRun):
     """
     Check that the build job would be created, and simulate the start of that job
     by changing the status to 'building'
@@ -19,69 +30,54 @@ async def test_start_run(mocker, testrun: NewTestRun):
     :return:
     """
     deletejobs = mocker.patch('ws.jobs.delete_jobs_for_branch')
-    create_build_job = mocker.patch('jobs.create_job')
-    await handle_message(dict(command='start', payload=testrun.json()))
+    create_from_yaml = mocker.patch('jobs.k8utils.create_from_yaml')
+    trjson = testrun.json()
+    await handle_message(dict(command='start', payload=trjson))
     # this will add an entry to the testrun collection
-    doc = await runs_coll().find_one({'id': 20})
-    assert doc['url'] == 'git@github.org/dummy.git'
-    # and create the build Job
-    deletejobs.assert_called_once()
-    create_build_job.assert_called_once()
+    saved_tr_json = await aredis.get(f'testrun:{testrun.id}')
+    savedtr = NewTestRun.parse_raw(saved_tr_json)
+    assert savedtr == testrun
+    # and kick off the build job
+    create_from_yaml.assert_called_once()
+    deletejobs.assert_called_once_with(testrun.id, 'master')
 
-    assert await messages_coll().count_documents({}) == 0
-
-    # update the status to building
-    msg = AgentStatusChanged(testrun_id=20,
-                             type=AgentEventType.status,
-                             status='building').json()
-
-    async def update_status():
-        await runs_coll().find_one_and_update({'id': 20}, {'$set': {'status': 'building'}})
-        await messages_coll().insert_one({'msg': msg})
-
-    add_msg = mocker.patch('main.messages.queue.add_agent_msg')
-    await asyncio.gather(poll_messages(1), update_status())
-
-    add_msg.assert_called_once_with(msg)
-    assert await messages_coll().count_documents({}) == 0
+    # mock out the actual Job to check the rendered template
+    compare_rendered_template(create_from_yaml, 'build')
 
 
-async def test_build_completed(mocker, testrun: NewTestRun):
-    # update the status to building
-    msg = AgentCompletedBuildMessage(testrun_id=testrun.id,
-                                     type=AgentEventType.build_completed,
-                                     sha='deadbeef0101',
-                                     specs=['cypress/e2e/fish/test1.spec.ts',
-                                            'cypress/e2e/fowl/test2.spec.ts'],
-                                     cache_hash='abcdef0101').json()
+@freeze_time('2022-04-03 14:10:00Z')
+async def test_build_messages(mocker, aredis, testrun: NewTestRun):
+    create_from_yaml = mocker.patch('jobs.k8utils.create_from_yaml')
 
-    await messages_coll().insert_one({'msg': msg})
-
-    add_msg = mocker.patch('main.messages.queue.add_agent_msg')
+    await aredis.set(f'testrun:{testrun.id}', testrun.json())
+    await send_build_started_message(testrun.id)
     await poll_messages(1)
+    msg = json.loads(await messages.queue.get())
+    messages.queue.task_done()
+    assert msg == {"type": "build_started", "testrun_id": 20, "started": "2022-04-03T14:10:00+00:00"}
+    # most messages are just forwarded on through the websocket, but we intercept the build completed
+    # one to enable us to kick off the runner Job
+    # The runner will have already set the build details: this is called by the runner
+    testrun.sha = 'deadbeef0101'
+    await set_build_details(testrun, ['cypress/e2e/spec1.ts', 'cypress/e2e/spec2.ts'])
+    # this will result in 2 new messages
+    specs = await aredis.smembers(f'testrun:{testrun.id}:specs')
+    assert specs == {'cypress/e2e/spec1.ts', 'cypress/e2e/spec2.ts'}
+    tr = NewTestRun.parse_raw(await aredis.get(f'testrun:{testrun.id}'))
+    assert tr.status == TestRunStatus.running
 
-    add_msg.assert_called_once_with(msg)
+    await poll_messages(2)
 
+    create_from_yaml.assert_called_once()
+    # mock out the actual Job to check the rendered template
+    compare_rendered_template(create_from_yaml, 'runner')
 
-async def test_spec_completed(mocker, testrun: NewTestRun):
-    dt = datetime.datetime(2023, 3, 1, 10, 0, 0, tzinfo=utc)
-    await runs_coll().insert_one(
-        {'id': 20,
-         'started': dt,
-         'failures': 1,
-         'sha': 'deadbeef0101',
-         'status': 'running'})
-    await specs_coll().insert_one({'trid': testrun.id, 'file': 'spec1.ts', 'started': dt, 'finished': dt})
-    msg = AgentSpecCompleted(testrun_id=20,
-                             type=AgentEventType.spec_completed,
-                             finished=dt,
-                             file='spec1.ts',
-                             result=SpecResult(tests=[TestResult(title="Title",
-                                                                 context="Context",
-                                                                 status=TestRunStatus.failed)])).json()
-    await messages_coll().insert_one({'msg': msg})
+    # two messages will be sent through the websocket
+    msg1 = json.loads(await messages.queue.get())
+    messages.queue.task_done()
+    assert msg1 == {'type': 'build_completed', 'testrun_id': 20, 'sha': 'deadbeef0101',
+                    'finished': '2022-04-03T14:10:00+00:00', 'specs': ['cypress/e2e/spec1.ts', 'cypress/e2e/spec2.ts']}
+    msg2 = json.loads(await messages.queue.get())
+    messages.queue.task_done()
+    assert msg2 == {'type': 'status', 'testrun_id': 20, 'status': 'running'}
 
-    add_msg = mocker.patch('main.messages.queue.add_agent_msg')
-    await poll_messages(1)
-
-    add_msg.assert_called_once_with(msg)

@@ -54,6 +54,13 @@ async def hc(request):
 
 @routes.get('/fs/{filename}')
 async def server(request):
+    """
+    Fetching from the server rather than something like Nginx as a sidecar isn't the most efficient technique,
+    but it does mean one less container to nail up. Most of the time the agent is doing nothing,
+    so it's better to err on the side of fewer containers for lower running costs
+    :param request:
+    :return:
+    """
     filename = request.match_info['filename']
     path = await get_path_if_exists(filename)
     if not path:
@@ -63,10 +70,21 @@ async def server(request):
 
 @routes.get('/fs')
 async def get_directory(request):
+    """
+    Return the cache list
+    :param request:
+    :return:
+    """
     return web.json_response([x for x in os.listdir(settings.CACHE_DIR) if not x.startswith('.')])
 
 
 async def prune_cache(app, size: int):
+    """
+    Simple LRU cache semantics
+    :param app:
+    :param size:
+    :return:
+    """
     target_size = settings.FILESTORE_CACHE_SIZE - size
     file_and_stat = []
     for f in await aiofiles.os.listdir(settings.CACHE_DIR):
@@ -83,6 +101,12 @@ async def prune_cache(app, size: int):
 
 @routes.post('/fs')
 async def upload(request):
+    """
+    Store a file in the cache
+    :param request:
+    :return:
+    """
+
     reader = await request.multipart()
     field = await reader.next()
     assert field.name == 'file'
@@ -117,6 +141,11 @@ async def upload(request):
 
 @routes.delete('/fs/{filename}')
 async def delete_file(request):
+    """
+    Delete from the cache
+    :param request:
+    :return:
+    """
     filename = request.match_info['filename']
     path = await get_path_if_exists(filename)
     if not path:
@@ -126,6 +155,11 @@ async def delete_file(request):
 
 
 def get_sync_hosts(app):
+    """
+    Determine all nodes. In practice we are likely to just have 2 agents and therefore one other node
+    :param app:
+    :return:
+    """
     # filter out ourselves
     hosts = app['synchosts'] = []
     for h in settings.FILESTORE_SERVERS.split(','):
@@ -141,6 +175,13 @@ async def on_shutdown(app):
 
 
 async def catch_up(app):
+    """
+    Very simple sync mechanism. Fetches the directory of files from all the other nodes
+    and then fetches missing files
+    :param app:
+    :return:
+    """
+
     while True:
         for host in app['synchosts']:
             incache = set(await aiofiles.os.listdir(settings.CACHE_DIR))
@@ -154,10 +195,10 @@ async def catch_up(app):
 
                 topull = files - incache
                 if topull:
-                    # pull files from the load balancer if they are in the master index but not local
+                    # pull files from the node that are not present locally
                     for fname in topull:
                         # load it from the cache
-                        logger.debug(f"Pulling {fname } from {host}")
+                        logger.debug(f"Pulling {fname} from {host}")
                         async with session().get(f'{host}/fs/{fname}') as resp:
                             destpath = os.path.join(settings.CACHE_DIR, f'.{fname}')
                             async with aiofiles.open(destpath, 'wb') as f:

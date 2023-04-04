@@ -1,0 +1,51 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+    labels:
+        branch: master
+        cykube-job: builder
+        local_id: '1'
+        project_id: '10'
+        testrun_id: '20'
+    name: cykube-build-project-1
+    namespace: cykube
+spec:
+    activeDeadlineSeconds: 600
+    backoffLimit: 5
+    template:
+        spec:
+            containers:
+            -   args:
+                - build
+                - '20'
+                env:
+                -   name: REDIS_PASSWORD
+                    valueFrom:
+                        secretKeyRef:
+                            key: redis-password
+                            name: cykube-redis
+                envFrom:
+                -   configMapRef:
+                        name: cykube-agent-configmap
+                -   secretRef:
+                        name: cykube-agent-secrets
+                image: cykube-runner:1234
+                imagePullPolicy: IfNotPresent
+                name: cykube-builder
+                resources:
+                    limits:
+                        cpu: '2.0'
+                        ephemeral-storage: 10.0Gi
+                        memory: 4.0G
+                    requests:
+                        cpu: '2.0'
+                        ephemeral-storage: 10.0Gi
+                        memory: 4.0G
+            priorityClassName: cykube-low-priority
+            restartPolicy: Never
+            securityContext:
+                fsGroup: 10000
+                runAsGroup: 10000
+                runAsNonRoot: true
+                runAsUser: 10000
+    ttlSecondsAfterFinished: 1200

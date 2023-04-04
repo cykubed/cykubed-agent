@@ -458,24 +458,19 @@ files = [
 python-dateutil = ">=2.4"
 
 [[package]]
-name = "fakeredis"
-version = "2.10.2"
-description = "Fake implementation of redis API for testing purposes."
+name = "freezegun"
+version = "1.2.2"
+description = "Let your Python tests travel through time"
 category = "dev"
 optional = false
-python-versions = ">=3.8,<4.0"
+python-versions = ">=3.6"
 files = [
-    {file = "fakeredis-2.10.2-py3-none-any.whl", hash = "sha256:6377c27bc557be46089381d43fd670aece46672d091a494f73ab4c96c34022b3"},
-    {file = "fakeredis-2.10.2.tar.gz", hash = "sha256:e2a95fbda7b11188c117d68b0f9eecc00600cb449ccf3362a15fc03cf9e2477d"},
+    {file = "freezegun-1.2.2-py3-none-any.whl", hash = "sha256:ea1b963b993cb9ea195adbd893a48d573fda951b0da64f60883d7e988b606c9f"},
+    {file = "freezegun-1.2.2.tar.gz", hash = "sha256:cd22d1ba06941384410cd967d8a99d5ae2442f57dfafeff2fda5de8dc5c05446"},
 ]
 
 [package.dependencies]
-redis = ">=4,<5"
-sortedcontainers = ">=2.4,<3.0"
-
-[package.extras]
-json = ["jsonpath-ng (>=1.5,<2.0)"]
-lua = ["lupa (>=1.14,<2.0)"]
+python-dateutil = ">=2.7"
 
 [[package]]
 name = "frozenlist"
@@ -1571,18 +1566,6 @@ files = [
 ]
 
 [[package]]
-name = "sortedcontainers"
-version = "2.4.0"
-description = "Sorted Containers -- Sorted List, Sorted Dict, Sorted Set"
-category = "dev"
-optional = false
-python-versions = "*"
-files = [
-    {file = "sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0"},
-    {file = "sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88"},
-]
-
-[[package]]
 name = "stack-data"
 version = "0.6.2"
 description = "Extract data from python stack frames and tracebacks for informative displays"
@@ -1861,4 +1844,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "ab6d051fcfc2c70578776319de30bbe805259ded5649255de663d2b77bb052ff"
+content-hash = "f7daa188f735af28d239a90da20dda90680d2fbc2f6689a891e570337d55f9e1"

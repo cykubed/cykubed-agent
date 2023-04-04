@@ -10,11 +10,10 @@ from redis import ResponseError
 from websockets.exceptions import ConnectionClosedError, InvalidStatusCode, ConnectionClosed
 
 import jobs
-import messages
 from common import db
 from common.db import async_redis
 from common.enums import AgentEventType
-from common.schemas import NewTestRun, AgentEvent, AgentCompletedBuildMessage
+from common.schemas import NewTestRun, AgentCompletedBuildMessage, AgentEvent
 from common.settings import settings
 from messages import queue
 
@@ -31,7 +30,11 @@ def shutdown():
     _running = False
 
 
-async def start_run(tr: NewTestRun):
+async def handle_start_run(tr: NewTestRun):
+    """
+    Start a test run
+    :param tr: new test run
+    """
     try:
         # Store in Redis and kick off a new build job
         await db.new_testrun(tr)
@@ -43,15 +46,20 @@ async def start_run(tr: NewTestRun):
             await queue.send_status_update(tr.id, 'failed')
 
 
-async def delete_project(project_id: int):
+async def handle_delete_project(project_id: int):
     if settings.K8:
         jobs.delete_jobs_for_project(project_id)
 
 
-async def cancel_run(trid: int):
+async def handle_cancel_run(trid: int):
     if settings.K8:
         jobs.delete_jobs(trid)
     await db.cancel_testrun(trid)
+
+
+async def handle_build_completed(msg: AgentCompletedBuildMessage):
+    tr = await db.get_testrun(msg.testrun_id)
+    await jobs.create_runner_jobs(tr, msg)
 
 
 async def handle_message(data: dict):
@@ -63,11 +71,11 @@ async def handle_message(data: dict):
     cmd = data['command']
     payload = data['payload']
     if cmd == 'start':
-        await start_run(NewTestRun.parse_raw(payload))
+        await handle_start_run(NewTestRun.parse_raw(payload))
     elif cmd == 'delete_project':
-        await delete_project(payload['project_id'])
+        await handle_delete_project(payload['project_id'])
     elif cmd == 'cancel':
-        await cancel_run(payload['testrun_id'])
+        await handle_cancel_run(payload['testrun_id'])
 
 
 async def consumer_handler(websocket):
@@ -115,8 +123,7 @@ async def connect(app):
             # grab a token
             try:
                 resp = await client.post(f'{settings.MAIN_API_URL}/agent/wsconnect',
-                                         json={'host_name': app['hostname'],
-                                               'agent_name': settings.AGENT_NAME})
+                                         json={'host_name': app['hostname']})
                 if resp.status_code != 200:
                     await retrier.retry()
                     continue
@@ -161,11 +168,6 @@ async def connect(app):
                     await sleep(10)
 
 
-async def handle_build_completed(msg: AgentCompletedBuildMessage):
-    tr = await db.get_testrun(msg.testrun_id)
-    jobs.create_runner_jobs(tr)
-
-
 async def poll_messages(max_messages=None):
     """
     Poll the message queue, forwarding them all to the websocket
@@ -180,7 +182,7 @@ async def poll_messages(max_messages=None):
             if msglist is not None:
                 for msg in msglist:
                     event = AgentEvent.parse_raw(msg)
-                    messages.queue.add(msg)
+                    queue.add(msg)
                     if event.type == AgentEventType.build_completed:
                         await handle_build_completed(AgentCompletedBuildMessage.parse_raw(msg))
                     sent += 1

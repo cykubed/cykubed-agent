@@ -45,18 +45,6 @@ async def app_factory(cache_size: int):
     app['hostname'] = hostname
     app['stats'] = {'size': cache_size}
 
-    # logger.info(f'Cache is currently {cache_size} bytes ({settings.FILESTORE_CACHE_SIZE - cache_size} remaining)')
-    # logger_format = (
-    #     "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
-    #     "<level>{level: <8}</level> | "
-    #     "{extra[hostname]: ^12} | "
-    #     # "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
-    #     "<level>{message}</level>"
-    # )
-    # logger.configure(extra=dict(hostname=hostname))
-    # logger.remove()
-    # logger.add(sys.stderr, format=logger_format)
-
     logger.info("Starting cache replica")
 
     fsserver.get_sync_hosts(app)
