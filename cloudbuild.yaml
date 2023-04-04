@@ -19,7 +19,7 @@ steps:
    args:
      - '-c'
      - |-
-       http POST https://api.cykube.net/api/admin/bump-agent-minor-version -A bearer -a "$CYKUBE_API_TOKEN" -b > /workspace/version.txt
+       http POST https://api.cykube.net/api/admin/bump-agent-minor-version -A bearer -a "$$CYKUBE_API_TOKEN" -b > /workspace/version.txt
    secretEnv: ['CYKUBE_API_TOKEN']
 
  - name: 'gcr.io/cloud-builders/docker'
