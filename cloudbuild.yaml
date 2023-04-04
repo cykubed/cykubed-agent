@@ -60,8 +60,7 @@ steps:
    args:
      - '-c'
      - |-
-       export VERSION=$(cat /workspace/version.txt) &&
-       curl -X POST -H 'Content-type: application/json' --data '{"text":"Cykube agent $VERSION ($SHORT_SHA) published"}' https://hooks.slack.com/services/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
+       curl -X POST -H 'Content-type: application/json' --data '{"text":"Cykube agent $(cat /workspace/version.txt) ($SHORT_SHA) published"}' https://hooks.slack.com/services/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
 
 availableSecrets:
   secretManager:
