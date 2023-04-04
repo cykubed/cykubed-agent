@@ -13,13 +13,33 @@ steps:
    args: ['-c', 'docker login --username=nickbrookck --password=$$PASSWORD']
    secretEnv: ['PASSWORD']
 
- - name: 'gcr.io/cloud-builders/docker'
-   entrypoint: 'bash'
-   args: ['-c', 'docker build -t nickbrookck/cykube-agent:$SHORT_SHA .']
+ - name: alpine/httpie
+   id: Get next version number
+   entrypoint: sh
+   args:
+     - '-c'
+     - |-
+       http POST https://api.cykube.net/api/admin/bump-agent-minor-version -A bearer -a "$CYKUBE_API_TOKEN" -b > /workspace/version.txt
+   secretEnv: ['CYKUBE_API_TOKEN']
 
  - name: 'gcr.io/cloud-builders/docker'
    entrypoint: 'bash'
-   args: ['-c', 'docker push nickbrookck/cykube-agent:$SHORT_SHA']
+   id: 'Build image'
+   args:
+     - '-c'
+     - |-       
+       docker build -t nickbrookck/cykube-agent:$(cat /workspace/version.txt) .
+
+ - name: 'gcr.io/cloud-builders/docker'
+   entrypoint: 'bash'
+   id: 'Push image'
+   args:
+     - '-c'
+     - |-       
+       docker push nickbrookck/cykube-agent:$(cat /workspace/version.txt) .
+
+ - name: 'bash'
+   args: ['./scripts/publish-chart.sh']
 
 # - name: gcr.io/cloud-builders/kubectl
 #   id: Deploy
@@ -36,9 +56,16 @@ steps:
 
  - name: gcr.io/cloud-builders/curl
    id: Notify
-   args: ['-X', 'POST', '-H', 'Content-type: application/json', '--data', '{"text":"Cykube Agent $SHORT_SHA redeployed"}', 'https://hooks.slack.com/services/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']
+   entrypoint: 'bash'
+   args:
+     - '-c'
+     - |-
+       export VERSION=$(cat /workspace/version.txt) &&
+       curl -X POST -H 'Content-type: application/json' --data '{"text":"Cykube agent $VERSION ($SHORT_SHA) published"}' https://hooks.slack.com/services/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
 
 availableSecrets:
   secretManager:
+    - versionName: projects/1090211518452/secrets/cykube-api-token/versions/4
+      env: 'CYKUBE_API_TOKEN'
     - versionName: projects/1090211518452/secrets/docker-hub-password/versions/1
       env: 'PASSWORD'
