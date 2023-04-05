@@ -41,7 +41,7 @@ spec:
         fsGroup: 10000
       containers:
         - name: server
-          image: "nickbrookck/cykube-agent:{{ .Values.tag }}"
+          image: "europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:{{ .Values.tag }}"
           imagePullPolicy: IfNotPresent
           resources:
             requests:
