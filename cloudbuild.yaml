@@ -39,8 +39,14 @@ steps:
      - |-       
        docker push "nickbrookck/cykube-agent:$(cat /workspace/version.txt)" 
 
- - name: 'bash'
-   args: ['./scripts/publish-chart.sh']
+ - name: 'gcr.io/cloud-builders/helm'
+   entrypoint: 'bash'
+   id: 'Publish chart'
+   args:
+     - '-c'
+     - |-
+       npm i -g wrangler &&
+       sh ./scripts/publish-chart.sh
 
  - name: alpine/httpie
    id: Set current version number
