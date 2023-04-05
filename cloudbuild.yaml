@@ -28,7 +28,8 @@ steps:
    args:
      - '-c'
      - |-       
-       docker build -t nickbrookck/cykube-agent:$(cat /workspace/version.txt) .
+       echo "$(cat /workspace/version.txt)" && 
+       docker build -t "nickbrookck/cykube-agent:$(cat /workspace/version.txt)" .
 
  - name: 'gcr.io/cloud-builders/docker'
    entrypoint: 'bash'
