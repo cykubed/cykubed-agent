@@ -66,7 +66,6 @@ def start(port: int):
 
 
 if __name__ == "__main__":
-
     if settings.SENTRY_DSN:
         sentry_sdk.init(
             dsn=settings.SENTRY_DSN,
