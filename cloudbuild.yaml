@@ -19,7 +19,7 @@ steps:
    args:
      - '-c'
      - |-
-       http POST https://api.cykube.net/api/admin/bump-agent-minor-version -A bearer -a $$CYKUBE_API_TOKEN -b > /workspace/version.txt
+       http https://api.cykube.net/admin/image/agent/next-version/minor -A bearer -a $$CYKUBE_API_TOKEN -b > /workspace/version.txt
    secretEnv: ['CYKUBE_API_TOKEN']
 
  - name: 'gcr.io/cloud-builders/docker'
@@ -40,6 +40,15 @@ steps:
 
  - name: 'bash'
    args: ['./scripts/publish-chart.sh']
+
+ - name: alpine/httpie
+   id: Set current version number
+   entrypoint: sh
+   args:
+     - '-c'
+     - |-
+       http POST https://api.cykube.net/admin/image/agent/current-version/$(cat /workspace/version.txt) -A bearer -a $$CYKUBE_API_TOKEN
+   secretEnv: ['CYKUBE_API_TOKEN']
 
 # - name: gcr.io/cloud-builders/kubectl
 #   id: Deploy
