@@ -19,7 +19,7 @@ steps:
    args:
      - '-c'
      - |-
-       http GET https://api.cykube.net/admin/image/agent/next-version/minor -A bearer -a $$CYKUBE_API_TOKEN -b > /workspace/version.txt
+       http GET https://api.cykube.net/admin/image/agent/next-version/minor -A bearer -a $$CYKUBE_API_TOKEN -b > /workspace/version.txt && echo "$(cat /workspace/version.txt)"
    secretEnv: ['CYKUBE_API_TOKEN']
 
  - name: 'gcr.io/cloud-builders/docker'
@@ -28,7 +28,7 @@ steps:
    args:
      - '-c'
      - |-       
-       echo "$(cat /workspace/version.txt)" && 
+       echo "Building nickbrookck/cykube-agent:$(cat /workspace/version.txt)" && 
        docker build -t "nickbrookck/cykube-agent:$(cat /workspace/version.txt)" .
 
  - name: 'gcr.io/cloud-builders/docker'
@@ -37,7 +37,7 @@ steps:
    args:
      - '-c'
      - |-       
-       docker push nickbrookck/cykube-agent:$(cat /workspace/version.txt) .
+       docker push "nickbrookck/cykube-agent:$(cat /workspace/version.txt)" .
 
  - name: 'bash'
    args: ['./scripts/publish-chart.sh']
@@ -48,7 +48,7 @@ steps:
    args:
      - '-c'
      - |-
-       http POST https://api.cykube.net/admin/image/agent/current-version/$(cat /workspace/version.txt) -A bearer -a $$CYKUBE_API_TOKEN
+       http POST "https://api.cykube.net/admin/image/agent/current-version/$(cat /workspace/version.txt)" -A bearer -a $$CYKUBE_API_TOKEN
    secretEnv: ['CYKUBE_API_TOKEN']
 
 # - name: gcr.io/cloud-builders/kubectl

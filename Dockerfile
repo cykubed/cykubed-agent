@@ -15,8 +15,7 @@ ENV PATH="/home/cykube/.local/bin:$PATH"
 RUN pip install poetry==1.3.1
 COPY pyproject.toml poetry.lock ./
 RUN poetry config installer.max-workers 10
-# when this goes to prod switch to --without=dev
-RUN poetry install --no-root --with=dev
+RUN poetry install --no-root --without=dev
 
 FROM python:3.11-slim-buster
 
