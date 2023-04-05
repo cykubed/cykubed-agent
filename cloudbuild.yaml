@@ -38,10 +38,9 @@ steps:
    id: 'Publish chart'
    args:
      - '-c'
-     - |-              
-       export VERSION=$(cat /workspace/version.txt) &&
+     - |-                     
        sh ./scripts/build-chart.sh &&
-       helm push build/dist/agent-"$VERSION".tgz oci://europe-west2-docker.pkg.dev/cykubeapp/helm-charts
+       helm push "build/dist/agent-$(cat /workspace/version.txt).tgz" oci://europe-west2-docker.pkg.dev/cykubeapp/helm-charts
 
  - name: alpine/httpie
    id: Set current version number

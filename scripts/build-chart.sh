@@ -1,3 +1,4 @@
+VERSION=$(cat /workspace/version.txt)
 rm -fr build/*
 mkdir -p build/chart
 mkdir -p build/dist
