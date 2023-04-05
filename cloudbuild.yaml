@@ -4,14 +4,9 @@ steps:
    args:
    - '-c'
    - |
-     git config -f .gitmodules submodule.src/common.url https://source.developers.google.com/p/iron-lodge-372417/r/github_cykube_cykube-common
+     git config -f .gitmodules submodule.src/common.url https://source.developers.google.com/p/cykubeapp/r/github_cykube_cykube-common
      git submodule init
      git submodule update
-
- - name: 'gcr.io/cloud-builders/docker'
-   entrypoint: 'bash'
-   args: ['-c', 'docker login --username=nickbrookck --password=$$PASSWORD']
-   secretEnv: ['PASSWORD']
 
  - name: alpine/httpie
    id: Get next version number
@@ -28,25 +23,25 @@ steps:
    args:
      - '-c'
      - |-       
-       echo "Building nickbrookck/cykube-agent:$(cat /workspace/version.txt)" && 
-       docker build -t "nickbrookck/cykube-agent:$(cat /workspace/version.txt)" .
+       echo "Building europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:$(cat /workspace/version.txt)" && 
+       docker build -t "europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:$(cat /workspace/version.txt)" .
 
  - name: 'gcr.io/cloud-builders/docker'
-   entrypoint: 'bash'
    id: 'Push image'
    args:
      - '-c'
      - |-       
-       docker push "nickbrookck/cykube-agent:$(cat /workspace/version.txt)" 
+       docker push "europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:$(cat /workspace/version.txt)" 
 
- - name: 'gcr.io/cloud-builders/helm'
+ - name: 'gcr.io/$PROJECT_ID/helm:3.7.0'
    entrypoint: 'bash'
    id: 'Publish chart'
    args:
      - '-c'
-     - |-
-       npm i -g wrangler &&
-       sh ./scripts/publish-chart.sh
+     - |-              
+       export VERSION=$(cat /workspace/version.txt) &&
+       sh ./scripts/build-chart.sh &&
+       helm push build/dist/agent-"$VERSION".tgz oci://europe-west2-docker.pkg.dev/cykubeapp/helm-charts
 
  - name: alpine/httpie
    id: Set current version number
@@ -80,7 +75,5 @@ steps:
 
 availableSecrets:
   secretManager:
-    - versionName: projects/1090211518452/secrets/cykube-api-token/versions/4
+    - versionName: projects/489847359241/secrets/cykube-api-token/versions/1
       env: 'CYKUBE_API_TOKEN'
-    - versionName: projects/1090211518452/secrets/docker-hub-password/versions/1
-      env: 'PASSWORD'
