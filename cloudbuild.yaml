@@ -48,6 +48,7 @@ steps:
    args:
      - '-c'
      - |-
+       npm i -g wrangler &&
        wrangler r2 object put charts/index.yaml --file=/workspace/build/dist/index.yaml && 
        wrangler r2 object put "charts/agent-$(cat /workspace/version.txt).tgz" --file="/workspace/build/dist/agent-$(cat /workspace/version.txt)".tgz
    secretEnv: ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID']
