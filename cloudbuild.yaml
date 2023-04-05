@@ -87,7 +87,7 @@ availableSecrets:
   secretManager:
     - versionName: projects/489847359241/secrets/cykube-api-token/versions/1
       env: 'CYKUBE_API_TOKEN'
-    - versionName: projects/489847359241/secrets/cloudflare_api_token/versions/1
+    - versionName: projects/489847359241/secrets/cloudflare_api_token/versions/2
       env: 'CLOUDFLARE_API_TOKEN'
     - versionName: projects/489847359241/secrets/cloudflare_account_id/versions/1
       env: 'CLOUDFLARE_ACCOUNT_ID'
