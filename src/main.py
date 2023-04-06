@@ -3,6 +3,7 @@ import asyncio
 import os
 import sys
 
+import httpx
 import sentry_sdk
 from aiohttp import web
 from loguru import logger
@@ -10,26 +11,30 @@ from sentry_sdk.integrations.asyncio import AsyncioIntegration
 from sentry_sdk.integrations.redis import RedisIntegration
 
 import fsserver
+import messages
 import ws
 from common import k8common
 from common.db import sync_redis
 from common.settings import settings
 from logs import configure_logging
-from messages import queue
 from ws import shutdown
 
 
 async def background_tasks(app):
-    await queue.init()
     app['catch_up'] = asyncio.create_task(fsserver.catch_up(app))
     app['connect'] = asyncio.create_task(ws.connect(app))
-    app['poll_messages'] = asyncio.create_task(ws.poll_messages())
+    app['poll_messages'] = asyncio.create_task(ws.poll_messages(app=app))
 
     yield
 
     for x in ['catch_up', 'connect', 'poll_messages']:
         app[x].cancel()
         await app[x]
+
+
+async def close_client(app):
+    if 'httpclient' in app:
+        await app['httpclient'].aclose()
 
 
 async def app_factory(cache_size: int):
@@ -45,12 +50,20 @@ async def app_factory(cache_size: int):
     app['hostname'] = hostname
     app['stats'] = {'size': cache_size}
 
+    await messages.queue.init()
+
+    transport = httpx.AsyncHTTPTransport(retries=settings.MAX_HTTP_RETRIES)
+    app['httpclient'] = httpx.AsyncClient(transport=transport,
+                                          base_url=settings.MAIN_API_URL,
+                                          headers={'Authorization': f'Bearer {settings.API_TOKEN}'})
+
     logger.info("Starting cache replica")
 
     fsserver.get_sync_hosts(app)
     app.add_routes(fsserver.routes)
     app.cleanup_ctx.append(background_tasks)
     app.on_shutdown.append(fsserver.on_shutdown)
+    app.on_shutdown.append(close_client)
     return app
 
 

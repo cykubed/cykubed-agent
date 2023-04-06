@@ -4,8 +4,8 @@ from asyncio import QueueFull
 from loguru import logger
 
 from common import schemas
-from common.enums import TestRunStatus, AgentEventType
-from common.schemas import AgentStatusChanged, AppLogMessage
+from common.enums import AgentEventType
+from common.schemas import AppLogMessage
 
 
 class MessageQueue:
@@ -18,7 +18,7 @@ class MessageQueue:
         We can't do this in the constructor as it needs to be inside an event loop
         (and it's easier if we use the singleton pattern)
         """
-        self.queue = asyncio.Queue(maxsize=1000)
+        self.queue = asyncio.Queue(maxsize=2000)
 
     def add(self, msg: str):
         """
@@ -29,11 +29,6 @@ class MessageQueue:
             self.queue.put_nowait(msg)
         except QueueFull:
             logger.error("Log message queue full - dropping message")
-
-    def send_status_update(self, trid: int, status: TestRunStatus):
-        self.add(AgentStatusChanged(type=AgentEventType.status,
-                                    testrun_id=trid,
-                                    status=status).json())
 
     def send_log(self, source: str, testrun_id: int, msg):
         """
