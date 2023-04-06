@@ -12,7 +12,7 @@ import jobs
 from common import db
 from common.db import async_redis
 from common.enums import AgentEventType
-from common.schemas import NewTestRun, AgentEvent
+from common.schemas import NewTestRun, AgentEvent, AgentCompletedBuildMessage
 from common.settings import settings
 from messages import queue
 
@@ -168,32 +168,37 @@ async def poll_messages(app, max_messages=None):
     """
     sent = 0
     logger.info("Start polling messages from Redis")
-    r = async_redis()
+    redis = async_redis()
 
     while is_running():
         try:
-            msglist = await r.lpop('messages', 100)
+            msglist = await redis.lpop('messages', 100)
             if msglist is not None:
-                for msg in msglist:
-                    event = AgentEvent.parse_raw(msg)
+                for rawmsg in msglist:
+                    event = AgentEvent.parse_raw(rawmsg)
                     if event.type == AgentEventType.build_completed:
                         # build completed - create runner jobs
-                        tr = await db.get_testrun(msg.testrun_id)
-                        await jobs.create_runner_jobs(tr, msg)
+                        buildmsg = AgentCompletedBuildMessage.parse_raw(rawmsg)
+                        tr = await db.get_testrun(buildmsg.testrun_id)
+                        await jobs.create_runner_jobs(tr, buildmsg)
                         # and notify the server
-                        r = await app['httpclient'].post(f'/agent/testrun/{tr.id}/build-complated',
-                                                  content=msg.encode())
-                        if r.status_code != 200:
-                            logger.error(f'Failed to update server that build was completed: {r.status_code}: {r.text}')
+                        resp = await app['httpclient'].post(f'/agent/testrun/{tr.id}/build-completed',
+                                                           content=rawmsg.encode())
+                        if resp.status_code != 200:
+                            logger.error(f'Failed to update server that build was completed:'
+                                         f' {resp.status_code}: {resp.text}')
                     else:
                         # otherwise it must be a log message
-                        queue.add(msg)
+                        queue.add(rawmsg)
                     sent += 1
                     if max_messages and sent == max_messages:
                         # for easier testing
                         return
-        except ResponseError as ex:
+        except ResponseError:
             if not is_running():
                 return
             logger.exception("Failed to fetch messages from Redis")
+        except Exception as ex:
+            logger.exception("Unexpected exception during message poll")
+
         await asyncio.sleep(1)
