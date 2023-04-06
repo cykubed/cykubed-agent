@@ -198,7 +198,11 @@ async def poll_messages(app, max_messages=None):
             if not is_running():
                 return
             logger.exception("Failed to fetch messages from Redis")
+            if max_messages:
+                return
         except Exception as ex:
             logger.exception("Unexpected exception during message poll")
+            if max_messages:
+                return
 
         await asyncio.sleep(1)

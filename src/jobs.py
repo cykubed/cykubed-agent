@@ -28,16 +28,12 @@ async def get_job_template(name: str) -> str:
         return await f.read()
 
 
-async def get_job_templates():
-    return schemas.JobTemplates(builder=await get_job_template('builder'),
-                                runner=await get_job_template('runner'))
-
-
 async def create_job(jobtype: str, testrun: schemas.NewTestRun,
                      msg: schemas.AgentCompletedBuildMessage = None):
     """
     Render the Kubernetes Job template into Python objects, ready for feeding into "create_from_yaml"
 
+    :param msg:
     :param agent:
     :param jobtype:
     :param testrun:

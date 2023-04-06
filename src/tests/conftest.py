@@ -1,6 +1,7 @@
 import shutil
 import tempfile
 
+import httpx
 import pytest
 from loguru import logger
 from redis.asyncio import Redis as AsyncRedis
@@ -30,6 +31,11 @@ async def init(aredis):
     yield
     shutil.rmtree(settings.CACHE_DIR)
     await aredis.flushdb()
+
+
+@pytest.fixture()
+async def mockapp():
+    return {'httpclient': httpx.AsyncClient(base_url='http://localhost:5050')}
 
 
 @pytest.fixture()
