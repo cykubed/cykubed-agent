@@ -3,6 +3,7 @@ from __future__ import annotations
 import loguru
 from loguru import logger
 
+from common.cloudlogging import configure_stackdriver_logging
 from messages import queue
 
 
@@ -22,5 +23,6 @@ def rest_logsink(msg: loguru.Message):
 
 
 def configure_logging():
+    configure_stackdriver_logging('cykube-agent')
     logger.add(rest_logsink,
                format="{message}", level="INFO")
