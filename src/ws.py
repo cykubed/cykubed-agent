@@ -8,6 +8,7 @@ from loguru import logger
 from redis import ResponseError
 from websockets.exceptions import ConnectionClosedError, InvalidStatusCode, ConnectionClosed
 
+import common.redisutils
 import db
 import jobs
 from common.enums import AgentEventType
@@ -179,7 +180,7 @@ async def poll_messages(app, max_messages=None):
                     if event.type == AgentEventType.build_completed:
                         # build completed - create runner jobs
                         buildmsg = AgentCompletedBuildMessage.parse_raw(rawmsg)
-                        tr = await db.get_testrun(buildmsg.testrun_id)
+                        tr = await common.redisutils.get_testrun(buildmsg.testrun_id)
                         await jobs.create_runner_jobs(tr, buildmsg)
                         # and notify the server
                         resp = await app['httpclient'].post(f'/agent/testrun/{tr.id}/build-completed',

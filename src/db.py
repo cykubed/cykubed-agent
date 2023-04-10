@@ -11,13 +11,6 @@ async def new_testrun(tr: NewTestRun):
     await async_redis().set(f'testrun:{tr.id}', tr.json())
 
 
-async def get_testrun(id: int) -> NewTestRun | None:
-    d = await async_redis().get(f'testrun:{id}')
-    if d:
-        return NewTestRun.parse_raw(d)
-    return None
-
-
 async def cancel_testrun(trid: int):
     """
     Just remove the keys
