@@ -5,8 +5,8 @@ import respx
 import yaml
 from freezegun import freeze_time
 
-from common.db import send_message
 from common.enums import TestRunStatus, AgentEventType
+from common.redisutils import async_redis
 from common.schemas import NewTestRun, AgentCompletedBuildMessage
 from common.utils import utcnow
 from ws import handle_message, poll_messages
@@ -65,7 +65,7 @@ async def test_build_completed(mocker, aredis, mockapp, testrun: NewTestRun):
     route = respx.post(f'http://localhost:5050/agent/testrun/20/build-completed')
 
     async with respx.mock:
-        await send_message(msg)
+        await async_redis().rpush('messages', msg.json())
         await poll_messages(mockapp, 1)
         assert route.called
         assert route.calls[0].request.method == 'POST'

@@ -15,7 +15,7 @@ from common.settings import settings
 @pytest.fixture(autouse=True)
 def aredis(mocker):
     r = AsyncRedis(host='localhost', db=1, decode_responses=True)
-    mocker.patch('common.db.async_redis', return_value=r)
+    mocker.patch('db.async_redis', return_value=r)
     return r
 
 

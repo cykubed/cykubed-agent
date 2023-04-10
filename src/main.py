@@ -14,7 +14,7 @@ import fsserver
 import messages
 import ws
 from common import k8common
-from common.db import sync_redis
+from common.redisutils import sync_redis
 from common.settings import settings
 from logs import configure_logging
 from ws import shutdown

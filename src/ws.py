@@ -8,10 +8,10 @@ from loguru import logger
 from redis import ResponseError
 from websockets.exceptions import ConnectionClosedError, InvalidStatusCode, ConnectionClosed
 
+import db
 import jobs
-from common import db
-from common.db import async_redis
 from common.enums import AgentEventType
+from common.redisutils import async_redis
 from common.schemas import NewTestRun, AgentEvent, AgentCompletedBuildMessage
 from common.settings import settings
 from messages import queue
