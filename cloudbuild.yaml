@@ -14,7 +14,7 @@ steps:
    args:
      - '-c'
      - |-
-       http GET https://api.cykube.net/admin/image/agent/next-version/minor -A bearer -a $$CYKUBE_API_TOKEN -b > /workspace/version.txt && echo "$(cat /workspace/version.txt)"
+       http GET https://api.cykubed.com/admin/image/agent/next-version/minor -A bearer -a $$CYKUBE_API_TOKEN -b > /workspace/version.txt && echo "$(cat /workspace/version.txt)"
    secretEnv: ['CYKUBE_API_TOKEN']
 
  - name: 'gcr.io/cloud-builders/docker'
@@ -59,7 +59,7 @@ steps:
    args:
      - '-c'
      - |-
-       http POST "https://api.cykube.net/admin/image/agent/current-version/$(cat /workspace/version.txt)" -A bearer -a $$CYKUBE_API_TOKEN
+       http POST "https://api.cykubed.com/admin/image/agent/current-version/$(cat /workspace/version.txt)" -A bearer -a $$CYKUBE_API_TOKEN
    secretEnv: ['CYKUBE_API_TOKEN']
 
  - name: alpine/httpie

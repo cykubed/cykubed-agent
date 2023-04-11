@@ -11,23 +11,12 @@ from websockets.exceptions import ConnectionClosedError, InvalidStatusCode, Conn
 import common.redisutils
 import db
 import jobs
+from app import is_running
 from common.enums import AgentEventType
 from common.redisutils import async_redis
 from common.schemas import NewTestRun, AgentEvent, AgentCompletedBuildMessage
 from common.settings import settings
 from messages import queue
-
-_running = True
-
-
-def is_running() -> bool:
-    global _running
-    return _running
-
-
-def shutdown():
-    global _running
-    _running = False
 
 
 async def handle_start_run(app, tr: NewTestRun):

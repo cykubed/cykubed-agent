@@ -83,6 +83,23 @@ async def create_job(jobtype: str, testrun: schemas.NewTestRun,
         raise InvalidTemplateException(f'Invalid {jobtype} template: {ex}')
 
 
+# async def monitor_jobs():
+#     """
+#
+#     """
+#     sent = 0
+#     logger.info("Start Job monitoring")
+#     redis = async_redis()
+#
+#     while is_running():
+#         api = client.BatchV1Api()
+#         # get runner Jobs
+#         jobs = api.list_namespaced_job(NAMESPACE, label_selector=f'cykube-job=runner')
+#
+#
+#         await asyncio.sleep(15)
+
+
 def delete_job(job, trid: int = None):
     logger.info(f"Deleting existing job {job.metadata.name}", trid=trid)
     client.BatchV1Api().delete_namespaced_job(job.metadata.name, NAMESPACE)

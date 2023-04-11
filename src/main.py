@@ -13,11 +13,11 @@ from sentry_sdk.integrations.redis import RedisIntegration
 import fsserver
 import messages
 import ws
+from app import shutdown
 from common import k8common
 from common.redisutils import sync_redis
 from common.settings import settings
 from logs import configure_logging
-from ws import shutdown
 
 
 async def background_tasks(app):
