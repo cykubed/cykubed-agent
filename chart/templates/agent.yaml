@@ -12,6 +12,40 @@ spec:
   clusterIP: None
   selector:
     app: server
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-nginx-conf
+  namespace: {{ .Values.namespace }}
+data:
+  nginx.conf: |
+    user nginx;
+    worker_processes  1;
+    events {
+      worker_connections  10240;
+    }
+    http {
+      server {
+          listen       8100;
+          server_name  localhost;
+
+          location /fs {
+            root /cache;
+            client_max_body_size 1000M;
+          }
+
+          location / {
+             proxy_pass http://localhost:8101/;
+             proxy_http_version 1.1;
+             proxy_set_header Host $host;
+             client_max_body_size 1000M;
+          }
+      }
+    }
+
+
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -56,8 +90,8 @@ spec:
             successThreshold: 1
             failureThreshold: 20
             httpGet:
-              port: 8100
-              path: "/hc"
+              port: 8101
+              path: "/api/hc"
           env:
             - name: REDIS_PASSWORD
               valueFrom:
@@ -75,9 +109,25 @@ spec:
           - name: cache
             mountPath: /cache
           ports:
-            - containerPort: 8100
+            - containerPort: 8101
               name: agent
               protocol: TCP
+        - name: nginx
+          image: nginx
+          ports:
+          - containerPort: 8100
+          resources:
+            requests:
+              cpu: 150m
+              memory: 200Mi
+            limits:
+              cpu: 150m
+              memory: 200Mi
+          volumeMounts:
+          - name: agent-nginx-conf
+            mountPath: /etc/nginx/nginx.conf
+            subPath: nginx.conf
+            readOnly: true
   volumeClaimTemplates:
   - metadata:
       name: cache

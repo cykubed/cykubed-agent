@@ -47,7 +47,7 @@ def session():
     return aiohttp.ClientSession(timeout=timeout, headers={'Authorization': f'Bearer {settings.API_TOKEN}'})
 
 
-@routes.get('/hc')
+@routes.get('/api/hc')
 async def hc(request):
     return web.Response(text="OK")
 
@@ -56,8 +56,7 @@ async def hc(request):
 async def server(request):
     """
     Fetching from the server rather than something like Nginx as a sidecar isn't the most efficient technique,
-    but it does mean one less container to nail up. Most of the time the agent is doing nothing,
-    so it's better to err on the side of fewer containers for lower running costs
+    but it does mean one less container to nail up. May as well offer it as an option
     :param request:
     :return:
     """
@@ -68,7 +67,7 @@ async def server(request):
     return web.FileResponse(path)
 
 
-@routes.get('/fs')
+@routes.get('/api/ls')
 async def get_directory(request):
     """
     Return the cache list
@@ -99,7 +98,7 @@ async def prune_cache(app, size: int):
         app['stats']['size'] -= fstat.st_size
 
 
-@routes.post('/fs')
+@routes.post('/api/upload')
 async def upload(request):
     """
     Store a file in the cache
@@ -140,7 +139,7 @@ async def upload(request):
     return web.Response()
 
 
-@routes.delete('/fs/{filename}')
+@routes.post('/api/rm/{filename}')
 async def delete_file(request):
     """
     Delete from the cache
@@ -155,9 +154,15 @@ async def delete_file(request):
     return web.Response()
 
 
+@routes.post('/api/clear')
+async def clear_cache(request):
+    for x in os.listdir(settings.CACHE_DIR):
+        await aiofiles.os.remove(os.path.join(os.listdir(settings.CACHE_DIR), x))
+
+
 def get_sync_hosts(app):
     """
-    Determine all nodes. In practice we are likely to just have 2 agents and therefore one other node
+    Determine all nodes. In practice, we are likely to just have 2 agents and therefore one other node
     :param app:
     :return:
     """
@@ -187,7 +192,7 @@ async def catch_up(app):
         for host in app['synchosts']:
             incache = set(await aiofiles.os.listdir(settings.CACHE_DIR))
             try:
-                async with session().get(f'{host}/fs') as resp:
+                async with session().get(f'{host}/api/ls') as resp:
                     if resp.status == 200:
                         files = set(await resp.json())
                     else:
