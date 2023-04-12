@@ -25,7 +25,7 @@ async def init(aredis):
     settings.REDIS_DB = 1
     settings.REDIS_HOST = 'localhost'
     settings.MESSAGE_POLL_PERIOD = 0.1
-    settings.CACHE_DIR = tempfile.mkdtemp()
+    settings.CACHE_DIR = tempfile.mkdtemp(dir=settings.get_temp_dir())
     logger.remove()
     await messages.queue.init()
     yield

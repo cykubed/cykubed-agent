@@ -48,12 +48,14 @@ async def app_factory(cache_size: int):
         with open('/etc/hostname', 'r') as f:
             hostname = f.read().strip()
 
-    resp = httpx.get('http://metadata.google.internal')
-    if resp.status_code == 200 and resp.headers['metadata-flavor'] == 'Google':
-        # running in GKE
-        app['platform'] = 'GKE'
-    else:
-        app['platform'] = 'Generic'
+    app['platform'] = 'Generic'
+    try:
+        resp = httpx.get('http://metadata.google.internal')
+        if resp.status_code == 200 and resp.headers['metadata-flavor'] == 'Google':
+            # running in GKE
+            app['platform'] = 'GKE'
+    except:
+        pass
 
     app['hostname'] = hostname
     app['stats'] = {'size': cache_size}
@@ -95,6 +97,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser('CykubeAgent')
     parser.add_argument('--port', type=int, default=8100, help='Port')
     args = parser.parse_args()
+
+    os.makedirs(settings.get_build_dir(), exist_ok=True)
+    os.makedirs(settings.get_temp_dir(), exist_ok=True)
 
     # block until we can access Redis
     sync_redis()

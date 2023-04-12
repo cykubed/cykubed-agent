@@ -16,7 +16,7 @@ metadata:
 data:
   MAIN_API_URL: {{ .Values.apiUrl }}
   NAMESPACE: {{ .Values.namespace }}
-  FILESTORE_SERVERS: "fs-0.agent:8100,fs-1.agent:8100"
+  FILESTORE_SERVERS: "agent-0.agent:8100,agent-1.agent:8100"
   FILESTORE_TOTAL_TIMEOUT: "600"
   FILESTORE_CONNECT_TIMEOUT: "10"
   FILESTORE_READ_TIMEOUT: "300"

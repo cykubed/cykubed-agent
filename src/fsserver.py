@@ -119,7 +119,8 @@ async def upload(request):
         return web.Response()
 
     size = 0
-    async with aiofiles.tempfile.NamedTemporaryFile('wb', delete=False) as f:
+    async with aiofiles.tempfile.NamedTemporaryFile('wb', delete=False,
+                                                    dir=settings.get_temp_dir()) as f:
         while True:
             chunk = await field.read_chunk()  # 8192 bytes by default.
             if not chunk:

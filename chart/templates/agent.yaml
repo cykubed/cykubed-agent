@@ -4,11 +4,11 @@ metadata:
   namespace: {{ .Release.Namespace }}
   name: agent
   labels:
-    app: fs
+    app: agent
 spec:
   ports:
   - port: 8100
-    name: fs
+    name: agent
   clusterIP: None
   selector:
     app: server
@@ -16,7 +16,7 @@ spec:
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: fs
+  name: agent
   namespace: {{ .Release.Namespace }}
 spec:
   replicas: {{ .Values.replicas }}
@@ -76,14 +76,15 @@ spec:
             mountPath: /cache
           ports:
             - containerPort: 8100
-              name: fs
+              name: agent
               protocol: TCP
   volumeClaimTemplates:
   - metadata:
       name: cache
     spec:
       accessModes: [ "ReadWriteOnce" ]
+      storageClassName: {{ .Values.cache.storageClass }}
       resources:
         requests:
-          storage: {{ .Values.cacheSize }}
+          storage: {{ .Values.cache.size }}
 

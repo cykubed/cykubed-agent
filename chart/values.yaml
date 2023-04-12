@@ -4,8 +4,9 @@ apiUrl: "https://api.cykubed.com"
 replicas: 2
 token: ""
 sentryDsn: "https://29835f630a0c4eb1a249b19ba0c269b8@o4504740483432448.ingest.sentry.io/4504910389313536"
-cacheSize: "10Gi"
-platform: "GKE"
+cache:
+  storageClass: "premium-rwo"
+  size: "10Gi"
 gcpServiceAccount: ""
 redis:
   sentinel:

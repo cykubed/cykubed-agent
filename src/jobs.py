@@ -158,7 +158,7 @@ async def create_build_job(platform: str, newrun: schemas.NewTestRun):
             await sleep(10)
             await create_runner_jobs(newrun, platform)
     else:
-        logger.info(f"Now run cykuberunner with options 'build {newrun.id}'",
+        logger.info(f"** {settings.K8}: Now run cykuberunner with options 'build {newrun.id}'**",
                     tr=newrun)
 
 
