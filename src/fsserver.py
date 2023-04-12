@@ -20,7 +20,7 @@ routes = web.RouteTableDef()
 @middleware
 async def auth_middleware(request, handler):
 
-    if request.path != '/hc':
+    if request.path != '/api/hc':
 
         if request.version != aiohttp.HttpVersion11:
             return

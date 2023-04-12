@@ -31,16 +31,17 @@ data:
           listen       8100;
           server_name  localhost;
 
-          location /fs {
+          location /fs/ {
+            rewrite ^/fs/(.*)$ /$1 break;
             root /cache;
-            client_max_body_size 1000M;
+            client_max_body_size 0;
           }
 
-          location / {
+          location /api/ {
              proxy_pass http://localhost:8101/;
              proxy_http_version 1.1;
              proxy_set_header Host $host;
-             client_max_body_size 1000M;
+             client_max_body_size 0;
           }
       }
     }
@@ -69,10 +70,17 @@ spec:
     spec:
       priorityClassName: cykube-high-priority
       serviceAccountName: cykube
-{{/*      securityContext:*/}}
-{{/*        runAsUser: 10000*/}}
-{{/*        runAsGroup: 10000*/}}
-{{/*        fsGroup: 10000*/}}
+      securityContext:
+        runAsUser: 10000
+        runAsGroup: 10000
+        fsGroup: 10000
+      volumes:
+      - name: agent-nginx-conf
+        configMap:
+          name: agent-nginx-conf
+          items:
+            - key: nginx.conf
+              path: nginx.conf
       containers:
         - name: server
           image: "europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:{{ .Values.tag }}"
@@ -113,7 +121,7 @@ spec:
               name: agent
               protocol: TCP
         - name: nginx
-          image: nginx
+          image: nginxinc/nginx-unprivileged:1.23.4-alpine-slim
           ports:
           - containerPort: 8100
           resources:
@@ -128,6 +136,10 @@ spec:
             mountPath: /etc/nginx/nginx.conf
             subPath: nginx.conf
             readOnly: true
+          - name: cache
+            mountPath: /cache
+            readOnly: true
+
   volumeClaimTemplates:
   - metadata:
       name: cache

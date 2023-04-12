@@ -9,7 +9,7 @@ RUN mkdir /cache
 RUN useradd -m cykube --uid 10000 && chown cykube /usr/app
 RUN chown 10000 /cache && chmod -R a+r /cache
 
-#USER 10000
+USER 10000
 
 RUN pip install poetry==1.3.1
 COPY pyproject.toml poetry.lock ./

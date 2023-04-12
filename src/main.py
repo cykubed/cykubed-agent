@@ -95,7 +95,7 @@ if __name__ == "__main__":
             integrations=[RedisIntegration(), AsyncioIntegration(),], )
 
     parser = argparse.ArgumentParser('CykubeAgent')
-    parser.add_argument('--port', type=int, default=8100, help='Port')
+    parser.add_argument('--port', type=int, default=8101, help='Port')
     args = parser.parse_args()
 
     os.makedirs(settings.get_build_dir(), exist_ok=True)
