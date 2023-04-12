@@ -47,6 +47,14 @@ async def app_factory(cache_size: int):
     else:
         with open('/etc/hostname', 'r') as f:
             hostname = f.read().strip()
+
+    resp = httpx.get('http://metadata.google.internal')
+    if resp.status_code == 200 and resp.headers['metadata-flavor'] == 'Google':
+        # running in GKE
+        app['platform'] = 'GKE'
+    else:
+        app['platform'] = 'Generic'
+
     app['hostname'] = hostname
     app['stats'] = {'size': cache_size}
 

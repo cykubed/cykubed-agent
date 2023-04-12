@@ -17,6 +17,7 @@ FIXTURES_DIR = os.path.join(os.path.dirname(__file__), 'fixtures')
 def compare_rendered_template(create_from_yaml_mock, jobtype: str):
     yamlobjects = create_from_yaml_mock.call_args[1]['yaml_objects'][0]
     asyaml = yaml.dump(yamlobjects, indent=4, sort_keys=True)
+    print(asyaml)
     with open(os.path.join(FIXTURES_DIR, f'rendered_{jobtype}_template.yaml'), 'r') as f:
         expected = f.read()
         assert expected == asyaml

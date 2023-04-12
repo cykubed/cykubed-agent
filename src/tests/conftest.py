@@ -35,7 +35,8 @@ async def init(aredis):
 
 @pytest.fixture()
 async def mockapp():
-    return {'httpclient': httpx.AsyncClient(base_url='http://localhost:5050')}
+    return {'platform': 'GKE',
+            'httpclient': httpx.AsyncClient(base_url='http://localhost:5050')}
 
 
 @pytest.fixture()

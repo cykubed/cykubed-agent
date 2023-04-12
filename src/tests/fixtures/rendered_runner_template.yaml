@@ -26,6 +26,8 @@ spec:
                 - run
                 - '20'
                 env:
+                -   name: SCRATCH_DIR
+                    value: /scratch
                 -   name: CYPRESS_RETRIES
                     value: '2'
                 -   name: TZ
@@ -46,18 +48,25 @@ spec:
                 resources:
                     limits:
                         cpu: '2.0'
-                        ephemeral-storage: 4.0Gi
                         memory: 4.0G
                     requests:
                         cpu: '2.0'
-                        ephemeral-storage: 4.0Gi
                         memory: 4.0G
+                volumeMounts:
+                -   mountPath: /scratch
+                    name: scratch-volume
             priorityClassName: cykube-low-priority
             restartPolicy: OnFailure
-            securityContext:
-                fsGroup: 10000
-                runAsGroup: 10000
-                runAsNonRoot: true
-                runAsUser: 10000
             serviceAccountName: cykube
+            volumes:
+            -   ephemeral:
+                    volumeClaimTemplate:
+                        spec:
+                            accessModes:
+                            - ReadWriteOnce
+                            resources:
+                                requests:
+                                    storage: 4.0Gi
+                            storageClassName: premium-rwo
+                name: scratch-volume
     ttlSecondsAfterFinished: 3600

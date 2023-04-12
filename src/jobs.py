@@ -28,15 +28,17 @@ async def get_job_template(name: str) -> str:
         return await f.read()
 
 
-async def create_job(jobtype: str, testrun: schemas.NewTestRun,
+async def create_job(jobtype: str,
+                     testrun: schemas.NewTestRun,
+                     platform: str,
                      msg: schemas.AgentCompletedBuildMessage = None):
     """
     Render the Kubernetes Job template into Python objects, ready for feeding into "create_from_yaml"
 
-    :param msg:
-    :param agent:
-    :param jobtype:
-    :param testrun:
+    :param jobtype: job type (builder or runner)
+    :param platform: K8 platform
+    :param testrun: test run
+    :param msg: [Optional] AgentCompletedBuildMessage for runners
     :return:
     """
     context = dict(project_name=testrun.project.name,
@@ -48,6 +50,12 @@ async def create_job(jobtype: str, testrun: schemas.NewTestRun,
                    cypress_retries=testrun.project.cypress_retries,
                    timezone=testrun.project.timezone,
                    token=settings.API_TOKEN)
+
+    if platform == 'GKE':
+        context['storage_class'] = 'premium-rwo'
+    else:
+        context['storage_class'] = 'standard'
+
     if jobtype == 'builder':
         template = await get_job_template('builder')
         context.update(dict(parallelism=testrun.project.parallelism,
@@ -139,25 +147,27 @@ def delete_jobs(testrun_id: int):
         delete_job(job, testrun_id)
 
 
-async def create_build_job(newrun: schemas.NewTestRun):
+async def create_build_job(platform: str, newrun: schemas.NewTestRun):
     if settings.K8:
         # stop existing jobs
         delete_jobs_for_branch(newrun.id, newrun.branch)
         # and create a new one
-        await create_job('builder', newrun)
+        await create_job('builder', newrun, platform)
 
         if newrun.project.start_runners_first:
             await sleep(10)
-            await create_runner_jobs(newrun)
+            await create_runner_jobs(newrun, platform)
     else:
         logger.info(f"Now run cykuberunner with options 'build {newrun.id}'",
                     tr=newrun)
 
 
-async def create_runner_jobs(testrun: NewTestRun, msg: schemas.AgentCompletedBuildMessage = None):
+async def create_runner_jobs(testrun: NewTestRun,
+                             platform: str,
+                             msg: schemas.AgentCompletedBuildMessage = None):
     if settings.K8:
         try:
-            await create_job('runner', testrun, msg)
+            await create_job('runner', testrun, platform, msg)
         except Exception:
             logger.exception(f"Failed to create runner job for testrun {testrun.id}")
     else:

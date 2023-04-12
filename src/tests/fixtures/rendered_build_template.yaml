@@ -24,6 +24,8 @@ spec:
                         secretKeyRef:
                             key: redis-password
                             name: cykube-redis
+                -   name: SCRATCH_DIR
+                    value: /scratch
                 envFrom:
                 -   configMapRef:
                         name: cykube-agent-configmap
@@ -35,17 +37,25 @@ spec:
                 resources:
                     limits:
                         cpu: '2.0'
-                        ephemeral-storage: 10.0Gi
                         memory: 4.0G
                     requests:
                         cpu: '2.0'
-                        ephemeral-storage: 10.0Gi
                         memory: 4.0G
+                volumeMounts:
+                -   mountPath: /scratch
+                    name: scratch-volume
             priorityClassName: cykube-low-priority
             restartPolicy: Never
-            securityContext:
-                fsGroup: 10000
-                runAsGroup: 10000
-                runAsNonRoot: true
-                runAsUser: 10000
+            serviceAccountName: cykube
+            volumes:
+            -   ephemeral:
+                    volumeClaimTemplate:
+                        spec:
+                            accessModes:
+                            - ReadWriteOnce
+                            resources:
+                                requests:
+                                    storage: 10.0Gi
+                            storageClassName: premium-rwo
+                name: scratch-volume
     ttlSecondsAfterFinished: 1200

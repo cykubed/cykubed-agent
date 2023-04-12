@@ -29,7 +29,7 @@ async def handle_start_run(app, tr: NewTestRun):
         # Store in Redis and kick off a new build job
         await db.new_testrun(tr)
         # and create a new one
-        await jobs.create_build_job(tr)
+        await jobs.create_build_job(app['platform'], tr)
     except:
         logger.exception(f"Failed to start test run {tr.id}", tr=tr)
         await app['httpclient'].post(f'/agent/testrun/{tr.id}/status/failed')
@@ -170,7 +170,7 @@ async def poll_messages(app, max_messages=None):
                         # build completed - create runner jobs
                         buildmsg = AgentCompletedBuildMessage.parse_raw(rawmsg)
                         tr = await common.redisutils.get_testrun(buildmsg.testrun_id)
-                        await jobs.create_runner_jobs(tr, buildmsg)
+                        await jobs.create_runner_jobs(tr, app['platform'], buildmsg)
                         # and notify the server
                         resp = await app['httpclient'].post(f'/agent/testrun/{tr.id}/build-completed',
                                                            content=rawmsg.encode())

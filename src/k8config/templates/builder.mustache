@@ -15,13 +15,26 @@ spec:
   activeDeadlineSeconds: {{deadline}}
   template:
     spec:
-<!--      securityContext:-->
-<!--        runAsNonRoot: true-->
-<!--        fsGroup: 10000-->
-<!--        runAsUser: 10000-->
-<!--        runAsGroup: 10000-->
+{{!
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 10000
+        runAsUser: 10000
+        runAsGroup: 10000 }}
+      serviceAccountName: "cykube"
+      volumes:
+        - name: scratch-volume
+          ephemeral:
+            volumeClaimTemplate:
+              spec:
+                accessModes: [ "ReadWriteOnce" ]
+                storageClassName: "{{storage_class}}"
+                resources:
+                  requests:
+                    storage: "{{storage}}Gi"
       restartPolicy: Never
       priorityClassName: "cykube-low-priority"
+
       containers:
       - name: "cykube-builder"
         image: "{{runner_image}}"
@@ -31,6 +44,8 @@ spec:
             secretKeyRef:
               name: "cykube-redis"
               key: "redis-password"
+        - name: SCRATCH_DIR
+          value: "/scratch"
         envFrom:
           - configMapRef:
               name: cykube-agent-configmap
@@ -38,14 +53,13 @@ spec:
               name: cykube-agent-secrets
         args: [ "build", "{{testrun_id}}"]
         imagePullPolicy: IfNotPresent
-        nodeSelector:
-          cloud.google.com/gke-ephemeral-storage-local-ssd: "true"
         resources:
           limits:
             cpu: "{{cpu_limit}}"
             memory: "{{memory_limit}}G"
-            ephemeral-storage: "{{storage}}Gi"
           requests:
             cpu: "{{cpu_request}}"
             memory: "{{memory_request}}G"
-            ephemeral-storage: "{{storage}}Gi"
+        volumeMounts:
+        - mountPath: "/scratch"
+          name: scratch-volume
