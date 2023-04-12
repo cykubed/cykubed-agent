@@ -8,32 +8,23 @@ steps:
      git submodule init
      git submodule update
 
- - name: 'gcr.io/cloud-builders/docker'
-   args: [ 'pull',  'europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:latest']
-
  - name: alpine/httpie
    id: Get next version number
    entrypoint: sh
    args:
      - '-c'
      - |-
-     - http GET https://api.cykubed.com/admin/image/agent/next-version/minor -A bearer -a $$CYKUBE_API_TOKEN -b > /workspace/version.txt
+       http GET https://api.cykubed.com/admin/image/agent/next-version/minor -A bearer -a $$CYKUBE_API_TOKEN -b > /workspace/version.txt && echo "$(cat /workspace/version.txt)"
    secretEnv: ['CYKUBE_API_TOKEN']
 
  - name: 'gcr.io/cloud-builders/docker'
    entrypoint: 'bash'
    id: 'Build image'
    args:
-     - '-eEuo'
-     - 'pipefail'
      - '-c'
      - |-       
-       echo "Building europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:$(cat /workspace/version.txt)"
-       docker build \
-          -t "europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:$(cat /workspace/version.txt)" \
-          -t "europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:$SHORT_SHA" \
-          -t "europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:latest" \
-          --cache-from="europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:latest" .
+       echo "Building europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:$(cat /workspace/version.txt)" && 
+       docker build -t "europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:$(cat /workspace/version.txt)"  -t "europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:$SHORT_SHA" .
 
  - name: 'gcr.io/cloud-builders/docker'
    id: 'Push image'
@@ -41,7 +32,7 @@ steps:
    args:
      - '-c'
      - |-       
-       docker push -a "europe-west2-docker.pkg.dev/cykubeapp/cykube/agent" 
+       docker push "europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:$(cat /workspace/version.txt)" 
 
  - name: 'gcr.io/$PROJECT_ID/helm:3.7.0'
    entrypoint: 'bash'
