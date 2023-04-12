@@ -24,7 +24,7 @@ steps:
      - '-c'
      - |-       
        echo "Building europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:$(cat /workspace/version.txt)" && 
-       docker build -t "europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:$(cat /workspace/version.txt)"  -t "europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:$SHORT_SHA" .
+       docker build -t "europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:$(cat /workspace/version.txt)"  -t "europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:$SHORT_SHA -t "europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:latest" .
 
  - name: 'gcr.io/cloud-builders/docker'
    id: 'Push image'
@@ -32,7 +32,7 @@ steps:
    args:
      - '-c'
      - |-       
-       docker push "europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:$(cat /workspace/version.txt)" 
+       docker push -a "europe-west2-docker.pkg.dev/cykubeapp/cykube/agent" 
 
  - name: 'gcr.io/$PROJECT_ID/helm:3.7.0'
    entrypoint: 'bash'
