@@ -15,11 +15,11 @@ spec:
   activeDeadlineSeconds: {{deadline}}
   template:
     spec:
-      securityContext:
-        runAsNonRoot: true
-        fsGroup: 10000
-        runAsUser: 10000
-        runAsGroup: 10000
+<!--      securityContext:-->
+<!--        runAsNonRoot: true-->
+<!--        fsGroup: 10000-->
+<!--        runAsUser: 10000-->
+<!--        runAsGroup: 10000-->
       restartPolicy: Never
       priorityClassName: "cykube-low-priority"
       containers:

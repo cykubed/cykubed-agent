@@ -35,11 +35,11 @@ spec:
                 values:
                 - "true"
       {{/gke_spot_enabled}}
-      securityContext:
-        runAsNonRoot: true
-        fsGroup: 10000
-        runAsUser: 10000
-        runAsGroup: 10000
+<!--      securityContext:-->
+<!--        runAsNonRoot: true-->
+<!--        fsGroup: 10000-->
+<!--        runAsUser: 10000-->
+<!--        runAsGroup: 10000-->
       restartPolicy: OnFailure
       priorityClassName: "cykube-low-priority"
       containers:
