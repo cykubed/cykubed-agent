@@ -22,7 +22,7 @@ FROM python:3.11-slim-buster
 
 WORKDIR /usr/app
 RUN useradd -m cykube --uid 10000 && chown cykube /usr/app
-USER 10000
+#USER 10000
 
 COPY --from=build /usr/app/.venv/ .venv/
 COPY src .

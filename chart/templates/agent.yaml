@@ -35,10 +35,10 @@ spec:
     spec:
       priorityClassName: cykube-high-priority
       serviceAccountName: cykube
-      securityContext:
-        runAsUser: 10000
-        runAsGroup: 10000
-        fsGroup: 10000
+{{/*      securityContext:*/}}
+{{/*        runAsUser: 10000*/}}
+{{/*        runAsGroup: 10000*/}}
+{{/*        fsGroup: 10000*/}}
       containers:
         - name: server
           image: "europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:{{ .Values.tag }}"
