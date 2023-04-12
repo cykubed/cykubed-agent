@@ -14,8 +14,8 @@ steps:
    args:
      - '-c'
      - |-
-     - http GET https://api.cykubed.com/admin/image/agent/next-version/minor -A bearer -a $$CYKUBE_API_TOKEN -b > /workspace/version.txt \
-        && echo "Next version = $(cat /workspace/version.txt)"
+     - http GET https://api.cykubed.com/admin/image/agent/next-version/minor -A bearer -a $$CYKUBE_API_TOKEN -b > /workspace/version.txt
+       echo "Next version = $(cat /workspace/version.txt)"
    secretEnv: ['CYKUBE_API_TOKEN']
 
  - name: 'gcr.io/cloud-builders/docker'
@@ -25,9 +25,11 @@ steps:
    entrypoint: 'bash'
    id: 'Build image'
    args:
+     - '-eEuo'
+     - 'pipefail'
      - '-c'
      - |-       
-       echo "Building europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:$(cat /workspace/version.txt)" && 
+       echo "Building europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:$(cat /workspace/version.txt)"
        docker build \
           -t "europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:$(cat /workspace/version.txt)" \
           -t "europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:$SHORT_SHA" \
