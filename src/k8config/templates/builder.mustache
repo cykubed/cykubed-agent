@@ -38,6 +38,8 @@ spec:
               name: cykube-agent-secrets
         args: [ "build", "{{testrun_id}}"]
         imagePullPolicy: IfNotPresent
+        nodeSelector:
+          cloud.google.com/gke-ephemeral-storage-local-ssd: "true"
         resources:
           limits:
             cpu: "{{cpu_limit}}"
