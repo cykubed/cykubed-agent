@@ -8,6 +8,9 @@ steps:
      git submodule init
      git submodule update
 
+ - name: 'gcr.io/cloud-builders/docker'
+   args: [ 'pull',  'europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:latest']
+
  - name: alpine/httpie
    id: Get next version number
    entrypoint: sh
@@ -16,9 +19,6 @@ steps:
      - |-
      - http GET https://api.cykubed.com/admin/image/agent/next-version/minor -A bearer -a $$CYKUBE_API_TOKEN -b > /workspace/version.txt
    secretEnv: ['CYKUBE_API_TOKEN']
-
- - name: 'gcr.io/cloud-builders/docker'
-   args: [ 'pull',  'europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:latest']
 
  - name: 'gcr.io/cloud-builders/docker'
    entrypoint: 'bash'
