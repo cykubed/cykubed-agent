@@ -21,3 +21,13 @@ async def cancel_testrun(trid: int):
     await r.delete(f'testrun:{trid}')
 
 
+async def get_testrun(id: int) -> NewTestRun | None:
+    """
+    Used by agents and runners to return a deserialised NewTestRun
+    :param id:
+    :return:
+    """
+    d = await async_redis().get(f'testrun:{id}')
+    if d:
+        return NewTestRun.parse_raw(d)
+    return None

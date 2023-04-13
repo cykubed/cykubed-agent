@@ -4,6 +4,7 @@ import loguru
 from loguru import logger
 
 from common.cloudlogging import configure_stackdriver_logging
+from common.utils import disable_hc_logging
 from messages import queue
 
 
@@ -23,6 +24,7 @@ def rest_logsink(msg: loguru.Message):
 
 
 def configure_logging():
+    disable_hc_logging()
     configure_stackdriver_logging('cykube-agent')
     logger.add(rest_logsink,
                format="{message}", level="INFO")
