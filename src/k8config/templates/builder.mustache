@@ -33,7 +33,6 @@ spec:
                     storage: "{{storage}}Gi"
       restartPolicy: Never
       priorityClassName: "cykube-low-priority"
-
       containers:
       - name: "cykube-builder"
         image: "{{runner_image}}"
