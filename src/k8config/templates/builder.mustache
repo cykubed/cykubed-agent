@@ -15,12 +15,11 @@ spec:
   activeDeadlineSeconds: {{deadline}}
   template:
     spec:
-{{!
       securityContext:
         runAsNonRoot: true
         fsGroup: 10000
         runAsUser: 10000
-        runAsGroup: 10000 }}
+        runAsGroup: 10000
       serviceAccountName: "cykube"
       volumes:
         - name: scratch-volume
