@@ -42,7 +42,7 @@ spec:
       containers:
         - name: server
           image: "europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:{{ .Values.tag }}"
-          imagePullPolicy: Always
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
           resources:
             requests:
               cpu: 150m
