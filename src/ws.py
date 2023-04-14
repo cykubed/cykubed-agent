@@ -162,6 +162,7 @@ async def poll_messages(app, max_messages=None):
                         tr = await db.get_testrun(buildmsg.testrun_id)
                         await jobs.create_runner_jobs(tr, app['platform'], buildmsg)
                         # and notify the server
+                        print(f'/agent/testrun/{tr.id}/build-completed')
                         resp = await app['httpclient'].post(f'/agent/testrun/{tr.id}/build-completed',
                                                            content=rawmsg.encode())
                         if resp.status_code != 200:
