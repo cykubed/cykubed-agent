@@ -33,6 +33,7 @@ pytest-asyncio = "^0.20.3"
 pydantic-factories = "^1.17.2"
 freezegun = "^1.2.2"
 respx = "^0.20.1"
+pytest-github-report = "^0.0.1"
 
 [build-system]
 requires = ["poetry-core"]
