@@ -10,7 +10,7 @@ metadata:
   name: "cykube-run-{{project_name}}-{{local_id}}"
   namespace: cykube
 spec:
-  backoffLimit: 0
+  backoffLimit: 10
   ttlSecondsAfterFinished: 86400
   parallelism: {{parallelism}}
   activeDeadlineSeconds: {{deadline}}
@@ -50,7 +50,7 @@ spec:
         fsGroup: 10000
         runAsUser: 10000
         runAsGroup: 10000
-      restartPolicy: Never
+      restartPolicy: OnFailure
       priorityClassName: "cykube-low-priority"
       containers:
       - name: "cykube-runner"
