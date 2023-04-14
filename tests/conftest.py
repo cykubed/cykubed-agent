@@ -4,6 +4,7 @@ import tempfile
 import httpx
 import pytest
 from loguru import logger
+from redis import Redis
 from redis.asyncio import Redis as AsyncRedis
 
 import messages
@@ -13,14 +14,17 @@ from common.settings import settings
 
 
 @pytest.fixture(autouse=True)
-def aredis(mocker):
-    r = AsyncRedis(host='localhost', db=1, decode_responses=True)
-    mocker.patch('db.async_redis', return_value=r)
+def redis(mocker):
+    r = Redis(host=settings.REDIS_HOST, db=1, decode_responses=True)
+    r.flushdb()
+    aredis = AsyncRedis(host='localhost', db=1, decode_responses=True)
+    mocker.patch('db.async_redis', return_value=aredis)
+    mocker.patch('ws.async_redis', return_value=aredis)
     return r
 
 
 @pytest.fixture(autouse=True)
-async def init(aredis):
+async def init(redis):
     settings.TEST = True
     settings.REDIS_DB = 1
     settings.REDIS_HOST = 'localhost'
@@ -30,7 +34,6 @@ async def init(aredis):
     await messages.queue.init()
     yield
     shutil.rmtree(settings.CACHE_DIR)
-    await aredis.flushdb()
 
 
 @pytest.fixture()

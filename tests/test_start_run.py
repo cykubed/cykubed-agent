@@ -20,7 +20,7 @@ def compare_rendered_template(create_from_yaml_mock, jobtype: str):
         assert expected == asyaml
 
 
-async def test_start_run(aredis, mocker, mockapp, testrun: NewTestRun):
+async def test_start_run(redis, mocker, mockapp, testrun: NewTestRun):
     """
     Check that the build job would be created, and simulate the start of that job
     by changing the status to 'building'
@@ -33,7 +33,7 @@ async def test_start_run(aredis, mocker, mockapp, testrun: NewTestRun):
     trjson = testrun.json()
     await handle_message(mockapp, dict(command='start', payload=trjson))
     # this will add an entry to the testrun collection
-    saved_tr_json = await aredis.get(f'testrun:{testrun.id}')
+    saved_tr_json = redis.get(f'testrun:{testrun.id}')
     savedtr = NewTestRun.parse_raw(saved_tr_json)
     assert savedtr == testrun
     # and kick off the build job
@@ -45,13 +45,13 @@ async def test_start_run(aredis, mocker, mockapp, testrun: NewTestRun):
 
 
 @freeze_time('2022-04-03 14:10:00Z')
-async def test_build_completed(respx_mock, mocker, aredis, mockapp, testrun: NewTestRun):
+async def test_build_completed(respx_mock, mocker, redis, mockapp, testrun: NewTestRun):
     create_from_yaml = mocker.patch('jobs.k8utils.create_from_yaml')
     specs = ['cypress/e2e/spec1.ts', 'cypress/e2e/spec2.ts']
-    await aredis.sadd(f'testrun:{testrun.id}:specs', *specs)
+    redis.sadd(f'testrun:{testrun.id}:specs', *specs)
     testrun.status = TestRunStatus.running
     testrun.sha = 'deadbeef0101'
-    await aredis.set(f'testrun:{testrun.id}', testrun.json())
+    redis.set(f'testrun:{testrun.id}', testrun.json())
 
     msg = AgentCompletedBuildMessage(type=AgentEventType.build_completed,
                                      testrun_id=testrun.id,
@@ -61,7 +61,7 @@ async def test_build_completed(respx_mock, mocker, aredis, mockapp, testrun: New
     route = respx_mock.post(f'http://localhost:5050/agent/testrun/20/build-completed')
 
     async with respx_mock:
-        await aredis.rpush('messages', msg.json())
+        redis.rpush('messages', msg.json())
         await poll_messages(mockapp, 1)
         assert route.called
         assert route.calls[0].request.method == 'POST'
