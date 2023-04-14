@@ -6,7 +6,6 @@ import yaml
 from freezegun import freeze_time
 
 from common.enums import TestRunStatus, AgentEventType
-from common.redisutils import async_redis
 from common.schemas import NewTestRun, AgentCompletedBuildMessage
 from common.utils import utcnow
 from ws import handle_message, poll_messages
@@ -17,7 +16,6 @@ FIXTURES_DIR = os.path.join(os.path.dirname(__file__), 'fixtures')
 def compare_rendered_template(create_from_yaml_mock, jobtype: str):
     yamlobjects = create_from_yaml_mock.call_args[1]['yaml_objects'][0]
     asyaml = yaml.dump(yamlobjects, indent=4, sort_keys=True)
-    print(asyaml)
     with open(os.path.join(FIXTURES_DIR, f'rendered_{jobtype}_template.yaml'), 'r') as f:
         expected = f.read()
         assert expected == asyaml
@@ -66,7 +64,7 @@ async def test_build_completed(mocker, aredis, mockapp, testrun: NewTestRun):
     route = respx.post(f'http://localhost:5050/agent/testrun/20/build-completed')
 
     async with respx.mock:
-        await async_redis().rpush('messages', msg.json())
+        await aredis.rpush('messages', msg.json())
         await poll_messages(mockapp, 1)
         assert route.called
         assert route.calls[0].request.method == 'POST'
