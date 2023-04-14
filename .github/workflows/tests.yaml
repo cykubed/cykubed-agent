@@ -7,8 +7,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10"]
-        poetry-version: ["1.3.1"]
+        python-version: ["3.11"]
+        poetry-version: ["1.4"]
 
     steps:
       - uses: actions/checkout@v3
@@ -56,26 +56,26 @@ jobs:
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_TOKEN }}
 
-#  deploy:
-#
-#    runs-on: ubuntu-latest
-#    needs: test
-#    if: github.ref == 'refs/heads/master'
-#    steps:
-#      - uses: actions/checkout@v3
-#
-#      - id: 'auth'
-#        uses: 'google-github-actions/auth@v0'
-#        with:
-#          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
-#      - name: 'Set up Cloud SDK'
-#        uses: 'google-github-actions/setup-gcloud@v0'
-#
-#      - name: 'Use gcloud CLI'
-#        run: 'gcloud info'
-#
-#      - name: 'Start Google Cloud Build trigger'
-#        run: |
-#          export CLOUDSDK_CORE_DISABLE_PROMPTS=1
-#          gcloud beta builds triggers run ${{ secrets.CLOUDBUILD_TRIGGER_ID }} --tag=${{ github.event.release.tag_name }}
-#
+  deploy:
+
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/master'
+    steps:
+      - uses: actions/checkout@v3
+
+      - id: 'auth'
+        uses: 'google-github-actions/auth@v0'
+        with:
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v0'
+
+      - name: 'Use gcloud CLI'
+        run: 'gcloud info'
+
+      - name: 'Start Google Cloud Build trigger'
+        run: |
+          export CLOUDSDK_CORE_DISABLE_PROMPTS=1
+          gcloud beta builds triggers run ${{ secrets.CLOUDBUILD_TRIGGER_ID }} --tag=${{ github.event.release.tag_name }}
+
