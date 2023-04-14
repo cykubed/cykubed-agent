@@ -13,7 +13,7 @@ from common.schemas import Project, OrganisationSummary, NewTestRun
 from common.settings import settings
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()
 def redis(mocker):
     r = Redis(host=settings.REDIS_HOST, db=1, decode_responses=True)
     r.flushdb()
