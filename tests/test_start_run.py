@@ -1,7 +1,6 @@
 import json
 import os.path
 
-import respx
 import yaml
 from freezegun import freeze_time
 
@@ -21,7 +20,6 @@ def compare_rendered_template(create_from_yaml_mock, jobtype: str):
         assert expected == asyaml
 
 
-@respx.mock
 async def test_start_run(aredis, mocker, mockapp, testrun: NewTestRun):
     """
     Check that the build job would be created, and simulate the start of that job
@@ -46,9 +44,8 @@ async def test_start_run(aredis, mocker, mockapp, testrun: NewTestRun):
     compare_rendered_template(create_from_yaml, 'build')
 
 
-@respx.mock
 @freeze_time('2022-04-03 14:10:00Z')
-async def test_build_completed(mocker, aredis, mockapp, testrun: NewTestRun):
+async def test_build_completed(respx_mock, mocker, aredis, mockapp, testrun: NewTestRun):
     create_from_yaml = mocker.patch('jobs.k8utils.create_from_yaml')
     specs = ['cypress/e2e/spec1.ts', 'cypress/e2e/spec2.ts']
     await aredis.sadd(f'testrun:{testrun.id}:specs', *specs)
@@ -61,9 +58,9 @@ async def test_build_completed(mocker, aredis, mockapp, testrun: NewTestRun):
                                      finished=utcnow(),
                                      sha=testrun.sha, specs=specs)
 
-    route = respx.post(f'http://localhost:5050/agent/testrun/20/build-completed')
+    route = respx_mock.post(f'http://localhost:5050/agent/testrun/20/build-completed')
 
-    async with respx.mock:
+    async with respx_mock:
         await aredis.rpush('messages', msg.json())
         await poll_messages(mockapp, 1)
         assert route.called
