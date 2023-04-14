@@ -1,16 +1,16 @@
 import asyncio
 import json
+import signal
 from asyncio import sleep, exceptions, create_task
 
 import websockets
-from httpx import HTTPError
 from loguru import logger
 from redis import ResponseError
 from websockets.exceptions import ConnectionClosedError, InvalidStatusCode, ConnectionClosed
 
 import db
 import jobs
-from app import is_running
+from app import is_running, shutdown
 from common.enums import AgentEventType
 from common.redisutils import async_redis
 from common.schemas import NewTestRun, AgentEvent, AgentCompletedBuildMessage
@@ -78,75 +78,66 @@ async def producer_handler(websocket):
         queue.task_done()
 
 
-class Retry(object):
-    def __init__(self):
-        self.delay = 10
-
-    async def retry(self):
-        logger.warning(f"Failed to contact Cykube servers: please check your token")
-        await asyncio.sleep(self.delay)
-        self.delay = min(settings.MAX_HTTP_BACKOFF, self.delay + 10)
-
-    def reset(self):
-        self.delay = 10
-
-
 async def connect(app):
     """
     Connect to the main cykube servers via a websocket
     """
 
+    app['ws'] = None
     # fetch token
-    headers = {'Authorization': f'Bearer {settings.API_TOKEN}'}
+    headers = {'Authorization': f'Bearer {settings.API_TOKEN}',
+               'Agent-Host': app['hostname']}
 
-    retrier = Retry()
+    async def handle_sigterm_runner():
+        logger.warning(f"SIGTERM/SIGINT caught: close socket and exist")
+        wsock = app['ws']
+        if wsock:
+            shutdown()
+            await wsock.close()
+            await wsock.wait_closed()
+        signal.raise_signal(signal.SIGINT)
+
+    loop = asyncio.get_event_loop()
+    loop.add_signal_handler(signal.SIGTERM, lambda: asyncio.create_task(handle_sigterm_runner()))
+
     while is_running():
 
-        # grab a token
         try:
-            resp = await app['httpclient'].post('/agent/wsconnect', json={'host_name': app['hostname']})
-            if resp.status_code != 200:
-                await retrier.retry()
-                continue
+            logger.debug("Try to connect websocket")
+            domain = settings.MAIN_API_URL[settings.MAIN_API_URL.find('//') + 2:]
+            protocol = 'wss' if settings.MAIN_API_URL.startswith('https') else 'ws'
+            url = f'{protocol}://{domain}/agent-ws'
 
-            token = resp.text
-        except HTTPError:
-            await retrier.retry()
-            continue
-
-        if token:
-            try:
-                logger.debug("Try to connect websocket")
-                domain = settings.MAIN_API_URL[settings.MAIN_API_URL.find('//') + 2:]
-                protocol = 'wss' if settings.MAIN_API_URL.startswith('https') else 'ws'
-                url = f'{protocol}://{domain}/agent/ws?token={token}'
-                async with websockets.connect(url, extra_headers=headers) as ws:
-                    logger.info("Connected")
-                    done, pending = await asyncio.wait([create_task(consumer_handler(app, ws)),
-                                                        create_task(producer_handler(ws))],
-                                                       return_when=asyncio.FIRST_COMPLETED)
-                    # we'll need to reconnect
-                    for task in pending:
-                        task.cancel()
-            except ConnectionClosedError:
-                if not is_running():
-                    return
-                await sleep(1)
-            except exceptions.TimeoutError:
-                logger.debug('Could not connect: try later...')
-                await sleep(1)
-            except ConnectionRefusedError:
-                await sleep(10)
-            except OSError:
-                logger.warning("Cannot ensure_connection to cykube - sleep for 60 secs")
-                await sleep(10)
-            except InvalidStatusCode as ex:
-                if ex.status_code == 403:
-                    logger.error("Permission denied: please check that you have used the correct API token")
-                await sleep(10)
-            except Exception as ex:
-                logger.exception('Could not connect: try later...')
-                await sleep(10)
+            async with websockets.connect(url, extra_headers=headers) as ws:
+                app['ws'] = ws
+                logger.info("Connected")
+                done, pending = await asyncio.wait([create_task(consumer_handler(app, ws)),
+                                                    create_task(producer_handler(ws))],
+                                                   return_when=asyncio.FIRST_COMPLETED)
+                # we'll need to reconnect
+                for task in pending:
+                    task.cancel()
+        except ConnectionClosedError:
+            if not is_running():
+                logger.info('Agent terminating gracefully')
+                return
+            logger.debug('Connection closed - attempt to reconnect')
+            await sleep(1)
+        except exceptions.TimeoutError:
+            logger.debug('Could not connect: try later...')
+            await sleep(1)
+        except ConnectionRefusedError:
+            await sleep(10)
+        except OSError:
+            logger.warning("Cannot ensure_connection to cykube - sleep for 60 secs")
+            await sleep(10)
+        except InvalidStatusCode as ex:
+            if ex.status_code == 403:
+                logger.error("Permission denied: please check that you have used the correct API token")
+            await sleep(10)
+        except Exception as ex:
+            logger.exception('Could not connect: try later...')
+            await sleep(10)
 
 
 async def poll_messages(app, max_messages=None):

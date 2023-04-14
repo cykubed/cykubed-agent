@@ -43,7 +43,7 @@ spec:
                 -   secretRef:
                         name: cykube-agent-secrets
                 image: cykube-runner:1234
-                imagePullPolicy: IfNotPresent
+                imagePullPolicy: Always
                 name: cykube-runner
                 resources:
                     limits:
@@ -57,6 +57,11 @@ spec:
                     name: scratch-volume
             priorityClassName: cykube-low-priority
             restartPolicy: Never
+            securityContext:
+                fsGroup: 10000
+                runAsGroup: 10000
+                runAsNonRoot: true
+                runAsUser: 10000
             serviceAccountName: cykube
             volumes:
             -   ephemeral:
@@ -69,4 +74,4 @@ spec:
                                     storage: 4.0Gi
                             storageClassName: premium-rwo
                 name: scratch-volume
-    ttlSecondsAfterFinished: 3600
+    ttlSecondsAfterFinished: 86400

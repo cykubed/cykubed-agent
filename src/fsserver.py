@@ -164,7 +164,7 @@ def get_sync_hosts(app):
     # filter out ourselves
     hosts = app['synchosts'] = []
     for h in settings.FILESTORE_SERVERS.split(','):
-        if not h.startswith(app['hostname']):
+        if not h.endswith(app['hostname']):
             if not h.startswith('http'):
                 h = f'http://{h}'
             hosts.append(h)
