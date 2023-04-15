@@ -38,6 +38,7 @@ class MessageQueue:
         :param msg:
         :return:
         """
+        logger.debug(f'Log msg: {source}: tr {testrun_id}: {msg}')
         item = schemas.AgentLogMessage(testrun_id=testrun_id,
                                        type=AgentEventType.log,
                                        msg=AppLogMessage(ts=msg.record['time'],

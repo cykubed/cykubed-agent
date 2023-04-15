@@ -11,7 +11,7 @@ metadata:
     namespace: cykube
 spec:
     activeDeadlineSeconds: 3600
-    backoffLimit: 0
+    backoffLimit: 10
     parallelism: 2
     template:
         metadata:
@@ -56,7 +56,7 @@ spec:
                 -   mountPath: /scratch
                     name: scratch-volume
             priorityClassName: cykube-low-priority
-            restartPolicy: Never
+            restartPolicy: OnFailure
             securityContext:
                 fsGroup: 10000
                 runAsGroup: 10000
