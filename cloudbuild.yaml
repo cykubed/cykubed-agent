@@ -26,7 +26,7 @@ steps:
    args:
      - '-c'
      - |-       
-       echo "Building europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:$(cat /workspace/version.txt)" && 
+       echo "Building agent:$(cat /workspace/version.txt)" && 
        docker build -t "europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:$(cat /workspace/version.txt)"  -t "europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:$SHORT_SHA" -t "europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:latest" --cache-from="europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:latest" .
 
  - name: 'gcr.io/cloud-builders/docker'
@@ -75,7 +75,7 @@ steps:
 
 availableSecrets:
   secretManager:
-    - versionName: projects/489847359241/secrets/cykube-api-token/versions/4
+    - versionName: projects/489847359241/secrets/cykube-api-token/versions/5
       env: 'CYKUBE_API_TOKEN'
     - versionName: projects/489847359241/secrets/cloudflare_api_token/versions/2
       env: 'CLOUDFLARE_API_TOKEN'
