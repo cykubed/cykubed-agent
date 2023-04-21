@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import os
 import sys
+from time import sleep
 
 import httpx
 import sentry_sdk
@@ -15,7 +16,7 @@ import messages
 import ws
 from app import shutdown
 from common import k8common
-from common.redisutils import sync_redis
+from common.redisutils import sync_redis, ping_redis
 from common.settings import settings
 from logs import configure_logging
 
@@ -102,7 +103,12 @@ if __name__ == "__main__":
     os.makedirs(settings.get_temp_dir(), exist_ok=True)
 
     # block until we can access Redis
-    sync_redis()
+    redis = sync_redis()
+    while True:
+        if ping_redis():
+            break
+        logger.debug("Cannot ping_redis Redis - waiting")
+        sleep(5)
 
     try:
         if settings.K8 and not settings.TEST:

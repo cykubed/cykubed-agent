@@ -41,7 +41,8 @@ async def create_job(jobtype: str,
     :param msg: [Optional] AgentCompletedBuildMessage for runners
     :return:
     """
-    context = dict(project_name=testrun.project.name,
+    name = f"cykube-{jobtype}-{testrun.project.name}-{testrun.local_id}"
+    context = dict(name=name,
                    project_id=testrun.project.id,
                    local_id=testrun.local_id,
                    testrun_id=testrun.id,
@@ -64,6 +65,7 @@ async def create_job(jobtype: str,
                             deadline=testrun.project.build_deadline,
                             storage=testrun.project.build_ephemeral_storage,
                             memory_request=testrun.project.build_memory,
+                            name=name,
                             memory_limit=testrun.project.build_memory))
     else:
         template = await get_job_template('runner')
@@ -85,6 +87,7 @@ async def create_job(jobtype: str,
         k8sclient = client.ApiClient()
         yamlobjects = yaml.safe_load(jobyaml)
         k8utils.create_from_yaml(k8sclient, yaml_objects=[yamlobjects], namespace=NAMESPACE)
+        logger.info(f'Created job {name}', trid=testrun.id)
     except YAMLError as ex:
         raise InvalidTemplateException(f'Invalid YAML in {jobtype} template: {ex}')
     except ChevronError as ex:

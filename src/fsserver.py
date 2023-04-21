@@ -206,6 +206,7 @@ async def catch_up(app):
                                 async for chunk in resp.content.iter_chunked(settings.CHUNK_SIZE):
                                     await f.write(chunk)
                             await aiofiles.os.rename(destpath, os.path.join(settings.CACHE_DIR, fname))
+                            logger.debug(f"Pulled {fname} from {host}")
             except Exception as ex:
                 logger.warning(f"Failed to sync from {host}: {ex}")
 

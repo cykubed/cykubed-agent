@@ -5,14 +5,14 @@ from asyncio import sleep, exceptions, create_task
 
 import websockets
 from loguru import logger
-from redis import ResponseError
+from redis.exceptions import RedisError
 from websockets.exceptions import ConnectionClosedError, InvalidStatusCode, ConnectionClosed
 
 import db
 import jobs
 from app import is_running, shutdown
 from common.enums import AgentEventType
-from common.redisutils import async_redis
+from common.redisutils import async_redis, ping_redis
 from common.schemas import NewTestRun, AgentEvent, AgentCompletedBuildMessage
 from common.settings import settings
 from messages import queue
@@ -117,12 +117,23 @@ async def connect(app):
                 # we'll need to reconnect
                 for task in pending:
                     task.cancel()
-        except ConnectionClosedError:
+
+            if not ping_redis():
+                logger.error("Cannot contact redis: wait until we can")
+            else:
+                logger.info("Socket disconnected: try again shortly")
+            await asyncio.sleep(10)
+
+        except ConnectionClosedError as ex:
             if not is_running():
                 logger.info('Agent terminating gracefully')
                 return
-            logger.debug('Connection closed - attempt to reconnect')
-            await sleep(1)
+            if ex.code == 1001:
+                logger.warning("Server closed - reconnect a bit later")
+                await sleep(10)
+            else:
+                logger.debug('Connection closed - attempt to reconnect')
+                await sleep(1)
         except exceptions.TimeoutError:
             logger.debug('Could not connect: try later...')
             await sleep(1)
@@ -162,7 +173,6 @@ async def poll_messages(app, max_messages=None):
                         tr = await db.get_testrun(buildmsg.testrun_id)
                         await jobs.create_runner_jobs(tr, app['platform'], buildmsg)
                         # and notify the server
-                        print(f'/agent/testrun/{tr.id}/build-completed')
                         resp = await app['httpclient'].post(f'/agent/testrun/{tr.id}/build-completed',
                                                            content=rawmsg.encode())
                         if resp.status_code != 200:
@@ -175,15 +185,13 @@ async def poll_messages(app, max_messages=None):
                     if max_messages and sent == max_messages:
                         # for easier testing
                         return
-        except ResponseError:
+            await asyncio.sleep(1)
+        except RedisError as ex:
             if not is_running():
                 return
-            logger.exception("Failed to fetch messages from Redis")
+            logger.error(f"Failed to fetch messages from Redis: {ex}")
             if max_messages:
                 return
-        except Exception as ex:
-            logger.exception("Unexpected exception during message poll")
-            if max_messages:
-                return
+            await asyncio.sleep(10)
 
-        await asyncio.sleep(1)
+
