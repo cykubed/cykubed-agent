@@ -87,7 +87,7 @@ async def create_job(jobtype: str,
         k8sclient = client.ApiClient()
         yamlobjects = yaml.safe_load(jobyaml)
         k8utils.create_from_yaml(k8sclient, yaml_objects=[yamlobjects], namespace=NAMESPACE)
-        logger.info(f'Created job {name}', trid=testrun.id)
+        logger.info(f'Created job {name}', id=testrun.id)
     except YAMLError as ex:
         raise InvalidTemplateException(f'Invalid YAML in {jobtype} template: {ex}')
     except ChevronError as ex:

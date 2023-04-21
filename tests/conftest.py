@@ -7,7 +7,6 @@ from loguru import logger
 from redis import Redis
 from redis.asyncio import Redis as AsyncRedis
 
-import messages
 from common.enums import PlatformEnum
 from common.schemas import Project, OrganisationSummary, NewTestRun
 from common.settings import settings
@@ -31,7 +30,6 @@ async def init(redis):
     settings.MESSAGE_POLL_PERIOD = 0.1
     settings.CACHE_DIR = tempfile.mkdtemp()
     logger.remove()
-    await messages.queue.init()
     yield
     shutil.rmtree(settings.CACHE_DIR)
 

@@ -15,7 +15,6 @@ from common.enums import AgentEventType
 from common.redisutils import async_redis, ping_redis
 from common.schemas import NewTestRun, AgentEvent, AgentCompletedBuildMessage
 from common.settings import settings
-from messages import queue
 
 
 async def handle_start_run(app, tr: NewTestRun):
@@ -71,11 +70,33 @@ async def consumer_handler(app, websocket):
             return
 
 
-async def producer_handler(websocket):
+async def producer_handler(app, websocket):
+    redis = async_redis()
     while is_running():
-        msg = await queue.get() + '\n'
-        await websocket.send(msg)
-        queue.task_done()
+        try:
+            msglist = await redis.lpop('messages', 100)
+            if msglist is not None:
+                for rawmsg in msglist:
+                    event = AgentEvent.parse_raw(rawmsg)
+                    if event.type == AgentEventType.build_completed:
+                        # build completed - create runner jobs
+                        buildmsg = AgentCompletedBuildMessage.parse_raw(rawmsg)
+                        tr = await db.get_testrun(buildmsg.testrun_id)
+                        await jobs.create_runner_jobs(tr, app['platform'], buildmsg)
+                        # and notify the server
+                        resp = await app['httpclient'].post(f'/agent/testrun/{tr.id}/build-completed',
+                                                            content=rawmsg.encode())
+                        if resp.status_code != 200:
+                            logger.error(f'Failed to update server that build was completed:'
+                                         f' {resp.status_code}: {resp.text}')
+                    # now post throught the websocket
+                    await websocket.send(rawmsg)
+
+            await asyncio.sleep(1)
+        except RedisError as ex:
+            if not is_running():
+                return
+            logger.error(f"Failed to fetch messages from Redis: {ex}")
 
 
 async def connect(app):
@@ -112,7 +133,7 @@ async def connect(app):
                 app['ws'] = ws
                 logger.info("Connected")
                 done, pending = await asyncio.wait([create_task(consumer_handler(app, ws)),
-                                                    create_task(producer_handler(ws))],
+                                                    create_task(producer_handler(app, ws))],
                                                    return_when=asyncio.FIRST_COMPLETED)
                 # we'll need to reconnect
                 for task in pending:
@@ -151,47 +172,5 @@ async def connect(app):
             await sleep(10)
 
 
-async def poll_messages(app, max_messages=None):
-    """
-    Poll the message queue, forwarding them all to the websocket
-    :param app: app for state
-    :param max_messages: limit the number of messages sent (for unit testing)
-    """
-    sent = 0
-    logger.info("Start polling messages from Redis")
-    redis = async_redis()
-
-    while is_running():
-        try:
-            msglist = await redis.lpop('messages', 100)
-            if msglist is not None:
-                for rawmsg in msglist:
-                    event = AgentEvent.parse_raw(rawmsg)
-                    if event.type == AgentEventType.build_completed:
-                        # build completed - create runner jobs
-                        buildmsg = AgentCompletedBuildMessage.parse_raw(rawmsg)
-                        tr = await db.get_testrun(buildmsg.testrun_id)
-                        await jobs.create_runner_jobs(tr, app['platform'], buildmsg)
-                        # and notify the server
-                        resp = await app['httpclient'].post(f'/agent/testrun/{tr.id}/build-completed',
-                                                           content=rawmsg.encode())
-                        if resp.status_code != 200:
-                            logger.error(f'Failed to update server that build was completed:'
-                                         f' {resp.status_code}: {resp.text}')
-                    else:
-                        # otherwise it must be a log message
-                        queue.add(rawmsg)
-                    sent += 1
-                    if max_messages and sent == max_messages:
-                        # for easier testing
-                        return
-            await asyncio.sleep(1)
-        except RedisError as ex:
-            if not is_running():
-                return
-            logger.error(f"Failed to fetch messages from Redis: {ex}")
-            if max_messages:
-                return
-            await asyncio.sleep(10)
 
 

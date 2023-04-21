@@ -73,7 +73,6 @@ spec:
           - secretRef:
               name: cykube-agent-secrets
         args: [ "run", "{{testrun_id}}"]
-        imagePullPolicy: Always
         resources:
           limits:
             cpu: "{{cpu_limit}}"

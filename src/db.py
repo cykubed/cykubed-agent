@@ -9,6 +9,7 @@ from common.schemas import NewTestRun
 
 async def new_testrun(tr: NewTestRun):
     await async_redis().set(f'testrun:{tr.id}', tr.json())
+    await async_redis().sadd('testruns', str(tr.id))
 
 
 async def cancel_testrun(trid: int):
@@ -19,6 +20,7 @@ async def cancel_testrun(trid: int):
     r = async_redis()
     await r.delete(f'testrun:{trid}:specs')
     await r.delete(f'testrun:{trid}')
+    await r.srem(f'testruns', str(trid))
 
 
 async def get_testrun(id: int) -> NewTestRun | None:

@@ -12,7 +12,6 @@ from sentry_sdk.integrations.asyncio import AsyncioIntegration
 from sentry_sdk.integrations.redis import RedisIntegration
 
 import fsserver
-import messages
 import ws
 from app import shutdown
 from common import k8common
@@ -24,8 +23,6 @@ from logs import configure_logging
 async def background_tasks(app):
     app['catch_up'] = asyncio.create_task(fsserver.catch_up(app))
     app['connect'] = asyncio.create_task(ws.connect(app))
-    app['poll_messages'] = asyncio.create_task(ws.poll_messages(app=app))
-
     yield
 
     for x in ['catch_up', 'connect', 'poll_messages']:
@@ -60,8 +57,6 @@ async def app_factory(cache_size: int):
 
     app['hostname'] = hostname
     app['stats'] = {'size': cache_size}
-
-    await messages.queue.init()
 
     transport = httpx.AsyncHTTPTransport(retries=settings.MAX_HTTP_RETRIES)
     app['httpclient'] = httpx.AsyncClient(transport=transport,
