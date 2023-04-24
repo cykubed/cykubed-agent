@@ -41,7 +41,7 @@ async def create_job(jobtype: str,
     :param msg: [Optional] AgentCompletedBuildMessage for runners
     :return:
     """
-    name = f"cykube-{jobtype}-{testrun.project.name}-{testrun.local_id}"
+    name = f"cykubed-{jobtype}-{testrun.project.name}-{testrun.local_id}"
     context = dict(name=name,
                    namespace='cykubed',
                    project_id=testrun.project.id,

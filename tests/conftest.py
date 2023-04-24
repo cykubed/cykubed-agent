@@ -49,7 +49,7 @@ async def project() -> Project:
                    agent_id=1,
                    start_runners_first=False,
                    platform=PlatformEnum.GITHUB,
-                   runner_image='cykube-runner:1234',
+                   runner_image='cykubed-runner:1234',
                    url='git@github.org/dummy.git',
                    organisation=org)
 

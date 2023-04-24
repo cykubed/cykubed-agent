@@ -3,12 +3,12 @@ kind: Job
 metadata:
     labels:
         branch: master
-        cykube-job: builder
+        cykubed-job: builder
         local_id: '1'
         project_id: '10'
         testrun_id: '20'
-    name: cykube-build-project-1
-    namespace: cykube
+    name: cykubed-builder-project-1
+    namespace: cykubed
 spec:
     activeDeadlineSeconds: 600
     backoffLimit: 5
@@ -23,17 +23,16 @@ spec:
                     valueFrom:
                         secretKeyRef:
                             key: redis-password
-                            name: cykube-redis
+                            name: cykubed-redis
                 -   name: SCRATCH_DIR
                     value: /scratch
                 envFrom:
                 -   configMapRef:
-                        name: cykube-agent-configmap
+                        name: cykubed-agent-configmap
                 -   secretRef:
-                        name: cykube-agent-secrets
-                image: cykube-runner:1234
-                imagePullPolicy: Always
-                name: cykube-builder
+                        name: cykubed-agent-secrets
+                image: cykubed-runner:1234
+                name: cykubed-builder
                 resources:
                     limits:
                         cpu: '2.0'
@@ -46,14 +45,14 @@ spec:
                 volumeMounts:
                 -   mountPath: /scratch
                     name: scratch-volume
-            priorityClassName: cykube-low-priority
+            priorityClassName: cykubed-low-priority
             restartPolicy: Never
             securityContext:
                 fsGroup: 10000
                 runAsGroup: 10000
                 runAsNonRoot: true
                 runAsUser: 10000
-            serviceAccountName: cykube
+            serviceAccountName: cykubed
             volumes:
             -   ephemeral:
                     volumeClaimTemplate:

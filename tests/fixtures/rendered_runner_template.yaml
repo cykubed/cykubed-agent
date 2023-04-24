@@ -3,11 +3,11 @@ kind: Job
 metadata:
     labels:
         branch: master
-        cykube-job: runner
+        cykubed-job: runner
         local_id: '1'
         project_id: '10'
         testrun_id: '20'
-    name: cykube-run-project-1
+    name: cykubed-runner-project-1
     namespace: cykube
 spec:
     activeDeadlineSeconds: 3600
@@ -36,15 +36,15 @@ spec:
                     valueFrom:
                         secretKeyRef:
                             key: redis-password
-                            name: cykube-redis
+                            name: cykubed-redis
                 envFrom:
                 -   configMapRef:
-                        name: cykube-agent-configmap
+                        name: cykubed-agent-configmap
                 -   secretRef:
-                        name: cykube-agent-secrets
-                image: cykube-runner:1234
+                        name: cykubed-agent-secrets
+                image: cykubed-runner:1234
                 imagePullPolicy: Always
-                name: cykube-runner
+                name: cykubed-runner
                 resources:
                     limits:
                         cpu: '2.0'
@@ -55,14 +55,14 @@ spec:
                 volumeMounts:
                 -   mountPath: /scratch
                     name: scratch-volume
-            priorityClassName: cykube-low-priority
+            priorityClassName: cykubed-low-priority
             restartPolicy: OnFailure
             securityContext:
                 fsGroup: 10000
                 runAsGroup: 10000
                 runAsNonRoot: true
                 runAsUser: 10000
-            serviceAccountName: cykube
+            serviceAccountName: cykubed
             volumes:
             -   ephemeral:
                     volumeClaimTemplate:
