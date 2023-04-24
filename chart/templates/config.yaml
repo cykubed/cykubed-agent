@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Secret
 metadata:
-  name: cykube-agent-secrets
+  name: cykubed-agent-secrets
   namespace: {{ .Release.Namespace }}
 type: Opaque
 data:
@@ -12,7 +12,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   namespace: {{ .Release.Namespace }}
-  name: cykube-agent-configmap
+  name: cykubed-agent-configmap
 data:
   MAIN_API_URL: {{ .Values.apiUrl }}
   NAMESPACE: {{ .Values.namespace }}
@@ -23,4 +23,4 @@ data:
   FILESTORE_DISK_SIZE_GB: "10.0"
   FILESTORE_MIN_WRITE: "1"
   CYPRESS_RUN_TIMEOUT: "3600"
-  REDIS_SENTINEL_PREFIX: "cykube-redis-headless"
+  REDIS_SENTINEL_PREFIX: "cykubed-redis-headless"

@@ -1,7 +1,7 @@
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
-  name: cykube-high-priority
+  name: cykubed-high-priority
 value: 1000
 globalDefault: false
 description: "Ensure that the cykube agent is not preempted by runner pods"
@@ -9,7 +9,7 @@ description: "Ensure that the cykube agent is not preempted by runner pods"
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
-  name: cykube-low-priority
+  name: cykubed-low-priority
 value: 0
 globalDefault: false
 description: "Ensure that the cykube runners are lower priority than the agent"

@@ -43,6 +43,7 @@ async def create_job(jobtype: str,
     """
     name = f"cykube-{jobtype}-{testrun.project.name}-{testrun.local_id}"
     context = dict(name=name,
+                   namespace='cykubed',
                    project_id=testrun.project.id,
                    local_id=testrun.local_id,
                    testrun_id=testrun.id,
@@ -105,7 +106,7 @@ async def create_job(jobtype: str,
 #     while is_running():
 #         api = client.BatchV1Api()
 #         # get runner Jobs
-#         jobs = api.list_namespaced_job(NAMESPACE, label_selector=f'cykube-job=runner')
+#         jobs = api.list_namespaced_job(NAMESPACE, label_selector=f'cykubed-job=runner')
 #
 #
 #         await asyncio.sleep(15)

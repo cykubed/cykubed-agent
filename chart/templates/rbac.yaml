@@ -5,8 +5,8 @@ metadata:
   annotations:
     iam.gke.io/gcp-service-account: {{ .Values.gcpServiceAccount }}
   {{ end }}
-  name: cykube
-  namespace: cykube
+  name: cykubed
+  namespace: {{ .Release.Namespace }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -24,11 +24,11 @@ rules:
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: cykube-binding
+  name: cykubed-binding
   namespace: {{ .Values.namespace }}
 subjects:
 - kind: ServiceAccount
-  name: cykube
+  name: cykubed
   namespace: {{ .Values.namespace }}
 roleRef:
   kind: Role

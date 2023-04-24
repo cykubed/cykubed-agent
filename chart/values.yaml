@@ -1,4 +1,4 @@
-namespace: cykube
+namespace: cykubed
 tag: "IMAGE_TAG"
 apiUrl: "https://api.cykubed.com"
 replicas: 2

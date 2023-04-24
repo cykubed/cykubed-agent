@@ -33,8 +33,8 @@ spec:
       labels:
         app: server
     spec:
-      priorityClassName: cykube-high-priority
-      serviceAccountName: cykube
+      priorityClassName: cykubed-high-priority
+      serviceAccountName: cykubed
       securityContext:
         runAsUser: 10000
         runAsGroup: 10000
@@ -62,15 +62,15 @@ spec:
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: "cykube-redis"
+                  name: "cykubed-redis"
                   key: "redis-password"
             - name: CACHE_DIR
               value: "/cache"
           envFrom:
             - configMapRef:
-                name: cykube-agent-configmap
+                name: cykubed-agent-configmap
             - secretRef:
-                name: cykube-agent-secrets
+                name: cykubed-agent-secrets
           volumeMounts:
           - name: cache
             mountPath: /cache

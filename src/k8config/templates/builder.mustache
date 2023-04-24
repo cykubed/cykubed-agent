@@ -2,13 +2,13 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   labels:
-    cykube-job: "builder"
+    cykubed-job: "builder"
     project_id: "{{project_id}}"
     local_id: "{{local_id}}"
     testrun_id: "{{testrun_id}}"
     branch: "{{branch}}"
   name: "{{name}}"
-  namespace: cykube
+  namespace: "{{namespace}}"
 spec:
   backoffLimit: 5
   ttlSecondsAfterFinished: 86400
@@ -20,7 +20,7 @@ spec:
         fsGroup: 10000
         runAsUser: 10000
         runAsGroup: 10000
-      serviceAccountName: "cykube"
+      serviceAccountName: "cykubed"
       volumes:
         - name: scratch-volume
           ephemeral:
@@ -32,23 +32,23 @@ spec:
                   requests:
                     storage: "{{storage}}Gi"
       restartPolicy: Never
-      priorityClassName: "cykube-low-priority"
+      priorityClassName: "cykubed-low-priority"
       containers:
-      - name: "cykube-builder"
+      - name: "cykubed-builder"
         image: "{{runner_image}}"
         env:
         - name: REDIS_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: "cykube-redis"
+              name: "cykubed-redis"
               key: "redis-password"
         - name: SCRATCH_DIR
           value: "/scratch"
         envFrom:
           - configMapRef:
-              name: cykube-agent-configmap
+              name: cykubed-agent-configmap
           - secretRef:
-              name: cykube-agent-secrets
+              name: cykubed-agent-secrets
         args: [ "build", "{{testrun_id}}"]
         resources:
           limits:
