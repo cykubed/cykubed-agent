@@ -23,4 +23,4 @@ data:
   FILESTORE_DISK_SIZE_GB: "10.0"
   FILESTORE_MIN_WRITE: "1"
   CYPRESS_RUN_TIMEOUT: "3600"
-  REDIS_SENTINEL_PREFIX: "cykubed-redis-headless"
+  REDIS_SENTINEL_PREFIX: "{{ .Release.Name }}-redis-headless"
