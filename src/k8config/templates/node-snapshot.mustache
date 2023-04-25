@@ -1,0 +1,11 @@
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshot
+metadata:
+  name: "node-{{hash}}"
+  namespace: "{{namespace}}"
+spec:
+  volumeSnapshotClassName: {{snapshot_class}}
+  source:
+    persistentVolumeClaimName: "node-{{project_id}}-{{testrun_id}}"
+
+

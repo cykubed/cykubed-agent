@@ -1,8 +1,7 @@
-{{^node_snapshot_name}}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: "node-{{project_id}}-{{testrun_id}}"
+  name: "build-{{project_id}}-{{testrun_id}}"
   namespace: "{{namespace}}"
 spec:
   storageClassName: "cykubed-storageclass"
@@ -12,13 +11,11 @@ spec:
     requests:
       storage: "{{storage}}Gi"
 ---
-{{/node_snapshot_name}}
-
 apiVersion: batch/v1
 kind: Job
 metadata:
   labels:
-    cykubed-job: "builder"
+    cykubed-job: "checkout"
     project_id: "{{project_id}}"
     local_id: "{{local_id}}"
     testrun_id: "{{testrun_id}}"
@@ -27,7 +24,7 @@ metadata:
   namespace: "{{namespace}}"
 spec:
   backoffLimit: 5
-  ttlSecondsAfterFinished: 86400
+  ttlSecondsAfterFinished: 3600
   activeDeadlineSeconds: {{deadline}}
   template:
     spec:
@@ -38,31 +35,13 @@ spec:
         runAsGroup: 10000
       serviceAccountName: "cykubed"
       volumes:
-        - name: node-volume
-        {{^node_snapshot_name}}
-          persistentVolumeClaim:
-            claimName: "node-{{project_id}}-{{testrun_id}}"
-        {{/node_snapshot_name}}
-        {{#node_snapshot_name}}
-          ephemeral:
-            volumeClaimTemplate:
-              spec:
-                accessModes: [ "ReadWriteOnce" ]
-                dataSource:
-                  apiGroup: snapshot.storage.k8s.io
-                  kind: VolumeSnapshot
-                  name: {{node_snapshot_name}}
-                resources:
-                  requests:
-                    storage: "{{storage}}Gi"
-        {{/node_snapshot_name}}
         - name: build-volume
           persistentVolumeClaim:
             claimName: "build-{{project_id}}-{{testrun_id}}"
       restartPolicy: Never
       priorityClassName: "cykubed-low-priority"
       containers:
-      - name: "cykubed-builder"
+      - name: "cloner"
         image: "{{runner_image}}"
         env:
         - name: REDIS_PASSWORD
@@ -72,14 +51,12 @@ spec:
               key: "redis-password"
         - name: BUILD_DIR
           value: "/build"
-        - name: NODE_CACHE_DIR
-          value: "/node"
         envFrom:
           - configMapRef:
               name: cykubed-agent-configmap
           - secretRef:
               name: cykubed-agent-secrets
-        args: [ "build", "{{testrun_id}}"]
+        args: [ "clone", "{{testrun_id}}"]
         resources:
           limits:
             cpu: "{{cpu_limit}}"
@@ -88,7 +65,5 @@ spec:
             cpu: "{{cpu_request}}"
             memory: "{{memory_request}}G"
         volumeMounts:
-        - mountPath: "/node"
-          name: node-volume
         - mountPath: "/build"
           name: build-volume
