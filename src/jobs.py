@@ -32,6 +32,7 @@ def common_context(jobtype: str, testrun: schemas.NewTestRun):
     name = f"cykubed-{jobtype}-{testrun.project.name}-{testrun.local_id}"
     return dict(name=name,
                 jobtype=jobtype,
+                sha=testrun.sha,
                 namespace=settings.NAMESPACE,
                 storage_class=settings.STORAGE_CLASS,
                 project_id=testrun.project.id,
@@ -41,7 +42,15 @@ def common_context(jobtype: str, testrun: schemas.NewTestRun):
                 branch=testrun.branch,
                 runner_image=testrun.project.runner_image,
                 timezone=testrun.project.timezone,
-                token=settings.API_TOKEN)
+                token=settings.API_TOKEN,
+                cpu_request=testrun.project.runner_cpu,
+                cpu_limit=testrun.project.runner_cpu,
+                gke_spot_enabled=testrun.project.spot_enabled,
+                gke_spot_percentage=testrun.project.spot_percentage,
+                deadline=testrun.project.runner_deadline,
+                memory_request=testrun.project.runner_memory,
+                memory_limit=testrun.project.runner_memory,
+                storage=testrun.project.runner_ephemeral_storage)
 
 
 async def create_job(context):
@@ -50,8 +59,8 @@ async def create_job(context):
         template = await get_job_template(jobtype)
         jobyaml = chevron.render(template, context)
         k8sclient = client.ApiClient()
-        yamlobjects = yaml.safe_load(jobyaml)
-        k8utils.create_from_yaml(k8sclient, yaml_objects=[yamlobjects], namespace=NAMESPACE)
+        yamlobjects = list(yaml.safe_load_all(jobyaml))
+        k8utils.create_from_yaml(k8sclient, yaml_objects=yamlobjects, namespace=NAMESPACE)
         logger.info(f'Created job {context["name"]}', id=context['testrun_id'])
     except YAMLError as ex:
         raise InvalidTemplateException(f'Invalid YAML in {jobtype} template: {ex}')
@@ -66,9 +75,7 @@ async def create_clone_job(testrun: schemas.AgentTestRun):
     # check for an existing build for this sha
     if await get_cached_item(testrun.sha):
         # yup - go straight to runner
-        resp = await app.httpclient.post(f'/agent/testrun/{testrun.id}/status/running')
-        if resp.status_code != 200:
-            logger.error(f'Failed to update server that testrun {testrun.id} is now runnign')
+        await app.update_status(testrun.id, 'running')
         await create_runner_job(testrun)
     else:
         # nope - clone it
@@ -80,19 +87,13 @@ async def create_build_job(testrun_id: int):
     testrun = await get_testrun(testrun_id)
     context = common_context('build', testrun)
     # check for node dist
-    cached_node_dist = await get_cached_item(testrun.cache_key)
+    cached_node_dist = await get_cached_item(f'node-{testrun.cache_key}')
     if cached_node_dist:
         context['node_snapshot_name'] = cached_node_dist.name
         testrun.node_cache_hit = True
         await save_testrun(testrun)
 
-    context.update(dict(node_cache_key=testrun.cache_key,
-                        cpu_request=testrun.project.build_cpu,
-                        cpu_limit=testrun.project.build_cpu,
-                        deadline=testrun.project.build_deadline,
-                        storage=testrun.project.build_ephemeral_storage,
-                        memory_request=testrun.project.build_memory,
-                        memory_limit=testrun.project.build_memory))
+    context.update(dict(node_cache_key=testrun.cache_key))
     await create_job(context)
 
 
@@ -101,7 +102,7 @@ async def build_completed(testrun_id: int):
     if not testrun.node_cache_hit:
         # take a snapshot of the node dist
         context = common_context('node-snapshot', testrun)
-        context['node_cache_key'] = testrun.cache_key
+        context['node_cache_key'] = f'node-{testrun.cache_key}'
         await create_job(context)
         await add_node_cache_item(testrun)
 
@@ -112,15 +113,7 @@ async def build_completed(testrun_id: int):
 async def create_runner_job(testrun: schemas.AgentTestRun):
     context = common_context('runner', testrun)
     parallelism = min(testrun.project.parallelism, len(testrun.specs))
-    context.update(dict(cpu_request=testrun.project.runner_cpu,
-                        cpu_limit=testrun.project.runner_cpu,
-                        deadline=testrun.project.runner_deadline,
-                        gke_spot_enabled=testrun.project.spot_enabled,
-                        gke_spot_percentage=testrun.project.spot_percentage,
-                        memory_request=testrun.project.runner_memory,
-                        memory_limit=testrun.project.runner_memory,
-                        storage=testrun.project.runner_ephemeral_storage,
-                        parallelism=parallelism))
+    context.update(dict(parallelism=parallelism))
     await create_job(context)
     await add_build_cache_item(testrun)
     await app.httpclient.post(f'/agent/testrun/{testrun.id}/status/running')

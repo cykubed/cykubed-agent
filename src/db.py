@@ -44,7 +44,8 @@ async def save_testrun(item: AgentTestRun):
 
 
 async def get_cached_item(key: str) -> CacheItem | None:
-    exists = await async_redis().smember('builds', key)
+    r = async_redis()
+    exists = await r.sismember('builds', key)
     if not exists:
         return None
 
@@ -55,11 +56,11 @@ async def get_cached_item(key: str) -> CacheItem | None:
     return item
 
 
-async def add_cached_item(key: str, ttl):
+async def add_cached_item(key: str, ttl: int):
     await async_redis().sadd('builds', key)
     item = CacheItem(name=key,
                      ttl=ttl,
-                     expires=utcnow() + datetime.timedelta(seconds=settings.APP_DISTRIBUTION_CACHE_TTL.ttl))
+                     expires=utcnow() + datetime.timedelta(seconds=settings.APP_DISTRIBUTION_CACHE_TTL))
     await async_redis().set(f'build:{key}', item.json())
 
 

@@ -1,4 +1,3 @@
-import httpx
 import pytest
 from loguru import logger
 from redis import Redis
@@ -9,25 +8,20 @@ from common.schemas import Project, OrganisationSummary, NewTestRun
 
 
 @pytest.fixture()
-def redis(mocker):
+def redis(mocker, autouse=True):
     r = Redis(host='localhost', db=1, decode_responses=True)
     r.flushdb()
     aredis = AsyncRedis(host='localhost', db=1, decode_responses=True)
     mocker.patch('db.async_redis', return_value=aredis)
     mocker.patch('ws.async_redis', return_value=aredis)
+    logger.remove()
     return r
 
 
-@pytest.fixture(autouse=True)
-async def init(mocker, redis):
-    mocker.patch('common.redisutils.RedisSettings.REDIS_DB', return_value=1)
-    logger.remove()
-
-
 @pytest.fixture()
-async def mockapp():
-    return {'platform': 'GKE',
-            'httpclient': httpx.AsyncClient(base_url='http://localhost:5050')}
+def mock_create_from_yaml(mocker):
+    mocker.patch('jobs.client')
+    return mocker.patch('jobs.k8utils.create_from_yaml')
 
 
 @pytest.fixture()
@@ -48,6 +42,7 @@ async def project() -> Project:
 async def testrun(project: Project) -> NewTestRun:
     return NewTestRun(url='git@github.org/dummy.git',
                       id=20,
+                      sha='deadbeef0101',
                       local_id=1,
                       project=project,
                       status='started',

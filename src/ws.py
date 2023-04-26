@@ -44,7 +44,7 @@ async def handle_cancel_run(trid: int):
     await db.cancel_testrun(trid)
 
 
-async def handle_message(data: dict):
+async def handle_websocket_message(data: dict):
     """
     Handle a message from the websocket
     :param data:
@@ -64,9 +64,29 @@ async def consumer_handler(websocket):
     while app.is_running():
         try:
             message = await websocket.recv()
-            await handle_message(json.loads(message))
+            await handle_websocket_message(json.loads(message))
         except ConnectionClosed:
             return
+
+
+async def handle_agent_message(websocket, rawmsg: str):
+    event = AgentEvent.parse_raw(rawmsg)
+    if event.type == AgentEventType.clone_completed:
+        await app.update_status(event.testrun_id, 'building')
+        # clone completed - kick off the build
+        await jobs.create_build_job(event.testrun_id)
+    if event.type == AgentEventType.build_completed:
+        await app.update_status(event.testrun_id, 'running')
+        # build completed - create runner jobs
+        await jobs.build_completed(event.testrun_id)
+        # and notify the server
+        resp = await app.httpclient.post(f'/agent/testrun/{event.testrun_id}/build-completed',
+                                         content=rawmsg.encode())
+        if resp.status_code != 200:
+            logger.error(f'Failed to update server that build was completed:'
+                         f' {resp.status_code}: {resp.text}')
+    # now post throught the websocket
+    await websocket.send(rawmsg)
 
 
 async def producer_handler(websocket):
@@ -76,22 +96,7 @@ async def producer_handler(websocket):
             msglist = await redis.lpop('messages', 100)
             if msglist is not None:
                 for rawmsg in msglist:
-                    event = AgentEvent.parse_raw(rawmsg)
-                    if event.type == AgentEventType.clone_completed:
-                        # clone completed - kick off the build
-                        await jobs.create_build_job(event.testrun_id)
-                    if event.type == AgentEventType.build_completed:
-                        # build completed - create runner jobs
-                        await jobs.build_completed(event.testrun_id)
-                        # and notify the server
-                        resp = await app.httpclient.post(f'/agent/testrun/{event.testrun_id}/build-completed',
-                                                            content=rawmsg.encode())
-                        if resp.status_code != 200:
-                            logger.error(f'Failed to update server that build was completed:'
-                                         f' {resp.status_code}: {resp.text}')
-                    # now post throught the websocket
-                    await websocket.send(rawmsg)
-
+                    await handle_agent_message(websocket, rawmsg)
             await asyncio.sleep(1)
         except RedisError as ex:
             if not app.is_running():

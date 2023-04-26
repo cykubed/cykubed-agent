@@ -1,5 +1,7 @@
 import httpx
+from loguru import logger
 
+from common.enums import TestRunStatus
 from settings import settings
 
 
@@ -23,6 +25,11 @@ class App(object):
     async def shutdown(self):
         self.running = False
         await self.httpclient.aclose()
+
+    async def update_status(self, testrun_id, status: TestRunStatus):
+        resp = await self.httpclient.post(f'/agent/testrun/{testrun_id}/status/{status}')
+        if resp.status_code != 200:
+            logger.error(f'Failed to update server with new state')
 
 
 app = App()

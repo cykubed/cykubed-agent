@@ -1,0 +1,77 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+    labels:
+        branch: master
+        local_id: '1'
+        project_id: '10'
+        sha: deadbeef0101
+        testrun_id: '20'
+    name: build-deadbeef0101
+    namespace: cykubed
+spec:
+    accessModes:
+    - ReadWriteOnce
+    resources:
+        requests:
+            storage: 4Gi
+    storageClassName: cykubed-storageclass
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+    labels:
+        branch: master
+        cykubed-job: checkout
+        local_id: '1'
+        project_id: '10'
+        testrun_id: '20'
+    name: cykubed-clone-project-1
+    namespace: cykubed
+spec:
+    activeDeadlineSeconds: 3600
+    backoffLimit: 5
+    template:
+        spec:
+            containers:
+            -   args:
+                - clone
+                - '20'
+                env:
+                -   name: REDIS_PASSWORD
+                    valueFrom:
+                        secretKeyRef:
+                            key: redis-password
+                            name: cykubed-redis
+                -   name: BUILD_DIR
+                    value: /build
+                envFrom:
+                -   configMapRef:
+                        name: cykubed-agent-configmap
+                -   secretRef:
+                        name: cykubed-agent-secrets
+                image: cykubed-runner:1234
+                name: cloner
+                resources:
+                    limits:
+                        cpu: '2'
+                        memory: 4G
+                    requests:
+                        cpu: '2'
+                        memory: 4G
+                volumeMounts:
+                -   mountPath: /build
+                    name: build-volume
+            priorityClassName: cykubed-low-priority
+            restartPolicy: Never
+            securityContext:
+                fsGroup: 10000
+                runAsGroup: 10000
+                runAsNonRoot: true
+                runAsUser: 10000
+            serviceAccountName: cykubed
+            volumes:
+            -   name: build-volume
+                persistentVolumeClaim:
+                    claimName: build-deadbeef0101
+    ttlSecondsAfterFinished: 3600

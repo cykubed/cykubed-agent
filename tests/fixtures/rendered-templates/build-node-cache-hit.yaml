@@ -1,0 +1,75 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+    labels:
+        branch: master
+        cykubed-job: builder
+        local_id: '1'
+        project_id: '10'
+        testrun_id: '20'
+    name: cykubed-build-project-1
+    namespace: cykubed
+spec:
+    activeDeadlineSeconds: 3600
+    backoffLimit: 5
+    template:
+        spec:
+            containers:
+            -   args:
+                - build
+                - '20'
+                env:
+                -   name: REDIS_PASSWORD
+                    valueFrom:
+                        secretKeyRef:
+                            key: redis-password
+                            name: cykubed-redis
+                -   name: BUILD_DIR
+                    value: /build
+                -   name: NODE_CACHE_DIR
+                    value: /node
+                envFrom:
+                -   configMapRef:
+                        name: cykubed-agent-configmap
+                -   secretRef:
+                        name: cykubed-agent-secrets
+                image: cykubed-runner:1234
+                name: cykubed-builder
+                resources:
+                    limits:
+                        cpu: '2.0'
+                        memory: 4.0G
+                    requests:
+                        cpu: '2.0'
+                        memory: 4.0G
+                volumeMounts:
+                -   mountPath: /node
+                    name: node-volume
+                -   mountPath: /build
+                    name: build-volume
+            priorityClassName: cykubed-low-priority
+            restartPolicy: Never
+            securityContext:
+                fsGroup: 10000
+                runAsGroup: 10000
+                runAsNonRoot: true
+                runAsUser: 10000
+            serviceAccountName: cykubed
+            volumes:
+            -   ephemeral:
+                    volumeClaimTemplate:
+                        spec:
+                            accessModes:
+                            - ReadWriteOnce
+                            dataSource:
+                                apiGroup: snapshot.storage.k8s.io
+                                kind: VolumeSnapshot
+                                name: node-absd234weefw
+                            resources:
+                                requests:
+                                    storage: 4.0Gi
+                name: node-volume
+            -   name: build-volume
+                persistentVolumeClaim:
+                    claimName: build-deadbeef0101
+    ttlSecondsAfterFinished: 86400

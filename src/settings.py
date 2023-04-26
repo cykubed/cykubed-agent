@@ -30,7 +30,7 @@ class AgentSettings(BaseSettings):
     MESSAGE_POLL_PERIOD = 1
 
     AGENT_URL: str = 'http://127.0.0.1:5000'
-    MAIN_API_URL: str = 'https://app.cykube.net/api'
+    MAIN_API_URL: str = 'https://api.cykubed.com'
 
     SENTRY_DSN: str = None
 

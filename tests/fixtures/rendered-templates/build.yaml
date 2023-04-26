@@ -1,3 +1,16 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+    name: node-absd234weefw
+    namespace: cykubed
+spec:
+    accessModes:
+    - ReadWriteOnce
+    resources:
+        requests:
+            storage: 4.0Gi
+    storageClassName: cykubed-storageclass
+---
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -7,10 +20,10 @@ metadata:
         local_id: '1'
         project_id: '10'
         testrun_id: '20'
-    name: cykubed-builder-project-1
+    name: cykubed-build-project-1
     namespace: cykubed
 spec:
-    activeDeadlineSeconds: 600
+    activeDeadlineSeconds: 3600
     backoffLimit: 5
     template:
         spec:
@@ -24,8 +37,10 @@ spec:
                         secretKeyRef:
                             key: redis-password
                             name: cykubed-redis
-                -   name: SCRATCH_DIR
-                    value: /scratch
+                -   name: BUILD_DIR
+                    value: /build
+                -   name: NODE_CACHE_DIR
+                    value: /node
                 envFrom:
                 -   configMapRef:
                         name: cykubed-agent-configmap
@@ -36,15 +51,15 @@ spec:
                 resources:
                     limits:
                         cpu: '2.0'
-                        ephemeral-storage: 10.0Gi
                         memory: 4.0G
                     requests:
                         cpu: '2.0'
-                        ephemeral-storage: 10.0Gi
                         memory: 4.0G
                 volumeMounts:
-                -   mountPath: /scratch
-                    name: scratch-volume
+                -   mountPath: /node
+                    name: node-volume
+                -   mountPath: /build
+                    name: build-volume
             priorityClassName: cykubed-low-priority
             restartPolicy: Never
             securityContext:
@@ -54,14 +69,10 @@ spec:
                 runAsUser: 10000
             serviceAccountName: cykubed
             volumes:
-            -   ephemeral:
-                    volumeClaimTemplate:
-                        spec:
-                            accessModes:
-                            - ReadWriteOnce
-                            resources:
-                                requests:
-                                    storage: 10.0Gi
-                            storageClassName: premium-rwo
-                name: scratch-volume
+            -   name: node-volume
+                persistentVolumeClaim:
+                    claimName: node-absd234weefw
+            -   name: build-volume
+                persistentVolumeClaim:
+                    claimName: build-deadbeef0101
     ttlSecondsAfterFinished: 86400
