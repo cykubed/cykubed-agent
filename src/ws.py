@@ -14,7 +14,7 @@ from app import is_running, shutdown
 from common.enums import AgentEventType
 from common.redisutils import async_redis, ping_redis
 from common.schemas import NewTestRun, AgentEvent, AgentCompletedBuildMessage
-from common.settings import settings
+from settings import settings
 
 
 async def handle_start_run(app, tr: NewTestRun):
@@ -27,7 +27,7 @@ async def handle_start_run(app, tr: NewTestRun):
         # Store in Redis and kick off a new build job
         await db.new_testrun(tr)
         # and create a new one
-        await jobs.create_build_job(app['platform'], tr)
+        await jobs.create_clone_job(tr)
     except:
         logger.exception(f"Failed to start test run {tr.id}", tr=tr)
         await app['httpclient'].post(f'/agent/testrun/{tr.id}/status/failed')
@@ -78,6 +78,7 @@ async def producer_handler(app, websocket):
             if msglist is not None:
                 for rawmsg in msglist:
                     event = AgentEvent.parse_raw(rawmsg)
+                    if event.type == AgentEventType.
                     if event.type == AgentEventType.build_completed:
                         # build completed - create runner jobs
                         buildmsg = AgentCompletedBuildMessage.parse_raw(rawmsg)

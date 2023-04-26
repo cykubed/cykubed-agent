@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: "build-{{project_id}}-{{testrun_id}}"
+  name: "{{build_pvc_name}}"
   namespace: "{{namespace}}"
 spec:
   storageClassName: "cykubed-storageclass"
@@ -37,7 +37,7 @@ spec:
       volumes:
         - name: build-volume
           persistentVolumeClaim:
-            claimName: "build-{{project_id}}-{{testrun_id}}"
+            claimName: "{{build_pvc_name}}"
       restartPolicy: Never
       priorityClassName: "cykubed-low-priority"
       containers:

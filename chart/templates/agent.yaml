@@ -1,8 +1,11 @@
+{{ required "A valid token is required" .Values.token }}
+{{ required "Please specifiy the target platform" .Values.platform }}
+
 {{ if eq .Values.platform "GKE" }}
 apiVersion: snapshot.storage.k8s.io/v1
 kind: VolumeSnapshotClass
 metadata:
-  name: snapshotclass
+  name: cykubed-snapshotclass
   namespace: cykubed
 driver: pd.csi.storage.gke.io
 deletionPolicy: Delete
@@ -20,9 +23,31 @@ parameters:
 provisioner: pd.csi.storage.gke.io
 reclaimPolicy: Delete
 volumeBindingMode: Immediate
+---
 {{ end }}
 
+
+{{ if eq .Values.platform | lower "minikube" }}
+apiVersion: snapshot.storage.k8s.io/v1
+deletionPolicy: Delete
+driver: hostpath.csi.k8s.io
+kind: VolumeSnapshotClass
+metadata:
+  labels:
+    addonmanager.kubernetes.io/mode: EnsureExists
+  name: cykubed-snapshotclass
 ---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  labels:
+    addonmanager.kubernetes.io/mode: Reconcile
+  name: cykubed-storageclass
+provisioner: hostpath.csi.k8s.io
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+---
+{{ end }}
 
 apiVersion: apps/v1
 kind: StatefulSet
@@ -67,6 +92,8 @@ spec:
                 secretKeyRef:
                   name: "cykubed-redis"
                   key: "redis-password"
+            - name: PLATFORM
+              value: {{ .Values.platform }}
           envFrom:
             - configMapRef:
                 name: cykubed-agent-configmap

@@ -14,7 +14,7 @@ from common import schemas
 from common.exceptions import InvalidTemplateException
 from common.k8common import NAMESPACE, get_core_api
 from common.schemas import NewTestRun
-from common.settings import settings
+from settings import settings
 
 TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), 'k8config', 'templates')
 
@@ -44,6 +44,7 @@ async def create_job(jobtype: str,
     name = f"cykubed-{jobtype}-{testrun.project.name}-{testrun.local_id}"
     context = dict(name=name,
                    namespace='cykubed',
+                   build_pvc_name=f'build-{testrun.project.id}-{testrun.id}',
                    project_id=testrun.project.id,
                    local_id=testrun.local_id,
                    testrun_id=testrun.id,
@@ -151,12 +152,12 @@ def delete_jobs(testrun_id: int):
         delete_job(job, testrun_id)
 
 
-async def create_build_job(platform: str, newrun: schemas.NewTestRun):
+async def create_clone_job(platform: str, newrun: schemas.NewTestRun):
     if settings.K8:
         # stop existing jobs
         delete_jobs_for_branch(newrun.id, newrun.branch)
         # and create a new one
-        await create_job('builder', newrun, platform)
+        await create_job('clone', newrun, platform)
 
         if newrun.project.start_runners_first:
             await sleep(10)

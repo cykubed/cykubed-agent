@@ -1,6 +1,3 @@
-import shutil
-import tempfile
-
 import httpx
 import pytest
 from loguru import logger
@@ -9,12 +6,11 @@ from redis.asyncio import Redis as AsyncRedis
 
 from common.enums import PlatformEnum
 from common.schemas import Project, OrganisationSummary, NewTestRun
-from common.settings import settings
 
 
 @pytest.fixture()
 def redis(mocker):
-    r = Redis(host=settings.REDIS_HOST, db=1, decode_responses=True)
+    r = Redis(host='localhost', db=1, decode_responses=True)
     r.flushdb()
     aredis = AsyncRedis(host='localhost', db=1, decode_responses=True)
     mocker.patch('db.async_redis', return_value=aredis)
@@ -23,15 +19,9 @@ def redis(mocker):
 
 
 @pytest.fixture(autouse=True)
-async def init(redis):
-    settings.TEST = True
-    settings.REDIS_DB = 1
-    settings.REDIS_HOST = 'localhost'
-    settings.MESSAGE_POLL_PERIOD = 0.1
-    settings.CACHE_DIR = tempfile.mkdtemp()
+async def init(mocker, redis):
+    mocker.patch('common.redisutils.RedisSettings.REDIS_DB', return_value=1)
     logger.remove()
-    yield
-    shutil.rmtree(settings.CACHE_DIR)
 
 
 @pytest.fixture()

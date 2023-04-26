@@ -4,7 +4,7 @@ metadata:
   name: "node-{{hash}}"
   namespace: "{{namespace}}"
 spec:
-  volumeSnapshotClassName: {{snapshot_class}}
+  volumeSnapshotClassName: cykubed-snapshotclass
   source:
     persistentVolumeClaimName: "node-{{project_id}}-{{testrun_id}}"
 
