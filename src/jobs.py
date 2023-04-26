@@ -116,9 +116,8 @@ async def create_runner_job(testrun: schemas.AgentTestRun):
     context.update(dict(parallelism=parallelism))
     await create_job(context)
     await add_build_cache_item(testrun)
-    await app.httpclient.post(f'/agent/testrun/{testrun.id}/status/running')
     # and delete the original build (we've already cloned it)
-    get_core_api().delete_namespaced_persistent_volume_claim(f'build-{testrun.sha}-ro', settings.NAMESPACE)
+    get_core_api().delete_namespaced_persistent_volume_claim(f'build-{testrun.sha}', settings.NAMESPACE)
 
 
 def delete_job(job, trid: int = None):

@@ -6,7 +6,8 @@ from freezegun import freeze_time
 from httpx import Response
 
 from common.enums import TestRunStatus, AgentEventType
-from common.schemas import NewTestRun, AgentTestRun, AgentEvent
+from common.schemas import NewTestRun, AgentTestRun, AgentEvent, BuildCompletedAgentMessage
+from common.utils import utcnow
 from db import add_node_cache_item
 from jobs import create_build_job
 from ws import handle_start_run, handle_agent_message
@@ -17,7 +18,7 @@ FIXTURES_DIR = os.path.join(os.path.dirname(__file__), 'fixtures')
 def compare_rendered_template(create_from_yaml_mock, jobtype: str):
     yamlobjects = create_from_yaml_mock.call_args[1]['yaml_objects']
     asyaml = yaml.safe_dump_all(yamlobjects, indent=4, sort_keys=True)
-    print('\n'+asyaml)
+    # print('\n'+asyaml)
     with open(os.path.join(FIXTURES_DIR, 'rendered-templates', f'{jobtype}.yaml'), 'r') as f:
         expected = f.read()
         assert expected == asyaml
@@ -62,9 +63,9 @@ async def test_clone_completed_cache_miss(redis, mocker, mock_create_from_yaml,
 
 
 @freeze_time('2022-04-03 14:10:00Z')
-async def test_create_build_job_node_cache_hit(redis, mocker, mock_create_from_yaml,
-                                              respx_mock,
-                                              testrun: NewTestRun):
+async def test_create_build_job_node_cache_hit(redis, mock_create_from_yaml,
+                                               respx_mock,
+                                               testrun: NewTestRun):
     specs = ['cypress/e2e/spec1.ts']
     testrun.status = TestRunStatus.running
     atr = AgentTestRun(specs=specs, node_cache_hit=True, cache_key='absd234weefw', **testrun.dict())
@@ -81,43 +82,26 @@ async def test_create_build_job_node_cache_hit(redis, mocker, mock_create_from_y
     compare_rendered_template(mock_create_from_yaml, 'build-node-cache-hit')
 
 
-# @freeze_time('2022-04-03 14:10:00Z')
-# async def test_build_completed(respx_mock, mocker, redis, mockapp, testrun: NewTestRun):
-#     create_from_yaml = mocker.patch('jobs.k8utils.create_from_yaml')
-#
-#     redis.sadd(f'testrun:{testrun.id}:specs', *specs)
-#     testrun.status = TestRunStatus.running
-#     testrun.sha = 'deadbeef0101'
-#     redis.set(f'testrun:{testrun.id}', testrun.json())
-#
-#     msg = AgentCompletedBuildMessage(type=AgentEventType.build_completed,
-#                                      testrun_id=testrun.id,
-#                                      finished=utcnow(),
-#                                      sha=testrun.sha, specs=specs)
-#
-#     route = respx_mock.post(f'http://localhost:5050/agent/testrun/20/build-completed')
-#
-#     async with respx_mock:
-#         redis.rpush('messages', msg.json())
-#         await poll_messages(mockapp, 1)
-#         assert route.called
-#         assert route.calls[0].request.method == 'POST'
-#         assert json.loads(route.calls[0].request.content.decode()) == {"type": "build_completed", "testrun_id": 20,
-#                                                                        "sha": "deadbeef0101",
-#                                                                        "finished": "2022-04-03T14:10:00+00:00",
-#                                                                        "specs": ["cypress/e2e/spec1.ts",
-#                                                                                  "cypress/e2e/spec2.ts"]}
-#
-#     create_from_yaml.assert_called_once()
-#     # mock out the actual Job to check the rendered template
-#     compare_rendered_template(create_from_yaml, 'runner')
+@freeze_time('2022-04-03 14:10:00Z')
+async def test_build_completed(redis, mock_create_from_yaml,
+                               respx_mock, mocker,
+                               k8_core_api_mock,
+                               testrun: NewTestRun):
+    msg = BuildCompletedAgentMessage(type=AgentEventType.build_completed,
+                                     testrun_id=testrun.id,
+                                     finished=utcnow(),
+                                     sha=testrun.sha, specs=['cypress/e2e/spec12.ts'])
+    build_completed = \
+        respx_mock.post('https://api.cykubed.com/agent/testrun/20/build-completed')\
+            .mock(return_value=Response(200))
+    websocket = mocker.AsyncMock()
+    atr = AgentTestRun(specs=msg.specs, cache_key='absd234weefw', **testrun.dict())
+    redis.set(f'testrun:{testrun.id}', atr.json())
 
-    # # two messages will be sent through the websocket
-    # msg1 = json.loads(await messages.queue.get())
-    # messages.queue.task_done()
-    # assert msg1 == {'type': 'build_completed', 'testrun_id': 20, 'sha': 'deadbeef0101',
-    #                 'finished': '2022-04-03T14:10:00+00:00', 'specs': ['cypress/e2e/spec1.ts', 'cypress/e2e/spec2.ts']}
-    # msg2 = json.loads(await messages.queue.get())
-    # messages.queue.task_done()
-    # assert msg2 == {'type': 'status', 'testrun_id': 20, 'status': 'running'}
+    await handle_agent_message(websocket, msg.json())
+    websocket.send.assert_called_once_with(msg.json())
+    k8_core_api_mock.delete_namespaced_persistent_volume_claim.assert_called_with('build-deadbeef0101', 'cykubed')
 
+    compare_rendered_template(mock_create_from_yaml, 'runner')
+
+    assert build_completed.called == 1

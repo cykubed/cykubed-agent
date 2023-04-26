@@ -76,7 +76,6 @@ async def handle_agent_message(websocket, rawmsg: str):
         # clone completed - kick off the build
         await jobs.create_build_job(event.testrun_id)
     if event.type == AgentEventType.build_completed:
-        await app.update_status(event.testrun_id, 'running')
         # build completed - create runner jobs
         await jobs.build_completed(event.testrun_id)
         # and notify the server

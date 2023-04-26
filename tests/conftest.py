@@ -39,6 +39,13 @@ async def project() -> Project:
 
 
 @pytest.fixture()
+def k8_core_api_mock(mocker):
+    core_api_mock = mocker.MagicMock()
+    mocker.patch('jobs.get_core_api', return_value=core_api_mock)
+    return core_api_mock
+
+
+@pytest.fixture()
 async def testrun(project: Project) -> NewTestRun:
     return NewTestRun(url='git@github.org/dummy.git',
                       id=20,

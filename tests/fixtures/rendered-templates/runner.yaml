@@ -1,3 +1,24 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+    labels:
+        branch: master
+        local_id: '1'
+        project_id: '10'
+        testrun_id: '20'
+    name: build-deadbeef0101-ro
+    namespace: cykubed
+spec:
+    accessModes:
+    - ReadOnlyMany
+    dataSource:
+        kind: PersistentVolumeClaim
+        name: build-deadbeef0101
+    resources:
+        requests:
+            storage: 4.0Gi
+    storageClassName: cykubed-storageclass
+---
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -8,11 +29,11 @@ metadata:
         project_id: '10'
         testrun_id: '20'
     name: cykubed-runner-project-1
-    namespace: cykube
+    namespace: cykubed
 spec:
     activeDeadlineSeconds: 3600
     backoffLimit: 10
-    parallelism: 2
+    parallelism: 1
     template:
         metadata:
             labels:
@@ -26,10 +47,10 @@ spec:
                 - run
                 - '20'
                 env:
-                -   name: SCRATCH_DIR
-                    value: /scratch
+                -   name: BUILD_DIR
+                    value: /build
                 -   name: CYPRESS_RETRIES
-                    value: '2'
+                    value: ''
                 -   name: TZ
                     value: UTC
                 -   name: REDIS_PASSWORD
@@ -43,7 +64,6 @@ spec:
                 -   secretRef:
                         name: cykubed-agent-secrets
                 image: cykubed-runner:1234
-                imagePullPolicy: Always
                 name: cykubed-runner
                 resources:
                     limits:
@@ -53,8 +73,8 @@ spec:
                         cpu: '2.0'
                         memory: 4.0G
                 volumeMounts:
-                -   mountPath: /scratch
-                    name: scratch-volume
+                -   mountPath: /build
+                    name: build-volume
             priorityClassName: cykubed-low-priority
             restartPolicy: OnFailure
             securityContext:
@@ -64,14 +84,8 @@ spec:
                 runAsUser: 10000
             serviceAccountName: cykubed
             volumes:
-            -   ephemeral:
-                    volumeClaimTemplate:
-                        spec:
-                            accessModes:
-                            - ReadWriteOnce
-                            resources:
-                                requests:
-                                    storage: 4.0Gi
-                            storageClassName: premium-rwo
-                name: scratch-volume
+            -   name: build-volume
+                persistentVolumeClaim:
+                    claimName: build-deadbeef0101-ro
+                    readOnly: true
     ttlSecondsAfterFinished: 86400

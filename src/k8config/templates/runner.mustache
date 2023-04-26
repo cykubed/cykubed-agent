@@ -49,7 +49,7 @@ spec:
         - name: build-volume
           persistentVolumeClaim:
             readOnly: true
-            claimName: "build-{{project_id}}-{{testrun_id}}-ro"
+            claimName: "build-{{sha}}-ro"
       {{#gke_spot_enabled}}
       affinity:
         nodeAffinity:
