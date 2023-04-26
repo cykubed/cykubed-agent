@@ -1,15 +1,20 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: "build-{{project_id}}-{{testrun_id}}-ro"
+  name: "build-{{sha}}-ro"
   namespace: "{{namespace}}"
+  labels:
+    project_id: "{{project_id}}"
+    local_id: "{{local_id}}"
+    testrun_id: "{{testrun_id}}"
+    branch: "{{branch}}"
 spec:
   storageClassName: "cykubed-storageclass"
   accessModes:
     - ReadOnlyMany
   dataSource:
     kind: PersistentVolumeClaim
-    name: "build-{{project_id}}-{{testrun_id}}"
+    name: "build-{{sha}}"
   resources:
     requests:
       storage: "{{storage}}Gi"

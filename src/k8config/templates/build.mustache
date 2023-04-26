@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: "node-{{project_id}}-{{testrun_id}}"
+  name: "node-{{node_cache_key}}"
   namespace: "{{namespace}}"
 spec:
   storageClassName: "cykubed-storageclass"
@@ -41,7 +41,7 @@ spec:
         - name: node-volume
         {{^node_snapshot_name}}
           persistentVolumeClaim:
-            claimName: "node-{{project_id}}-{{testrun_id}}"
+            claimName: "node-{{node_cache_key}}"
         {{/node_snapshot_name}}
         {{#node_snapshot_name}}
           ephemeral:
@@ -58,7 +58,7 @@ spec:
         {{/node_snapshot_name}}
         - name: build-volume
           persistentVolumeClaim:
-            claimName: "build-{{project_id}}-{{testrun_id}}"
+            claimName: "build-{{sha}}"
       restartPolicy: Never
       priorityClassName: "cykubed-low-priority"
       containers:

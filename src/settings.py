@@ -6,7 +6,8 @@ class AppSettings(BaseSettings):
 
     K8: bool = True
 
-    NAMESPACE = 'cykube'
+    NAMESPACE = 'cykubed'
+    PLATFORM: str
 
     SERVER_START_TIMEOUT: int = 60
     CYPRESS_RUN_TIMEOUT: int = 10*60
@@ -34,6 +35,9 @@ class AppSettings(BaseSettings):
     SENTRY_DSN: str = None
 
     HOSTNAME: str = None  # for testin
+
+    STORAGE_CLASS = 'cykubed-storageclass'
+
 
 
 settings = AppSettings()

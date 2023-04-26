@@ -1,10 +1,16 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: "{{build_pvc_name}}"
+  name: "build-{{sha}}"
   namespace: "{{namespace}}"
+  labels:
+    sha: "{{sha}}"
+    project_id: "{{project_id}}"
+    local_id: "{{local_id}}"
+    testrun_id: "{{testrun_id}}"
+    branch: "{{branch}}"
 spec:
-  storageClassName: "cykubed-storageclass"
+  storageClassName: "{{storage_class}}"
   accessModes:
     - ReadWriteOnce
   resources:
@@ -37,7 +43,7 @@ spec:
       volumes:
         - name: build-volume
           persistentVolumeClaim:
-            claimName: "{{build_pvc_name}}"
+            claimName: "build-{{sha}}"
       restartPolicy: Never
       priorityClassName: "cykubed-low-priority"
       containers:

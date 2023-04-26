@@ -10,14 +10,14 @@ from websockets.exceptions import ConnectionClosedError, InvalidStatusCode, Conn
 
 import db
 import jobs
-from app import is_running, shutdown
+from app import app
 from common.enums import AgentEventType
 from common.redisutils import async_redis, ping_redis
-from common.schemas import NewTestRun, AgentEvent, AgentCompletedBuildMessage
+from common.schemas import NewTestRun, AgentEvent
 from settings import settings
 
 
-async def handle_start_run(app, tr: NewTestRun):
+async def handle_start_run(tr: NewTestRun):
     """
     Start a test run
     :param app:
@@ -44,48 +44,47 @@ async def handle_cancel_run(trid: int):
     await db.cancel_testrun(trid)
 
 
-async def handle_message(app, data: dict):
+async def handle_message(data: dict):
     """
     Handle a message from the websocket
-    :param app:
     :param data:
     :return:
     """
     cmd = data['command']
     payload = data['payload']
     if cmd == 'start':
-        await handle_start_run(app, NewTestRun.parse_raw(payload))
+        await handle_start_run(NewTestRun.parse_raw(payload))
     elif cmd == 'delete_project':
         await handle_delete_project(payload['project_id'])
     elif cmd == 'cancel':
         await handle_cancel_run(payload['testrun_id'])
 
 
-async def consumer_handler(app, websocket):
-    while is_running():
+async def consumer_handler(websocket):
+    while app.is_running():
         try:
             message = await websocket.recv()
-            await handle_message(app, json.loads(message))
+            await handle_message(json.loads(message))
         except ConnectionClosed:
             return
 
 
-async def producer_handler(app, websocket):
+async def producer_handler(websocket):
     redis = async_redis()
-    while is_running():
+    while app.is_running():
         try:
             msglist = await redis.lpop('messages', 100)
             if msglist is not None:
                 for rawmsg in msglist:
                     event = AgentEvent.parse_raw(rawmsg)
-                    if event.type == AgentEventType.
+                    if event.type == AgentEventType.clone_completed:
+                        # clone completed - kick off the build
+                        await jobs.create_build_job(event.testrun_id)
                     if event.type == AgentEventType.build_completed:
                         # build completed - create runner jobs
-                        buildmsg = AgentCompletedBuildMessage.parse_raw(rawmsg)
-                        tr = await db.get_testrun(buildmsg.testrun_id)
-                        await jobs.create_runner_jobs(tr, app['platform'], buildmsg)
+                        await jobs.build_completed(event.testrun_id)
                         # and notify the server
-                        resp = await app['httpclient'].post(f'/agent/testrun/{tr.id}/build-completed',
+                        resp = await app.httpclient.post(f'/agent/testrun/{event.testrun_id}/build-completed',
                                                             content=rawmsg.encode())
                         if resp.status_code != 200:
                             logger.error(f'Failed to update server that build was completed:'
@@ -95,26 +94,24 @@ async def producer_handler(app, websocket):
 
             await asyncio.sleep(1)
         except RedisError as ex:
-            if not is_running():
+            if not app.is_running():
                 return
             logger.error(f"Failed to fetch messages from Redis: {ex}")
 
 
-async def connect(app):
+async def connect():
     """
     Connect to the main cykube servers via a websocket
     """
-
-    app['ws'] = None
     # fetch token
     headers = {'Authorization': f'Bearer {settings.API_TOKEN}',
-               'Agent-Host': app['hostname']}
+               'Agent-Host': app.hostname}
 
     async def handle_sigterm_runner():
         logger.warning(f"SIGTERM/SIGINT caught: close socket and exist")
-        wsock = app['ws']
+        wsock = app.ws
         if wsock:
-            shutdown()
+            app.shutdown()
             await wsock.close()
             await wsock.wait_closed()
         signal.raise_signal(signal.SIGINT)
@@ -122,7 +119,7 @@ async def connect(app):
     loop = asyncio.get_event_loop()
     loop.add_signal_handler(signal.SIGTERM, lambda: asyncio.create_task(handle_sigterm_runner()))
 
-    while is_running():
+    while app.is_running():
 
         try:
             logger.debug("Try to connect websocket")
@@ -133,8 +130,8 @@ async def connect(app):
             async with websockets.connect(url, extra_headers=headers) as ws:
                 app['ws'] = ws
                 logger.info("Connected")
-                done, pending = await asyncio.wait([create_task(consumer_handler(app, ws)),
-                                                    create_task(producer_handler(app, ws))],
+                done, pending = await asyncio.wait([create_task(consumer_handler(ws)),
+                                                    create_task(producer_handler(ws))],
                                                    return_when=asyncio.FIRST_COMPLETED)
                 # we'll need to reconnect
                 for task in pending:
@@ -147,7 +144,7 @@ async def connect(app):
             await asyncio.sleep(10)
 
         except ConnectionClosedError as ex:
-            if not is_running():
+            if not app.is_running():
                 logger.info('Agent terminating gracefully')
                 return
             if ex.code == 1001:

@@ -1,5 +1,9 @@
+import datetime
+
 from common.redisutils import async_redis
-from common.schemas import NewTestRun
+from common.schemas import NewTestRun, CacheItem, AgentTestRun
+from common.utils import utcnow
+from settings import settings
 
 
 #
@@ -23,13 +27,45 @@ async def cancel_testrun(trid: int):
     await r.srem(f'testruns', str(trid))
 
 
-async def get_testrun(id: int) -> NewTestRun | None:
+async def get_testrun(id: int) -> AgentTestRun | None:
     """
-    Used by agents and runners to return a deserialised NewTestRun
+    Used by agents and runners to return a deserialised AgentTestRun
     :param id:
     :return:
     """
     d = await async_redis().get(f'testrun:{id}')
     if d:
-        return NewTestRun.parse_raw(d)
+        return AgentTestRun.parse_raw(d)
     return None
+
+
+async def save_testrun(item: AgentTestRun):
+    await async_redis().set(f'testrun:{id}', item.json())
+
+
+async def get_cached_item(key: str) -> CacheItem | None:
+    exists = await async_redis().smember('builds', key)
+    if not exists:
+        return None
+
+    # update expiry
+    item = CacheItem.parse_raw(await async_redis().get(f'build:{key}'))
+    item.update_expiry()
+    await async_redis().set(f'build:{key}', item.json())
+    return item
+
+
+async def add_cached_item(key: str, ttl):
+    await async_redis().sadd('builds', key)
+    item = CacheItem(name=key,
+                     ttl=ttl,
+                     expires=utcnow() + datetime.timedelta(seconds=settings.APP_DISTRIBUTION_CACHE_TTL.ttl))
+    await async_redis().set(f'build:{key}', item.json())
+
+
+async def add_node_cache_item(tr: AgentTestRun):
+    await add_cached_item(f'node-{tr.cache_key}', settings.NODE_DISTRIBUTION_CACHE_TTL)
+
+
+async def add_build_cache_item(tr: AgentTestRun):
+    await add_cached_item(f"build-{tr.sha}-ro", settings.APP_DISTRIBUTION_CACHE_TTL)

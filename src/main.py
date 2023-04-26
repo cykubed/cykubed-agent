@@ -8,11 +8,25 @@ from sentry_sdk.integrations.asyncio import AsyncioIntegration
 from sentry_sdk.integrations.redis import RedisIntegration
 
 import ws
-from app import shutdown
+from app import app
 from common import k8common
 from common.redisutils import sync_redis, ping_redis
 from logs import configure_logging
 from settings import settings
+
+
+async def prune_cache():
+    while app.is_running():
+        await asyncio.sleep(300)
+        # TODO prune cache
+
+
+async def run():
+    await asyncio.wait(
+        [asyncio.create_task(prune_cache()),
+         asyncio.create_task(ws.connect())], return_when=asyncio.FIRST_COMPLETED,
+    )
+
 
 if __name__ == "__main__":
     if settings.SENTRY_DSN:
@@ -33,16 +47,10 @@ if __name__ == "__main__":
             k8common.init()
         configure_logging()
 
-        app = dict()
-        if settings.HOSTNAME:
-            app['hostname'] = settings.HOSTNAME
-        else:
-            with open('/etc/hostname', 'r') as f:
-                app['hostname'] = f.read().strip()
-        asyncio.run(ws.connect(app))
+        asyncio.run(run())
 
     except KeyboardInterrupt:
-        shutdown()
+        app.shutdown()
     except Exception as ex:
         logger.exception("Agent quit expectedly")
         sys.exit(1)

@@ -94,6 +94,10 @@ spec:
                   key: "redis-password"
             - name: PLATFORM
               value: {{ .Values.platform }}
+            - name: NAMESPACE
+              value: {{ .Release.Namespace }}
+            - name: STORAGE_CLASS
+              value: cykubed-storageclass
           envFrom:
             - configMapRef:
                 name: cykubed-agent-configmap
