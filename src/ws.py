@@ -128,7 +128,6 @@ async def connect():
             url = f'{protocol}://{domain}/agent-ws'
 
             async with websockets.connect(url, extra_headers=headers) as ws:
-                app['ws'] = ws
                 logger.info("Connected")
                 done, pending = await asyncio.wait([create_task(consumer_handler(ws)),
                                                     create_task(producer_handler(ws))],
@@ -143,6 +142,9 @@ async def connect():
                 logger.info("Socket disconnected: try again shortly")
             await asyncio.sleep(10)
 
+        except KeyboardInterrupt:
+            await app.shutdown()
+            return
         except ConnectionClosedError as ex:
             if not app.is_running():
                 logger.info('Agent terminating gracefully')

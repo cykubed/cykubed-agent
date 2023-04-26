@@ -22,10 +22,13 @@ async def prune_cache():
 
 
 async def run():
-    await asyncio.wait(
+    done, pending = await asyncio.wait(
         [asyncio.create_task(prune_cache()),
          asyncio.create_task(ws.connect())], return_when=asyncio.FIRST_COMPLETED,
     )
+    # cancel the others
+    for task in pending:
+        task.cancel()
 
 
 if __name__ == "__main__":
@@ -42,15 +45,10 @@ if __name__ == "__main__":
         logger.debug("Cannot ping_redis Redis - waiting")
         sleep(5)
 
+    if settings.K8 and not settings.TEST:
+        k8common.init()
+    configure_logging()
     try:
-        if settings.K8 and not settings.TEST:
-            k8common.init()
-        configure_logging()
-
         asyncio.run(run())
-
     except KeyboardInterrupt:
-        app.shutdown()
-    except Exception as ex:
-        logger.exception("Agent quit expectedly")
-        sys.exit(1)
+        sys.exit(0)

@@ -1,13 +1,13 @@
 from pydantic import BaseSettings
 
 
-class AppSettings(BaseSettings):
+class AgentSettings(BaseSettings):
     API_TOKEN: str = 'cykubeauth'
 
     K8: bool = True
 
     NAMESPACE = 'cykubed'
-    PLATFORM: str
+    PLATFORM: str = 'Minikube'
 
     SERVER_START_TIMEOUT: int = 60
     CYPRESS_RUN_TIMEOUT: int = 10*60
@@ -39,5 +39,4 @@ class AppSettings(BaseSettings):
     STORAGE_CLASS = 'cykubed-storageclass'
 
 
-
-settings = AppSettings()
+settings = AgentSettings()

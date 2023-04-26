@@ -20,7 +20,7 @@ class App(object):
     def is_running(self) -> bool:
         return self.running
 
-    def shutdown(self):
+    async def shutdown(self):
         self.running = False
         await self.httpclient.aclose()
 

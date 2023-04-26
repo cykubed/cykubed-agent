@@ -50,7 +50,7 @@ async def get_cached_item(key: str) -> CacheItem | None:
 
     # update expiry
     item = CacheItem.parse_raw(await async_redis().get(f'build:{key}'))
-    item.update_expiry()
+    item.expires = utcnow() + datetime.timedelta(seconds=item.ttl)
     await async_redis().set(f'build:{key}', item.json())
     return item
 
