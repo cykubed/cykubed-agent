@@ -24,9 +24,14 @@ def compare_rendered_template(create_from_yaml_mock, jobtype: str):
         assert expected == asyaml
 
 
-async def test_start_run(redis, mocker, testrun: NewTestRun, mock_create_from_yaml):
+async def test_start_run(redis, mocker, testrun: NewTestRun,
+                         respx_mock, mock_create_from_yaml):
     """
     """
+    update_status = \
+        respx_mock.post('https://api.cykubed.com/agent/testrun/20/status/building')\
+            .mock(return_value=Response(200))
+
     delete_jobs = mocker.patch('jobs.delete_jobs_for_branch')
     await handle_start_run(testrun)
     # this will add an entry to the testrun collection
@@ -41,13 +46,12 @@ async def test_start_run(redis, mocker, testrun: NewTestRun, mock_create_from_ya
     # mock out the actual Job to check the rendered template
     compare_rendered_template(mock_create_from_yaml, 'clone')
 
+    assert update_status.called == 1
+
 
 async def test_clone_completed_cache_miss(redis, mocker, mock_create_from_yaml,
                                           respx_mock,
                                           testrun: NewTestRun):
-    update_status = \
-        respx_mock.post('https://api.cykubed.com/agent/testrun/20/status/building')\
-            .mock(return_value=Response(200))
     websocket = mocker.AsyncMock()
     specs = ['cypress/e2e/spec1.ts', 'cypress/e2e/spec2.ts']
     atr = AgentTestRun(specs=specs, cache_key='absd234weefw', **testrun.dict())
@@ -59,7 +63,6 @@ async def test_clone_completed_cache_miss(redis, mocker, mock_create_from_yaml,
                                                      testrun_id=testrun.id).json())
 
     compare_rendered_template(mock_create_from_yaml, 'build')
-    assert update_status.called == 1
 
 
 @freeze_time('2022-04-03 14:10:00Z')

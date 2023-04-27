@@ -81,6 +81,7 @@ async def create_clone_job(testrun: schemas.AgentTestRun):
         # nope - clone it
         context = common_context('clone', testrun)
         await create_job(context)
+        await app.update_status(testrun.id, 'building')
 
 
 async def create_build_job(testrun_id: int):

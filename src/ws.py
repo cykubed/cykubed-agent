@@ -72,7 +72,6 @@ async def consumer_handler(websocket):
 async def handle_agent_message(websocket, rawmsg: str):
     event = AgentEvent.parse_raw(rawmsg)
     if event.type == AgentEventType.clone_completed:
-        await app.update_status(event.testrun_id, 'building')
         # clone completed - kick off the build
         await jobs.create_build_job(event.testrun_id)
     if event.type == AgentEventType.build_completed:
