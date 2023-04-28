@@ -8,17 +8,11 @@ from sentry_sdk.integrations.asyncio import AsyncioIntegration
 from sentry_sdk.integrations.redis import RedisIntegration
 
 import ws
-from app import app
 from common import k8common
 from common.redisutils import sync_redis, ping_redis
+from jobs import prune_cache
 from logs import configure_logging
 from settings import settings
-
-
-async def prune_cache():
-    while app.is_running():
-        await asyncio.sleep(300)
-        # TODO prune cache
 
 
 async def run():

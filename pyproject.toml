@@ -13,7 +13,6 @@ websockets = "*"
 httpx = "*"
 cachetools = "^5.2.0"
 python-dateutil = "^2.8.2"
-motor = "^3.1.1"
 sentry-sdk = {extras = ["httpx"], version = "^1.17.0"}
 aiofiles = "^23.1.0"
 redis = "^4.5.2"

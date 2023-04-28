@@ -1,7 +1,7 @@
 import datetime
 
 from common.redisutils import async_redis
-from common.schemas import NewTestRun, CacheItem, AgentTestRun
+from common.schemas import NewTestRun, CacheItem, AgentTestRun, CacheItemType
 from common.utils import utcnow
 from settings import settings
 
@@ -12,8 +12,10 @@ from settings import settings
 
 
 async def new_testrun(tr: NewTestRun):
-    await async_redis().set(f'testrun:{tr.id}', tr.json())
-    await async_redis().sadd('testruns', str(tr.id))
+    r = async_redis()
+    await r.set(f'testrun:{tr.id}', tr.json(), ex=24*3600)
+    await r.sadd('testruns', str(tr.id))
+    await r.set(f'testrun:{tr.id}:run_duration', 0, ex=24*3600)
 
 
 async def cancel_testrun(trid: int):
@@ -43,30 +45,65 @@ async def save_testrun(item: AgentTestRun):
     await async_redis().set(f'testrun:{id}', item.json())
 
 
-async def get_cached_item(key: str) -> CacheItem | None:
-    r = async_redis()
-    exists = await r.sismember('builds', key)
-    if not exists:
+async def get_cached_item(key: str, update_expiry=False) -> CacheItem | None:
+    itemstr = await async_redis().get(f'cache:{key}')
+    if not itemstr:
         return None
-
-    # update expiry
-    item = CacheItem.parse_raw(await async_redis().get(f'build:{key}'))
-    item.expires = utcnow() + datetime.timedelta(seconds=item.ttl)
-    await async_redis().set(f'build:{key}', item.json())
+    item = CacheItem.parse_raw(itemstr)
+    if update_expiry:
+        # update expiry
+        item.expires = utcnow() + datetime.timedelta(seconds=item.ttl)
+        await async_redis().set(f'cache:{key}', item.json())
     return item
 
 
-async def add_cached_item(key: str, ttl: int):
-    await async_redis().sadd('builds', key)
+async def add_cached_item(key: str, itemtype: CacheItemType) -> CacheItem:
+    ttl = settings.NODE_DISTRIBUTION_CACHE_TTL if itemtype == CacheItemType.snapshot \
+        else settings.APP_DISTRIBUTION_CACHE_TTL
     item = CacheItem(name=key,
                      ttl=ttl,
-                     expires=utcnow() + datetime.timedelta(seconds=settings.APP_DISTRIBUTION_CACHE_TTL))
-    await async_redis().set(f'build:{key}', item.json())
+                     type=itemtype,
+                     expires=utcnow() + datetime.timedelta(seconds=ttl))
+    await async_redis().set(f'cache:{key}', item.json())
+    return item
 
 
-async def add_node_cache_item(tr: AgentTestRun):
-    await add_cached_item(f'node-{tr.cache_key}', settings.NODE_DISTRIBUTION_CACHE_TTL)
+async def remove_cached_item(key: str):
+    await async_redis().delete(f'cache:{key}')
 
 
-async def add_build_cache_item(tr: AgentTestRun):
-    await add_cached_item(f"build-{tr.sha}-ro", settings.APP_DISTRIBUTION_CACHE_TTL)
+async def add_node_cache_item(tr: AgentTestRun) -> CacheItem:
+    return await add_cached_item(f'node-{tr.cache_key}', CacheItemType.snapshot)
+
+
+async def get_node_cache_item(tr: AgentTestRun, update_expiry=True):
+    return await get_cached_item(f'node-{tr.cache_key}', update_expiry)
+
+
+async def add_build_cache_item(tr: AgentTestRun) -> CacheItem:
+    return await add_cached_item(f"build-{tr.sha}-ro", CacheItemType.pvc)
+
+
+async def get_build_cache_item(tr: AgentTestRun, update_expiry=True):
+    return await get_cached_item(f"build-{tr.sha}-ro", update_expiry)
+
+
+async def add_build_pvc(tr: AgentTestRun):
+    await add_cached_item(f"build-{tr.sha}", CacheItemType.pvc)
+
+
+async def remove_build_pvc(tr: AgentTestRun):
+    await remove_cached_item(f"build-{tr.sha}")
+
+
+async def build_pvc_exists(tr: AgentTestRun) -> bool:
+    return bool(await get_cached_item(f"build-{tr.sha}"))
+
+
+async def expired_cached_items_iter():
+    async for key in async_redis().scan_iter('cache:*'):
+        item = await get_cached_item(key[6:])
+        if item.expires < utcnow():
+            yield item
+
+

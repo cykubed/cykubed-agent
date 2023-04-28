@@ -8,7 +8,7 @@ imagePullPolicy: Always
 cache:
   size: "10Gi"
 gcpServiceAccount: ""
-platform: ""
+platform: "minikube"
 redis:
   sentinel:
     enabled: true

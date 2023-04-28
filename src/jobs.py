@@ -1,3 +1,4 @@
+import asyncio
 import os
 
 import aiofiles
@@ -11,9 +12,12 @@ from yaml import YAMLError
 
 from app import app
 from common import schemas
-from common.exceptions import InvalidTemplateException
+from common.exceptions import InvalidTemplateException, BuildFailedException
 from common.k8common import NAMESPACE, get_core_api
-from db import get_testrun, get_cached_item, save_testrun, add_build_cache_item, add_node_cache_item
+from common.schemas import CacheItemType
+from db import get_testrun, save_testrun, add_build_cache_item, add_node_cache_item, \
+    expired_cached_items_iter, build_pvc_exists, add_build_pvc, get_node_cache_item, get_build_cache_item, \
+    remove_build_pvc
 from settings import settings
 
 TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), 'k8config', 'templates')
@@ -53,8 +57,7 @@ def common_context(jobtype: str, testrun: schemas.NewTestRun):
                 storage=testrun.project.runner_ephemeral_storage)
 
 
-async def create_job(context):
-    jobtype = context['jobtype']
+async def create_job(jobtype, context):
     try:
         template = await get_job_template(jobtype)
         jobyaml = chevron.render(template, context)
@@ -73,14 +76,18 @@ async def create_clone_job(testrun: schemas.AgentTestRun):
     delete_jobs_for_branch(testrun.id, testrun.branch)
 
     # check for an existing build for this sha
-    if await get_cached_item(testrun.sha):
-        # yup - go straight to runner
+    if await get_build_cache_item(testrun):
+        # it's ready to run: go straight to runner
         await app.update_status(testrun.id, 'running')
         await create_runner_job(testrun)
     else:
-        # nope - clone it
         context = common_context('clone', testrun)
-        await create_job(context)
+        if not await build_pvc_exists(testrun):
+            # no build PVC - create it
+            await create_job('build-pvc', context)
+            await add_build_pvc(testrun)
+        # and clone
+        await create_job('clone', context)
         await app.update_status(testrun.id, 'building')
 
 
@@ -88,14 +95,14 @@ async def create_build_job(testrun_id: int):
     testrun = await get_testrun(testrun_id)
     context = common_context('build', testrun)
     # check for node dist
-    cached_node_dist = await get_cached_item(f'node-{testrun.cache_key}')
+    cached_node_dist = await get_node_cache_item(testrun)
     if cached_node_dist:
         context['node_snapshot_name'] = cached_node_dist.name
         testrun.node_cache_hit = True
         await save_testrun(testrun)
 
     context.update(dict(node_cache_key=testrun.cache_key))
-    await create_job(context)
+    await create_job('build', context)
 
 
 async def build_completed(testrun_id: int):
@@ -103,22 +110,56 @@ async def build_completed(testrun_id: int):
     if not testrun.node_cache_hit:
         # take a snapshot of the node dist
         context = common_context('node-snapshot', testrun)
-        context['node_cache_key'] = f'node-{testrun.cache_key}'
-        await create_job(context)
+        context['node_cache_key'] = testrun.cache_key
+        await create_job('node-snapshot', context)
         await add_node_cache_item(testrun)
-
     # next create the runner job
     await create_runner_job(testrun)
 
 
-async def create_runner_job(testrun: schemas.AgentTestRun):
+async def create_runner_job(testrun: schemas.AgentTestRun, use_cached_pvc=False):
     context = common_context('runner', testrun)
     parallelism = min(testrun.project.parallelism, len(testrun.specs))
-    context.update(dict(parallelism=parallelism))
-    await create_job(context)
-    await add_build_cache_item(testrun)
-    # and delete the original build (we've already cloned it)
+    context.update(dict(parallelism=parallelism, use_cached_pvc=use_cached_pvc))
+    await create_job('runner', context)
+    # delete the original build (we've already cloned it)
     get_core_api().delete_namespaced_persistent_volume_claim(f'build-{testrun.sha}', settings.NAMESPACE)
+    await remove_build_pvc(testrun)
+    await add_build_cache_item(testrun)
+
+
+async def prune_cache():
+    """
+    Pune expired snapshots and PVCs
+    :return:
+    """
+    custom_api = client.CustomObjectsApi()
+    core_api = client.CoreV1Api()
+
+    while app.is_running():
+        await asyncio.sleep(300)
+        async for item in expired_cached_items_iter():
+            if item.type == CacheItemType.snapshot:
+                # delete volume
+                custom_api.delete_namespaced_custom_object(group="snapshot.storage.k8s.io",
+                                                    version="v1beta1",
+                                                    namespace=settings.NAMESPACE,
+                                                    plural="volumesnapshots",
+                                                    name=item.name)
+            else:
+                # delete pvc
+                core_api.delete_namespaced_persistent_volume_claim(item.name, settings.NAMESPACE)
+
+
+def check_pvc_exists(pvc_name: str) -> bool:
+    # check if the PVC exists
+    try:
+        return bool(get_core_api().read_namespaced_persistent_volume_claim(pvc_name, settings.NAMESPACE))
+    except ApiException as ex:
+        if ex.status == 404:
+            return False
+        else:
+            raise BuildFailedException('Failed to determine existence of build PVC')
 
 
 def delete_job(job, trid: int = None):

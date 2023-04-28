@@ -5,9 +5,7 @@ WORKDIR /usr/app
 ENV PATH="/home/cykubed/.local/bin:/usr/app/.venv/bin:$PATH"
 ENV POETRY_VIRTUALENVS_IN_PROJECT=1
 
-RUN mkdir /cache
 RUN useradd -m cykubed --uid 10000 && chown cykubed:cykubed /usr/app
-RUN chown cykubed /cache && chmod -R a+r /cache
 
 USER cykubed
 

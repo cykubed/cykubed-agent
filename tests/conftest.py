@@ -46,7 +46,7 @@ def k8_core_api_mock(mocker):
 
 
 @pytest.fixture()
-async def testrun(project: Project) -> NewTestRun:
+def testrun(project: Project) -> NewTestRun:
     return NewTestRun(url='git@github.org/dummy.git',
                       id=20,
                       sha='deadbeef0101',
