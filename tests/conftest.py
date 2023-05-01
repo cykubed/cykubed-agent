@@ -46,6 +46,13 @@ def k8_core_api_mock(mocker):
 
 
 @pytest.fixture()
+def k8_custom_api_mock(mocker):
+    api_mock = mocker.MagicMock()
+    mocker.patch('jobs.get_custom_api', return_value=api_mock)
+    return api_mock
+
+
+@pytest.fixture()
 def testrun(project: Project) -> NewTestRun:
     return NewTestRun(url='git@github.org/dummy.git',
                       id=20,

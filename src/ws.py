@@ -23,6 +23,7 @@ async def handle_start_run(tr: NewTestRun):
     :param app:
     :param tr: new test run
     """
+    logger.info(f'Handle start testrun {tr.id}')
     try:
         # Store in Redis and kick off a new build job
         await db.new_testrun(tr)
@@ -30,7 +31,7 @@ async def handle_start_run(tr: NewTestRun):
         await jobs.create_clone_job(tr)
     except:
         logger.exception(f"Failed to start test run {tr.id}", tr=tr)
-        await app['httpclient'].post(f'/agent/testrun/{tr.id}/status/failed')
+        await app.httpclient.post(f'/agent/testrun/{tr.id}/status/failed')
 
 
 async def handle_delete_project(project_id: int):
@@ -83,6 +84,10 @@ async def handle_agent_message(websocket, rawmsg: str):
         if resp.status_code != 200:
             logger.error(f'Failed to update server that build was completed:'
                          f' {resp.status_code}: {resp.text}')
+    if event.type == AgentEventType.run_completed:
+        # run completed - clean up
+        await jobs.run_completed(event.testrun_id)
+
     # now post throught the websocket
     await websocket.send(rawmsg)
 

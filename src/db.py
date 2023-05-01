@@ -45,7 +45,7 @@ async def save_testrun(item: AgentTestRun):
     await async_redis().set(f'testrun:{id}', item.json())
 
 
-async def get_cached_item(key: str, update_expiry=False) -> CacheItem | None:
+async def get_cached_item(key: str, update_expiry=True) -> CacheItem | None:
     itemstr = await async_redis().get(f'cache:{key}')
     if not itemstr:
         return None
@@ -72,32 +72,52 @@ async def remove_cached_item(key: str):
     await async_redis().delete(f'cache:{key}')
 
 
-async def add_node_cache_item(tr: AgentTestRun) -> CacheItem:
-    return await add_cached_item(f'node-{tr.cache_key}', CacheItemType.snapshot)
+def get_build_ro_pvc_name(tr: AgentTestRun):
+    return f"build-{tr.sha}-ro"
 
 
-async def get_node_cache_item(tr: AgentTestRun, update_expiry=True):
-    return await get_cached_item(f'node-{tr.cache_key}', update_expiry)
+def get_build_pvc_name(tr: AgentTestRun):
+    return f"build-{tr.sha}"
 
 
-async def add_build_cache_item(tr: AgentTestRun) -> CacheItem:
-    return await add_cached_item(f"build-{tr.sha}-ro", CacheItemType.pvc)
+def get_node_snapshot_name(tr: AgentTestRun):
+    return f"node-snap-{tr.cache_key}"
 
 
-async def get_build_cache_item(tr: AgentTestRun, update_expiry=True):
-    return await get_cached_item(f"build-{tr.sha}-ro", update_expiry)
+def get_node_pvc_name(tr: AgentTestRun):
+    return f"node-pvc-{tr.cache_key}"
 
 
-async def add_build_pvc(tr: AgentTestRun):
-    await add_cached_item(f"build-{tr.sha}", CacheItemType.pvc)
+def get_node_ro_pvc_name(tr: AgentTestRun):
+    return f"node-ro-pvc-{tr.cache_key}"
 
 
-async def remove_build_pvc(tr: AgentTestRun):
-    await remove_cached_item(f"build-{tr.sha}")
-
-
-async def build_pvc_exists(tr: AgentTestRun) -> bool:
-    return bool(await get_cached_item(f"build-{tr.sha}"))
+# async def add_node_cache_item(tr: AgentTestRun) -> CacheItem:
+#     return await add_cached_item(f'node-{tr.cache_key}', CacheItemType.snapshot)
+#
+#
+# async def get_node_cache_item(tr: AgentTestRun, update_expiry=True):
+#     return await get_cached_item(f'node-{tr.cache_key}', update_expiry)
+#
+#
+# async def add_build_cache_item(tr: AgentTestRun) -> CacheItem:
+#     return await add_cached_item(f"build-{tr.sha}-ro", CacheItemType.pvc)
+#
+#
+# async def get_build_cache_item(tr: AgentTestRun, update_expiry=True):
+#     return await get_cached_item(f"build-{tr.sha}-ro", update_expiry)
+#
+#
+# async def add_build_pvc(tr: AgentTestRun):
+#     await add_cached_item(f"build-{tr.sha}", CacheItemType.pvc)
+#
+#
+# async def remove_build_pvc(tr: AgentTestRun):
+#     await remove_cached_item(f"build-{tr.sha}")
+#
+#
+# async def build_pvc_exists(tr: AgentTestRun) -> bool:
+#     return bool(await get_cached_item(f"build-{tr.sha}"))
 
 
 async def expired_cached_items_iter():

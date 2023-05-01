@@ -7,7 +7,7 @@ metadata:
         local_id: '1'
         project_id: '10'
         testrun_id: '20'
-    name: cykubed-build-project-1
+    name: cykubed-build-project-20
     namespace: cykubed
 spec:
     activeDeadlineSeconds: 3600
@@ -56,20 +56,10 @@ spec:
                 runAsUser: 10000
             serviceAccountName: cykubed
             volumes:
-            -   ephemeral:
-                    volumeClaimTemplate:
-                        spec:
-                            accessModes:
-                            - ReadWriteOnce
-                            dataSource:
-                                apiGroup: snapshot.storage.k8s.io
-                                kind: VolumeSnapshot
-                                name: node-absd234weefw
-                            resources:
-                                requests:
-                                    storage: 4.0Gi
-                name: node-volume
+            -   name: node-volume
+                persistentVolumeClaim:
+                    claimName: node-ro-pvc-absd234weefw
             -   name: build-volume
                 persistentVolumeClaim:
                     claimName: build-deadbeef0101
-    ttlSecondsAfterFinished: 86400
+    ttlSecondsAfterFinished: 3600

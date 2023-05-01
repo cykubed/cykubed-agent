@@ -7,7 +7,7 @@ metadata:
         local_id: '1'
         project_id: '10'
         testrun_id: '20'
-    name: cykubed-clone-project-1
+    name: cykubed-clone-20-deadbeef0101
     namespace: cykubed
 spec:
     activeDeadlineSeconds: 3600
