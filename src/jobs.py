@@ -75,13 +75,13 @@ async def check_cached(key: str, update_expiry=True) -> CacheItem | None:
     item = await get_cached_item(key, update_expiry)
     if item:
         if item.type == CacheItemType.pvc:
-            if await check_pvc_exists(item.name):
+            if await async_check_pvc_exists(item.name):
                 return item
             # nope - someone else must have deleted it
             await remove_cached_item(key)
         else:
             # snapshot
-            if await check_snapshot_exists(item.name):
+            if await async_check_snapshot_exists(item.name):
                 return item
             # nope - clean up
             await remove_cached_item(key)
@@ -158,7 +158,7 @@ async def handle_clone_completed(testrun_id: int):
     else:
         # otherwise this will need to build the node dist: create a RW pvc and
         node_pvc_name = context['node_pvc_name'] = context['pvc_name'] = get_node_pvc_name(testrun)
-        if not await check_pvc_exists(node_pvc_name):
+        if not await async_check_pvc_exists(node_pvc_name):
             # it shouldn't, but just in case
             await create_k8_objects('rw-pvc', context)
 
@@ -214,27 +214,24 @@ async def handle_run_completed(testrun_id):
     await delete_cached_pvc(get_build_ro_pvc_name(testrun))
 
 
-async def prune_cache():
+async def prune_cache_loop():
     """
     Pune expired snapshots and PVCs
     :return:
     """
-    custom_api = get_custom_api()
-    core_api = get_core_api()
-
     while app.is_running():
         await asyncio.sleep(300)
-        async for item in expired_cached_items_iter():
-            if item.type == CacheItemType.snapshot:
-                # delete volume
-                custom_api.delete_namespaced_custom_object(group="snapshot.storage.k8s.io",
-                                                    version="v1beta1",
-                                                    namespace=settings.NAMESPACE,
-                                                    plural="volumesnapshots",
-                                                    name=item.name)
-            else:
-                # delete pvc
-                core_api.delete_namespaced_persistent_volume_claim(item.name, settings.NAMESPACE)
+        await prune_cache()
+
+
+async def prune_cache():
+    async for item in expired_cached_items_iter():
+        if item.type == CacheItemType.snapshot:
+            # delete volume
+            await async_delete_snapshot(item.name)
+        else:
+            # delete pvc
+            await async_delete_pvc(item.name)
 
 
 def delete_pvc(name: str):
@@ -263,6 +260,22 @@ def get_pvc(pvc_name: str) -> bool:
             raise BuildFailedException('Failed to determine existence of build PVC')
 
 
+def delete_snapshot(name: str):
+    try:
+        get_custom_api().delete_namespaced_custom_object(group="snapshot.storage.k8s.io",
+                                                    version="v1beta1",
+                                                    namespace=settings.NAMESPACE,
+                                                    plural="volumesnapshots",
+                                                    name=name)
+    except ApiException as ex:
+        if ex.status == 404:
+            # already deleted - ignore
+            pass
+        else:
+            logger.exception(f'Failed to delete snapshot')
+            raise BuildFailedException(f'Failed to delete snapshot')
+
+
 def get_snapshot(name: str):
     try:
         return get_custom_api().get_namespaced_custom_object(group="snapshot.storage.k8s.io",
@@ -277,12 +290,17 @@ def get_snapshot(name: str):
             raise BuildFailedException('Failed to determine existence of snapshot')
 
 
-async def check_snapshot_exists(name: str) -> bool:
+async def async_check_snapshot_exists(name: str) -> bool:
     details = await asyncio.to_thread(get_snapshot, name)
     return bool(details)
 
 
-async def check_pvc_exists(name: str) -> bool:
+async def async_delete_snapshot(name: str) -> bool:
+    details = await asyncio.to_thread(delete_snapshot, name)
+    return bool(details)
+
+
+async def async_check_pvc_exists(name: str) -> bool:
     details = await asyncio.to_thread(get_pvc, name)
     return bool(details)
 

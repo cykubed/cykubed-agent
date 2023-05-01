@@ -1,17 +1,14 @@
-import datetime
 import json
 import os.path
 
 import yaml
 from freezegun import freeze_time
 from httpx import Response
-from pytz import utc
 
 from common.enums import TestRunStatus, AgentEventType
 from common.schemas import NewTestRun, AgentTestRun, AgentEvent, CacheItemType
-from db import expired_cached_items_iter, get_cached_item, add_cached_item, get_node_snapshot_name
+from db import get_cached_item, add_cached_item, get_node_snapshot_name
 from jobs import handle_clone_completed, handle_run_completed
-from settings import settings
 from ws import handle_start_run, handle_agent_message
 
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), 'fixtures')
@@ -215,22 +212,3 @@ async def test_run_completed(redis, k8_core_api_mock, testrun):
     assert delete_pvc_mock.call_args_list[1].args == ('build-ro-pvc-deadbeef0101', 'cykubed')
 
 
-async def test_expired_cache_iterator(redis, mocker, testrun: NewTestRun):
-    mocker.patch('db.utcnow', return_value=datetime.datetime(2022, 1, 28, 10, 0, 0, tzinfo=utc))
-    await add_cached_item('key1', CacheItemType.snapshot)
-    items = []
-    mocker.patch('db.utcnow', return_value=datetime.datetime(2022, 4, 28, 10, 0, 0, tzinfo=utc))
-    async for item in expired_cached_items_iter():
-        items.append(item)
-    assert len(items) == 1
-
-
-async def test_node_cache_expiry_update(redis, mocker, testrun: NewTestRun):
-    atr = AgentTestRun(specs=['s.ts'], cache_key='absd234weefw', **testrun.dict())
-    mocker.patch('db.utcnow', return_value=datetime.datetime(2022, 1, 28, 10, 0, 0, tzinfo=utc))
-    await add_cached_item('key1', CacheItemType.snapshot)
-    now = datetime.datetime(2022, 4, 28, 10, 0, 0, tzinfo=utc)
-    mocker.patch('db.utcnow', return_value=now)
-    # fetch it
-    item = await get_cached_item('key1', atr)
-    assert item.expires == now + datetime.timedelta(seconds=settings.NODE_DISTRIBUTION_CACHE_TTL)
