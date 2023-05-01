@@ -59,6 +59,7 @@ spec:
             -   name: node-volume
                 persistentVolumeClaim:
                     claimName: node-ro-pvc-absd234weefw
+                    readOnly: true
             -   name: build-volume
                 persistentVolumeClaim:
                     claimName: build-deadbeef0101

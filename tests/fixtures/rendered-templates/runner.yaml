@@ -1,24 +1,3 @@
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-    labels:
-        branch: master
-        local_id: '1'
-        project_id: '10'
-        testrun_id: '20'
-    name: build-deadbeef0101-ro
-    namespace: cykubed
-spec:
-    accessModes:
-    - ReadOnlyMany
-    dataSource:
-        kind: PersistentVolumeClaim
-        name: build-deadbeef0101
-    resources:
-        requests:
-            storage: 4.0Gi
-    storageClassName: cykubed-storageclass
----
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -28,7 +7,7 @@ metadata:
         local_id: '1'
         project_id: '10'
         testrun_id: '20'
-    name: cykubed-runner-project-1
+    name: cykubed-runner-project-20
     namespace: cykubed
 spec:
     activeDeadlineSeconds: 3600
@@ -49,6 +28,8 @@ spec:
                 env:
                 -   name: BUILD_DIR
                     value: /build
+                -   name: NODE_CACHE_DIR
+                    value: /node
                 -   name: CYPRESS_RETRIES
                     value: ''
                 -   name: TZ
@@ -75,6 +56,8 @@ spec:
                 volumeMounts:
                 -   mountPath: /build
                     name: build-volume
+                -   mountPath: /node
+                    name: node-volume
             priorityClassName: cykubed-low-priority
             restartPolicy: OnFailure
             securityContext:
@@ -88,4 +71,8 @@ spec:
                 persistentVolumeClaim:
                     claimName: build-deadbeef0101-ro
                     readOnly: true
-    ttlSecondsAfterFinished: 86400
+            -   name: node-volume
+                persistentVolumeClaim:
+                    claimName: node-ro-pvc-absd234weefw
+                    readOnly: true
+    ttlSecondsAfterFinished: 3600

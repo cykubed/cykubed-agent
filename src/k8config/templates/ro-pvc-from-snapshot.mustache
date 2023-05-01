@@ -1,18 +1,24 @@
+#
+# Create a many-read PVC based on the node snapshot
+#
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: "build-{{sha}}"
+  name: "{{ro_pvc_name}}"
   namespace: "{{namespace}}"
   labels:
-    sha: "{{sha}}"
     project_id: "{{project_id}}"
     local_id: "{{local_id}}"
     testrun_id: "{{testrun_id}}"
     branch: "{{branch}}"
 spec:
-  storageClassName: "{{storage_class}}"
+  storageClassName: "cykubed-storageclass"
   accessModes:
-    - ReadWriteOnce
+    - ReadOnlyMany
+  dataSource:
+    apiGroup: snapshot.storage.k8s.io
+    kind: VolumeSnapshot
+    name: "{{snapshot_name}}"
   resources:
     requests:
       storage: "{{storage}}Gi"

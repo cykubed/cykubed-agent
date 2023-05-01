@@ -10,7 +10,7 @@ from pytz import utc
 from common.enums import TestRunStatus, AgentEventType
 from common.schemas import NewTestRun, AgentTestRun, AgentEvent, CacheItemType
 from db import expired_cached_items_iter, get_cached_item, add_cached_item
-from jobs import create_build_job
+from jobs import handle_clone_completed
 from settings import settings
 from ws import handle_start_run, handle_agent_message
 
@@ -20,7 +20,7 @@ FIXTURES_DIR = os.path.join(os.path.dirname(__file__), 'fixtures')
 def compare_rendered_template(create_from_yaml_mock, jobtype: str, index=0):
     yamlobjects = create_from_yaml_mock.call_args_list[index][1]['yaml_objects']
     asyaml = yaml.safe_dump_all(yamlobjects, indent=4, sort_keys=True)
-    print('\n'+asyaml)
+    # print('\n'+asyaml)
     with open(os.path.join(FIXTURES_DIR, 'rendered-templates', f'{jobtype}.yaml'), 'r') as f:
         expected = f.read()
         assert expected == asyaml
@@ -107,7 +107,7 @@ async def test_create_build_job_node_cache_hit(redis, mock_create_from_yaml, moc
 
     await add_cached_item('node-snap-absd234weefw', CacheItemType.snapshot)
 
-    await create_build_job(testrun.id)
+    await handle_clone_completed(testrun.id)
 
     read_pvc.assert_not_called()
     read_snapshot.assert_called_once()
@@ -121,29 +121,32 @@ async def test_build_completed(redis, mock_create_from_yaml,
                                k8_core_api_mock,
                                testrun: NewTestRun):
     msg = AgentEvent(type=AgentEventType.build_completed,
+                     duration=10,
                      testrun_id=testrun.id)
     build_completed = \
         respx_mock.post('https://api.cykubed.com/agent/testrun/20/build-completed')\
             .mock(return_value=Response(200))
     websocket = mocker.AsyncMock()
-    atr = AgentTestRun(specs=msg.specs, cache_key='absd234weefw', **testrun.dict())
+    specs = ['cypress/e2e/test/test1.spec.ts']
+    atr = AgentTestRun(specs=specs, cache_key='absd234weefw', **testrun.dict())
     redis.set(f'testrun:{testrun.id}', atr.json())
 
     await handle_agent_message(websocket, msg.json())
     websocket.send.assert_called_once_with(msg.json())
-    k8_core_api_mock.delete_namespaced_persistent_volume_claim.assert_called_with('build-deadbeef0101', 'cykubed')
+    # not a cached node_modules: delete the RW (we will have taken a snapshot)
+    k8_core_api_mock.delete_namespaced_persistent_volume_claim.assert_called_with('node-pvc-absd234weefw', 'cykubed')
 
-    assert mock_create_from_yaml.call_count == 2
+    assert mock_create_from_yaml.call_count == 3
     compare_rendered_template(mock_create_from_yaml, 'node-snapshot', 0)
-    compare_rendered_template(mock_create_from_yaml, 'runner', 1)
+    compare_rendered_template(mock_create_from_yaml, 'node-ro-clone-pvc', 1)
+    compare_rendered_template(mock_create_from_yaml, 'runner', 2)
 
     assert build_completed.called == 1
 
 
 async def test_expired_cache_iterator(redis, mocker, testrun: NewTestRun):
-    atr = AgentTestRun(specs=['s.ts'], cache_key='absd234weefw', **testrun.dict())
     mocker.patch('db.utcnow', return_value=datetime.datetime(2022, 1, 28, 10, 0, 0, tzinfo=utc))
-    await add_node_cache_item(atr)
+    await add_cached_item('key1', CacheItemType.snapshot)
     items = []
     mocker.patch('db.utcnow', return_value=datetime.datetime(2022, 4, 28, 10, 0, 0, tzinfo=utc))
     async for item in expired_cached_items_iter():
@@ -154,11 +157,11 @@ async def test_expired_cache_iterator(redis, mocker, testrun: NewTestRun):
 async def test_node_cache_expiry_update(redis, mocker, testrun: NewTestRun):
     atr = AgentTestRun(specs=['s.ts'], cache_key='absd234weefw', **testrun.dict())
     mocker.patch('db.utcnow', return_value=datetime.datetime(2022, 1, 28, 10, 0, 0, tzinfo=utc))
-    await add_node_cache_item(atr)
+    await add_cached_item('key1', CacheItemType.snapshot)
     now = datetime.datetime(2022, 4, 28, 10, 0, 0, tzinfo=utc)
     mocker.patch('db.utcnow', return_value=now)
     # fetch it
-    item = await get_node_cache_item(atr)
+    item = await get_cached_item('key1', atr)
     assert item.expires == now + datetime.timedelta(seconds=settings.NODE_DISTRIBUTION_CACHE_TTL)
 
 

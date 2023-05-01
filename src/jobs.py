@@ -98,11 +98,20 @@ async def create_clone_job(testrun: schemas.AgentTestRun):
     delete_jobs_for_branch(testrun.id, testrun.branch)
 
     # check for an existing ro build pvc for this sha
-    if await check_cached(get_build_ro_pvc_name(testrun)):
-        # it's ready to run: go straight to runner
-        await app.update_status(testrun.id, 'running')
-        await create_runner_job(testrun)
-    else:
+    ro_build_pvc_name = get_build_ro_pvc_name(testrun)
+    build = not bool(await check_cached(ro_build_pvc_name))
+    if not build:
+        # we've already got a RO build PVC - we'll need a node dist
+        node_snapshot_name = get_node_snapshot_name(testrun)
+        if not await check_cached(node_snapshot_name):
+            # we shouldn't get here, so delete the build PVC and let's rebuild
+            await async_delete_pvc(ro_build_pvc_name)
+            build = True
+        else:
+            await app.update_status(testrun.id, 'running')
+            await create_runner_job(testrun)
+
+    if build:
         context = common_context(testrun)
         # do we have a build PVC (i.e i.e the previous build may have failed)
         pvc_name = get_build_pvc_name(testrun)
@@ -117,7 +126,15 @@ async def create_clone_job(testrun: schemas.AgentTestRun):
         await app.update_status(testrun.id, 'building')
 
 
-async def create_build_job(testrun_id: int):
+async def create_ro_node_pvc_from_snapshot(testrun: schemas.AgentTestRun):
+    node_snapshot_name = get_node_snapshot_name(testrun)
+    context = common_context(testrun)
+    context['snapshot_name'] = node_snapshot_name
+    context['ro_pvc_name'] = get_node_ro_pvc_name(testrun)
+    await create_k8_objects('ro-pvc-from-snapshot', context)
+
+
+async def handle_clone_completed(testrun_id: int):
     """
     Check for a volume snapshot of the node dist (which will include the Cypress cache).
     If it exists then it be
@@ -133,10 +150,10 @@ async def create_build_job(testrun_id: int):
     node_snapshot_name = get_node_snapshot_name(testrun)
     if await check_cached(node_snapshot_name):
         # we have a cached node distribution (i.e a VolumeSnapshot for it) - create a read-only PVC
-        context['snapshot_name'] = node_snapshot_name
-        context['node_pvc_name'] = context['ro_pvc_name'] = get_node_ro_pvc_name(testrun)
+        await create_ro_node_pvc_from_snapshot(testrun)
         testrun.node_cache_hit = True
-        await create_k8_objects('ro-pvc-from-snapshot', context)
+        context['node_pvc_name'] = get_node_ro_pvc_name(testrun)
+        context['node_snapshot_name'] = node_snapshot_name
         await save_testrun(testrun)
     else:
         # otherwise this will need to build the node dist: create a RW pvc and
@@ -174,18 +191,11 @@ async def build_completed(testrun_id: int):
     await create_runner_job(testrun)
 
 
-async def create_runner_job(testrun: schemas.AgentTestRun, use_cached_pvc=False):
+async def create_runner_job(testrun: schemas.AgentTestRun):
     context = common_context(testrun)
-    if not use_cached_pvc:
-        # we'll need to create a RO PVC from the build then delete the original RW PVC
-        ro_pvc_name = context['ro_pvc_name'] = get_build_ro_pvc_name(testrun)
-        rw_pvc_name = context['rw_pvc_name'] = get_build_pvc_name(testrun)
-        await create_k8_objects('ro-pvc-from-pvc', context)
-        await add_cached_item(ro_pvc_name, CacheItemType.pvc)
-        await delete_cached_pvc(rw_pvc_name)
-
+    context['name'] = f'cykubed-runner-{testrun.project.name}-{testrun.id}'
     parallelism = min(testrun.project.parallelism, len(testrun.specs))
-    context.update(dict(parallelism=parallelism, use_cached_pvc=use_cached_pvc))
+    context.update(dict(parallelism=parallelism))
     context['build_pvc_name'] = get_build_ro_pvc_name(testrun)
     context['node_pvc_name'] = get_node_ro_pvc_name(testrun)
     await create_k8_objects('runner', context)
@@ -235,9 +245,15 @@ def delete_pvc(name: str):
     return get_core_api().delete_namespaced_persistent_volume_claim(name, settings.NAMESPACE)
 
 
-async def delete_cached_pvc(name: str):
+async def async_delete_pvc(name: str):
     await asyncio.to_thread(delete_pvc(name))
+
+
+async def delete_cached_pvc(name: str):
+    await async_delete_pvc(name)
     await remove_cached_item(name)
+
+
 
 
 def get_pvc(pvc_name: str) -> bool:

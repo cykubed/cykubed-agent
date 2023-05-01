@@ -7,7 +7,7 @@ metadata:
     local_id: "{{local_id}}"
     testrun_id: "{{testrun_id}}"
     branch: "{{branch}}"
-  name: "{{name}}"
+  name: "cykubed-clone-{{testrun_id}}-{{sha}}"
   namespace: "{{namespace}}"
 spec:
   backoffLimit: 5
@@ -24,7 +24,7 @@ spec:
       volumes:
         - name: build-volume
           persistentVolumeClaim:
-            claimName: "build-{{sha}}"
+            claimName: "{{build_pvc_name}}"
       restartPolicy: Never
       priorityClassName: "cykubed-low-priority"
       containers:
