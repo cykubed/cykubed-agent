@@ -75,7 +75,7 @@ async def handle_agent_message(websocket, rawmsg: str):
     if event.type == AgentEventType.clone_completed:
         # clone completed - kick off the build
         await jobs.handle_clone_completed(event.testrun_id)
-    if event.type == AgentEventType.build_completed:
+    elif event.type == AgentEventType.build_completed:
         # build completed - create runner jobs
         await jobs.build_completed(event.testrun_id)
         # and notify the server
@@ -86,12 +86,12 @@ async def handle_agent_message(websocket, rawmsg: str):
         if resp.status_code != 200:
             logger.error(f'Failed to update server that build was completed:'
                          f' {resp.status_code}: {resp.text}')
-    if event.type == AgentEventType.run_completed:
+    elif event.type == AgentEventType.run_completed:
         # run completed - clean up
-        await jobs.run_completed(event.testrun_id)
-
-    # now post throught the websocket
-    await websocket.send(rawmsg)
+        await jobs.handle_run_completed(event.testrun_id)
+    else:
+        # post everything else through the websocket
+        await websocket.send(rawmsg)
 
 
 async def producer_handler(websocket):

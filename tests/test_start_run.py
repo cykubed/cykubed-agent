@@ -9,8 +9,8 @@ from pytz import utc
 
 from common.enums import TestRunStatus, AgentEventType
 from common.schemas import NewTestRun, AgentTestRun, AgentEvent, CacheItemType
-from db import expired_cached_items_iter, get_cached_item, add_cached_item
-from jobs import handle_clone_completed
+from db import expired_cached_items_iter, get_cached_item, add_cached_item, get_node_snapshot_name
+from jobs import handle_clone_completed, handle_run_completed
 from settings import settings
 from ws import handle_start_run, handle_agent_message
 
@@ -31,7 +31,7 @@ async def test_start_run(redis, mocker, testrun: NewTestRun,
     """
     """
     update_status = \
-        respx_mock.post('https://api.cykubed.com/agent/testrun/20/status/building')\
+        respx_mock.post('https://api.cykubed.com/agent/testrun/20/status/building') \
             .mock(return_value=Response(200))
 
     delete_jobs = mocker.patch('jobs.delete_jobs_for_branch')
@@ -49,7 +49,7 @@ async def test_start_run(redis, mocker, testrun: NewTestRun,
     compare_rendered_template(mock_create_from_yaml, 'build-pvc', 0)
     compare_rendered_template(mock_create_from_yaml, 'clone', 1)
 
-    assert get_cached_item('build-deadbeef0101')
+    assert get_cached_item('build-pvc-deadbeef0101')
 
     assert update_status.called == 1
 
@@ -58,6 +58,17 @@ async def test_clone_completed_cache_miss(redis, mocker, mock_create_from_yaml,
                                           respx_mock,
                                           k8_core_api_mock,
                                           testrun: NewTestRun):
+    """
+    Clone completed and we have no cached node dist: we'll need to create a RW
+    PVC for the node dist
+    :param redis:
+    :param mocker:
+    :param mock_create_from_yaml:
+    :param respx_mock:
+    :param k8_core_api_mock:
+    :param testrun:
+    :return:
+    """
     websocket = mocker.AsyncMock()
     specs = ['cypress/e2e/spec1.ts', 'cypress/e2e/spec2.ts']
     atr = AgentTestRun(specs=specs, cache_key='absd234weefw', **testrun.dict())
@@ -76,6 +87,53 @@ async def test_clone_completed_cache_miss(redis, mocker, mock_create_from_yaml,
     compare_rendered_template(mock_create_from_yaml, 'build', 1)
 
     assert get_cached_item('node-pvc-absd234weefw')
+
+
+async def test_clone_completed_cache_hit(redis, mocker, mock_create_from_yaml,
+                                         respx_mock,
+                                         k8_core_api_mock,
+                                         k8_custom_api_mock,
+                                         testrun: NewTestRun):
+    """
+    Clone completed but this time we have a snapshot for a node distribution,
+    so go straight to creating a RO PVC from the snapshot
+    :param redis:
+    :param mocker:
+    :param mock_create_from_yaml:
+    :param respx_mock:
+    :param k8_core_api_mock:
+    :param testrun:
+    :return:
+    """
+
+    websocket = mocker.AsyncMock()
+    specs = ['cypress/e2e/spec1.ts']
+    testrun.status = 'building'
+    atr = AgentTestRun(specs=specs, node_cache_hit=True,
+                       cache_key='absd234weefw', **testrun.dict())
+    redis.set(f'testrun:{testrun.id}', atr.json())
+    await add_cached_item(get_node_snapshot_name(atr), CacheItemType.snapshot)
+
+    # it will also check that the snapshot exists
+    read_snapshot = k8_custom_api_mock.get_namespaced_custom_object = mocker.Mock(return_value=True)
+
+    await handle_agent_message(websocket, AgentEvent(type=AgentEventType.clone_completed,
+                                                     testrun_id=testrun.id).json())
+
+    read_snapshot.assert_called_once()
+    assert read_snapshot.call_args.kwargs == {'group': 'snapshot.storage.k8s.io',
+                                              'version': 'v1beta1',
+                                              'namespace': 'cykubed',
+                                              'plural': 'volumesnapshots',
+                                              'name': 'node-snap-absd234weefw'}
+
+    k8_core_api_mock.assert_not_called()
+
+    # it will create a RO PVC for the node cache and the build job
+    compare_rendered_template(mock_create_from_yaml, 'node-ro-pvc-from-snapshot', 0)
+    compare_rendered_template(mock_create_from_yaml, 'build-node-cache-hit', 1)
+
+    assert get_cached_item('node-ro-pvc-absd234weefw')
 
 
 @freeze_time('2022-04-03 14:10:00Z')
@@ -124,7 +182,7 @@ async def test_build_completed(redis, mock_create_from_yaml,
                      duration=10,
                      testrun_id=testrun.id)
     build_completed = \
-        respx_mock.post('https://api.cykubed.com/agent/testrun/20/build-completed')\
+        respx_mock.post('https://api.cykubed.com/agent/testrun/20/build-completed') \
             .mock(return_value=Response(200))
     websocket = mocker.AsyncMock()
     specs = ['cypress/e2e/test/test1.spec.ts']
@@ -132,7 +190,6 @@ async def test_build_completed(redis, mock_create_from_yaml,
     redis.set(f'testrun:{testrun.id}', atr.json())
 
     await handle_agent_message(websocket, msg.json())
-    websocket.send.assert_called_once_with(msg.json())
     # not a cached node_modules: delete the RW (we will have taken a snapshot)
     k8_core_api_mock.delete_namespaced_persistent_volume_claim.assert_called_with('node-pvc-absd234weefw', 'cykubed')
 
@@ -142,6 +199,20 @@ async def test_build_completed(redis, mock_create_from_yaml,
     compare_rendered_template(mock_create_from_yaml, 'runner', 2)
 
     assert build_completed.called == 1
+
+
+async def test_run_completed(redis, k8_core_api_mock, testrun):
+    specs = ['cypress/e2e/test/test1.spec.ts']
+    atr = AgentTestRun(specs=specs, cache_key='absd234weefw', **testrun.dict())
+    redis.set(f'testrun:{atr.id}', atr.json())
+
+    delete_pvc_mock = k8_core_api_mock.delete_namespaced_persistent_volume_claim
+
+    await handle_run_completed(testrun.id)
+
+    assert delete_pvc_mock.call_count == 2
+    assert delete_pvc_mock.call_args_list[0].args == ('node-ro-pvc-absd234weefw', 'cykubed')
+    assert delete_pvc_mock.call_args_list[1].args == ('build-ro-pvc-deadbeef0101', 'cykubed')
 
 
 async def test_expired_cache_iterator(redis, mocker, testrun: NewTestRun):
@@ -163,7 +234,3 @@ async def test_node_cache_expiry_update(redis, mocker, testrun: NewTestRun):
     # fetch it
     item = await get_cached_item('key1', atr)
     assert item.expires == now + datetime.timedelta(seconds=settings.NODE_DISTRIBUTION_CACHE_TTL)
-
-
-
-

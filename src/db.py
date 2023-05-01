@@ -73,11 +73,11 @@ async def remove_cached_item(key: str):
 
 
 def get_build_ro_pvc_name(tr: AgentTestRun):
-    return f"build-{tr.sha}-ro"
+    return f"build-ro-pvc-{tr.sha}"
 
 
 def get_build_pvc_name(tr: AgentTestRun):
-    return f"build-{tr.sha}"
+    return f"build-pvc-{tr.sha}"
 
 
 def get_node_snapshot_name(tr: AgentTestRun):

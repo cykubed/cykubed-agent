@@ -7,7 +7,7 @@ metadata:
         project_id: '10'
         sha: deadbeef0101
         testrun_id: '20'
-    name: build-deadbeef0101
+    name: build-pvc-deadbeef0101
     namespace: cykubed
 spec:
     accessModes:

@@ -152,7 +152,7 @@ async def handle_clone_completed(testrun_id: int):
         # we have a cached node distribution (i.e a VolumeSnapshot for it) - create a read-only PVC
         await create_ro_node_pvc_from_snapshot(testrun)
         testrun.node_cache_hit = True
-        context['node_pvc_name'] = get_node_ro_pvc_name(testrun)
+        node_pvc_name = context['node_pvc_name'] = get_node_ro_pvc_name(testrun)
         context['node_snapshot_name'] = node_snapshot_name
         await save_testrun(testrun)
     else:
@@ -161,8 +161,9 @@ async def handle_clone_completed(testrun_id: int):
         if not await check_pvc_exists(node_pvc_name):
             # it shouldn't, but just in case
             await create_k8_objects('rw-pvc', context)
-        # record it so we can garbage collect if it all goes wrong
-        await add_cached_item(node_pvc_name, CacheItemType.pvc)
+
+    # record it so we can garbage collect if it all goes wrong
+    await add_cached_item(node_pvc_name, CacheItemType.pvc)
 
     # now create the build
     await create_k8_objects('build', context)
@@ -201,21 +202,16 @@ async def create_runner_job(testrun: schemas.AgentTestRun):
     await create_k8_objects('runner', context)
 
 
-async def run_completed(testrun_id):
+async def handle_run_completed(testrun_id):
     """
     Just delete the node cache - keep the build PVC around in case of reruns,
     and let the pruner delete it
     :param testrun_id:
     """
     testrun = await get_testrun(testrun_id)
-    name = f"node-{testrun.cache_key}-ro"
-    try:
-        get_core_api().delete_namespaced_persistent_volume_claim(name, settings.NAMESPACE)
-    except ApiException as ex:
-        if ex.status == 404:
-            logger.info(f'PVC {name} does not exist - delete ignored')
-        else:
-            logger.error('Failed to delete PVC')
+    # delete the PVCs
+    await delete_cached_pvc(get_node_ro_pvc_name(testrun))
+    await delete_cached_pvc(get_build_ro_pvc_name(testrun))
 
 
 async def prune_cache():
