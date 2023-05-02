@@ -19,8 +19,8 @@ data:
   PLATFORM: {{ required "Please specify the target platform" .Values.platform }}
   STORAGE_CLASS: cykubed-storageclass
   CYPRESS_RUN_TIMEOUT: "3600"
-{{ if .Values.redis.singleton }}
-  REDIS_HOST: "redis-master.cykubed.svc.cluster.local"
+{{ if eq .Values.redis.architecture "standalone" }}
+  REDIS_HOST: "{{ .Release.Name }}-redis-master.cykubed.svc.cluster.local"
   REDIS_NODES: "1"
 {{ else }}
   REDIS_NODES: "{{ .Values.redis.replica.replicaCount }}"

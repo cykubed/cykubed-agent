@@ -10,7 +10,6 @@ cache:
 gcpServiceAccount: ""
 platform: "minikube"
 redis:
-  singleton: false
   sentinel:
     enabled: true
     resources:
