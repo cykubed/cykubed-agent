@@ -235,18 +235,16 @@ async def prune_cache():
 
 
 def delete_pvc(name: str):
-    return get_core_api().delete_namespaced_persistent_volume_claim(name, settings.NAMESPACE)
-
-
-async def async_delete_pvc(name: str):
-    await asyncio.to_thread(delete_pvc(name))
+    try:
+        get_core_api().delete_namespaced_persistent_volume_claim(name, settings.NAMESPACE)
+    except ApiException as ex:
+        if ex.status != 404:
+            logger.exception('Failed to delete PVC')
 
 
 async def delete_cached_pvc(name: str):
     await async_delete_pvc(name)
     await remove_cached_item(name)
-
-
 
 
 def get_pvc(pvc_name: str) -> bool:
@@ -293,6 +291,10 @@ def get_snapshot(name: str):
 async def async_check_snapshot_exists(name: str) -> bool:
     details = await asyncio.to_thread(get_snapshot, name)
     return bool(details)
+
+
+async def async_delete_pvc(name: str):
+    await asyncio.to_thread(delete_pvc, name)
 
 
 async def async_delete_snapshot(name: str) -> bool:
