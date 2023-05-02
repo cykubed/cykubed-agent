@@ -13,7 +13,7 @@ from yaml import YAMLError
 from app import app
 from common import schemas
 from common.exceptions import InvalidTemplateException, BuildFailedException
-from common.k8common import NAMESPACE, get_core_api, get_custom_api
+from common.k8common import get_core_api, get_custom_api
 from common.schemas import CacheItemType, CacheItem
 from db import get_testrun, save_testrun, expired_cached_items_iter, get_cached_item, get_build_ro_pvc_name, \
     remove_cached_item, get_build_pvc_name, add_cached_item, get_node_snapshot_name, get_node_pvc_name, \
@@ -54,16 +54,42 @@ def common_context(testrun: schemas.NewTestRun):
                 storage=testrun.project.runner_ephemeral_storage)
 
 
+async def render_template(jobtype, context):
+    template = await get_job_template(jobtype)
+    jobyaml = chevron.render(template, context)
+    return list(yaml.safe_load_all(jobyaml))
+
+
+async def create_k8_snapshot(jobtype, context):
+    """
+    Annoyingly volume snapsnhots have to use the Custom API
+    :param jobtype:
+    :param context:
+    :return:
+    """
+    try:
+        yamlobjects = await render_template(jobtype, context)
+        get_custom_api().create_namespaced_custom_object(group="snapshot.storage.k8s.io",
+                                                         version="v1",
+                                                         namespace=settings.NAMESPACE,
+                                                         plural="volumesnapshots",
+                                                         body=yamlobjects[0])
+    except YAMLError as ex:
+        raise InvalidTemplateException(f'Invalid YAML in {jobtype} template: {ex}')
+    except ChevronError as ex:
+        raise InvalidTemplateException(f'Invalid {jobtype} template: {ex}')
+
+
 async def create_k8_objects(jobtype, context):
     try:
-        template = await get_job_template(jobtype)
-        jobyaml = chevron.render(template, context)
-        yamlobjects = list(yaml.safe_load_all(jobyaml))
         k8sclient = client.ApiClient()
+        yamlobjects = await render_template(jobtype, context)
         # should only be one object
         kind = yamlobjects[0]['kind']
         name = yamlobjects[0]['metadata']['name']
-        k8utils.create_from_yaml(k8sclient, yaml_objects=yamlobjects, namespace=NAMESPACE)
+        logger.info(f'Creating {kind} {name}', id=context['testrun_id'])
+        await asyncio.to_thread(k8utils.create_from_yaml, k8sclient,
+                                yaml_objects=yamlobjects, namespace=settings.NAMESPACE)
         logger.info(f'Created {kind} {name}', id=context['testrun_id'])
     except YAMLError as ex:
         raise InvalidTemplateException(f'Invalid YAML in {jobtype} template: {ex}')
@@ -95,7 +121,7 @@ async def create_clone_job(testrun: schemas.AgentTestRun):
     :return:
     """
     # stop existing jobs
-    delete_jobs_for_branch(testrun.id, testrun.branch)
+    await delete_jobs_for_branch(testrun.id, testrun.branch)
 
     # check for an existing ro build pvc for this sha
     ro_build_pvc_name = get_build_ro_pvc_name(testrun)
@@ -121,6 +147,7 @@ async def create_clone_job(testrun: schemas.AgentTestRun):
             context['pvc_name'] = pvc_name
             await create_k8_objects('rw-pvc', context)
             await add_cached_item(pvc_name, CacheItemType.pvc)
+
         # and clone
         await create_k8_objects('clone', context)
         await app.update_status(testrun.id, 'building')
@@ -149,6 +176,7 @@ async def handle_clone_completed(testrun_id: int):
     # check for node snapshot
     node_snapshot_name = get_node_snapshot_name(testrun)
     if await check_cached(node_snapshot_name):
+        logger.debug(f'Found node cache snapshot {node_snapshot_name}')
         # we have a cached node distribution (i.e a VolumeSnapshot for it) - create a read-only PVC
         await create_ro_node_pvc_from_snapshot(testrun)
         testrun.node_cache_hit = True
@@ -170,26 +198,31 @@ async def handle_clone_completed(testrun_id: int):
 
 
 async def build_completed(testrun_id: int):
-    testrun = await get_testrun(testrun_id)
-    context = common_context(testrun)
-    node_ro_pvc_name = context['ro_pvc_name'] = get_node_ro_pvc_name(testrun)
-    snapshot_name = context['snapshot_name'] = get_node_snapshot_name(testrun)
-    if not testrun.node_cache_hit:
-        # take a snapshot of the node dist
-        context['rw_pvc_name'] = context['pvc_name'] = get_node_pvc_name(testrun)
-        await create_k8_objects('pvc-snapshot', context)
-        await add_cached_item(snapshot_name, CacheItemType.snapshot)
-        # create a RO PVC from this RW PVC
-        await create_k8_objects('ro-pvc-from-pvc', context)
-        # and delete the RW node PVC
-        await delete_cached_pvc(context['rw_pvc_name'])
-    else:
-        # create a many-read-only volume from the snapshot
-        await create_k8_objects('ro-pvc-from-snapshot', context)
-        await add_cached_item(node_ro_pvc_name, CacheItemType.pvc)
+    logger.info(f'Build completed for testrun {testrun_id}')
+    try:
+        testrun = await get_testrun(testrun_id)
+        context = common_context(testrun)
+        node_ro_pvc_name = context['ro_pvc_name'] = get_node_ro_pvc_name(testrun)
+        snapshot_name = context['snapshot_name'] = get_node_snapshot_name(testrun)
+        if not testrun.node_cache_hit:
+            # take a snapshot of the node dist
+            context['rw_pvc_name'] = context['pvc_name'] = get_node_pvc_name(testrun)
+            await create_k8_snapshot('pvc-snapshot', context)
+            await add_cached_item(snapshot_name, CacheItemType.snapshot)
+            # create a RO PVC from this RW PVC
+            await create_k8_objects('ro-pvc-from-pvc', context)
+            # # and delete the RW node PVC
+            # await delete_cached_pvc(context['rw_pvc_name'])
+        else:
+            # create a many-read-only volume from the snapshot
+            await create_k8_objects('ro-pvc-from-snapshot', context)
+            await add_cached_item(node_ro_pvc_name, CacheItemType.pvc)
 
-    # next create the runner job
-    await create_runner_job(testrun)
+        # next create the runner job
+        await create_runner_job(testrun)
+    except Exception as ex:
+        logger.exception("Failed to complete the build")
+        raise ex
 
 
 async def create_runner_job(testrun: schemas.AgentTestRun):
@@ -210,6 +243,7 @@ async def handle_run_completed(testrun_id):
     """
     testrun = await get_testrun(testrun_id)
     # delete the PVCs
+    await delete_cached_pvc(get_node_pvc_name(testrun))
     await delete_cached_pvc(get_node_ro_pvc_name(testrun))
     await delete_cached_pvc(get_build_ro_pvc_name(testrun))
 
@@ -220,8 +254,8 @@ async def prune_cache_loop():
     :return:
     """
     while app.is_running():
-        await asyncio.sleep(300)
         await prune_cache()
+        await asyncio.sleep(300)
 
 
 async def prune_cache():
@@ -307,49 +341,55 @@ async def async_check_pvc_exists(name: str) -> bool:
     return bool(details)
 
 
-def delete_job(job, trid: int = None):
+async def delete_job(job, trid: int = None):
     logger.info(f"Deleting existing job {job.metadata.name}", trid=trid)
-    client.BatchV1Api().delete_namespaced_job(job.metadata.name, NAMESPACE)
-    poditems = get_core_api().list_namespaced_pod(NAMESPACE,
+    client.BatchV1Api().delete_namespaced_job(job.metadata.name, settings.NAMESPACE)
+    poditems = get_core_api().list_namespaced_pod(settings.NAMESPACE,
                                                   label_selector=f"job-name={job.metadata.name}").items
     if poditems:
         for pod in poditems:
             logger.info(f'Deleting pod {pod.metadata.name}', id=trid)
-            get_core_api().delete_namespaced_pod(pod.metadata.name, NAMESPACE)
+            get_core_api().delete_namespaced_pod(pod.metadata.name, settings.NAMESPACE)
+    # also delete PVCs
+    pvcs = get_core_api().list_namespaced_persistent_volume_claim(settings.NAMESPACE,
+                                                                  label_selector=f'testrun_id={trid}').items
+    if pvcs:
+        for pvc in pvcs:
+            await delete_cached_pvc(pvc.metadata.name)
 
 
-def delete_jobs_for_branch(trid: int, branch: str):
+async def delete_jobs_for_branch(trid: int, branch: str):
     # delete any job already running
     api = client.BatchV1Api()
-    jobs = api.list_namespaced_job(NAMESPACE, label_selector=f'branch={branch}')
+    jobs = api.list_namespaced_job(settings.NAMESPACE, label_selector=f'branch={branch}')
     if jobs.items:
         logger.info(f'Found {len(jobs.items)} existing Jobs - deleting them', trid=trid)
         # delete it (there should just be one, but iterate anyway)
         for job in jobs.items:
-            delete_job(job, trid)
+            await delete_job(job, trid)
 
 
-def delete_jobs_for_project(project_id):
+async def delete_jobs_for_project(project_id):
     api = client.BatchV1Api()
-    jobs = api.list_namespaced_job(NAMESPACE, label_selector=f'project_id={project_id}')
+    jobs = api.list_namespaced_job(settings.NAMESPACE, label_selector=f'project_id={project_id}')
     if jobs.items:
         logger.info(f'Found {len(jobs.items)} existing Jobs - deleting them')
         for job in jobs.items:
-            delete_job(job)
+            await delete_job(job)
 
 
-def delete_jobs(testrun_id: int):
+async def delete_jobs(testrun_id: int):
     logger.info(f"Deleting jobs for testrun {testrun_id}")
     api = client.BatchV1Api()
-    jobs = api.list_namespaced_job(NAMESPACE, label_selector=f"testrun_id={testrun_id}")
+    jobs = api.list_namespaced_job(settings.NAMESPACE, label_selector=f"testrun_id={testrun_id}")
     for job in jobs.items:
-        delete_job(job, testrun_id)
+        await delete_job(job, testrun_id)
 
 
 def is_pod_running(podname: str):
     v1 = client.CoreV1Api()
     try:
-        v1.read_namespaced_pod(podname, NAMESPACE)
+        v1.read_namespaced_pod(podname, settings.NAMESPACE)
         return True
     except ApiException:
         return False

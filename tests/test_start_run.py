@@ -14,13 +14,17 @@ from ws import handle_start_run, handle_agent_message
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), 'fixtures')
 
 
-def compare_rendered_template(create_from_yaml_mock, jobtype: str, index=0):
-    yamlobjects = create_from_yaml_mock.call_args_list[index][1]['yaml_objects']
+def compare_rendered_template(yamlobjects, jobtype: str):
     asyaml = yaml.safe_dump_all(yamlobjects, indent=4, sort_keys=True)
     # print('\n'+asyaml)
     with open(os.path.join(FIXTURES_DIR, 'rendered-templates', f'{jobtype}.yaml'), 'r') as f:
         expected = f.read()
         assert expected == asyaml
+
+
+def compare_rendered_template_from_mock(create_from_yaml_mock, jobtype: str, index=0):
+    yamlobjects = create_from_yaml_mock.call_args_list[index][1]['yaml_objects']
+    compare_rendered_template(yamlobjects, jobtype)
 
 
 async def test_start_run(redis, mocker, testrun: NewTestRun,
@@ -43,8 +47,8 @@ async def test_start_run(redis, mocker, testrun: NewTestRun,
     assert mock_create_from_yaml.call_count == 2
 
     # mock out the actual Job to check the rendered template
-    compare_rendered_template(mock_create_from_yaml, 'build-pvc', 0)
-    compare_rendered_template(mock_create_from_yaml, 'clone', 1)
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'build-pvc', 0)
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'clone', 1)
 
     assert get_cached_item('build-pvc-deadbeef0101')
 
@@ -80,8 +84,8 @@ async def test_clone_completed_cache_miss(redis, mocker, mock_create_from_yaml,
 
     read_pvc.assert_called_once_with('node-pvc-absd234weefw', 'cykubed')
     # it will create two object: the node (RW) PVC and the build job
-    compare_rendered_template(mock_create_from_yaml, 'node-rw-pvc', 0)
-    compare_rendered_template(mock_create_from_yaml, 'build', 1)
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'node-rw-pvc', 0)
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'build', 1)
 
     assert get_cached_item('node-pvc-absd234weefw')
 
@@ -127,8 +131,8 @@ async def test_clone_completed_cache_hit(redis, mocker, mock_create_from_yaml,
     k8_core_api_mock.assert_not_called()
 
     # it will create a RO PVC for the node cache and the build job
-    compare_rendered_template(mock_create_from_yaml, 'node-ro-pvc-from-snapshot', 0)
-    compare_rendered_template(mock_create_from_yaml, 'build-node-cache-hit', 1)
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'node-ro-pvc-from-snapshot', 0)
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'build-node-cache-hit', 1)
 
     assert get_cached_item('node-ro-pvc-absd234weefw')
 
@@ -166,18 +170,20 @@ async def test_create_build_job_node_cache_hit(redis, mock_create_from_yaml, moc
 
     read_pvc.assert_not_called()
     read_snapshot.assert_called_once()
-    compare_rendered_template(mock_create_from_yaml, 'node-ro-pvc-from-snapshot', 0)
-    compare_rendered_template(mock_create_from_yaml, 'build-node-cache-hit', 1)
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'node-ro-pvc-from-snapshot', 0)
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'build-node-cache-hit', 1)
 
 
 @freeze_time('2022-04-03 14:10:00Z')
 async def test_build_completed(redis, mock_create_from_yaml,
                                respx_mock, mocker,
                                k8_core_api_mock,
+                               k8_custom_api_mock,
                                testrun: NewTestRun):
     msg = AgentEvent(type=AgentEventType.build_completed,
                      duration=10,
                      testrun_id=testrun.id)
+
     build_completed = \
         respx_mock.post('https://api.cykubed.com/agent/testrun/20/build-completed') \
             .mock(return_value=Response(200))
@@ -187,13 +193,16 @@ async def test_build_completed(redis, mock_create_from_yaml,
     redis.set(f'testrun:{testrun.id}', atr.json())
 
     await handle_agent_message(websocket, msg.json())
-    # not a cached node_modules: delete the RW (we will have taken a snapshot)
-    k8_core_api_mock.delete_namespaced_persistent_volume_claim.assert_called_with('node-pvc-absd234weefw', 'cykubed')
 
-    assert mock_create_from_yaml.call_count == 3
-    compare_rendered_template(mock_create_from_yaml, 'node-snapshot', 0)
-    compare_rendered_template(mock_create_from_yaml, 'node-ro-clone-pvc', 1)
-    compare_rendered_template(mock_create_from_yaml, 'runner', 2)
+    # not cached - so create a snapshot
+    k8_create_custom = k8_custom_api_mock.create_namespaced_custom_object
+    k8_create_custom.assert_called_once()
+    compare_rendered_template([k8_create_custom.call_args.kwargs['body']], 'node-snapshot')
+
+    assert mock_create_from_yaml.call_count == 2
+    # compare_rendered_template_from_mock(mock_create_from_yaml, 'node-snapshot', 0)
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'node-ro-clone-pvc', 0)
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'runner', 1)
 
     assert build_completed.called == 1
 
@@ -207,8 +216,9 @@ async def test_run_completed(redis, k8_core_api_mock, testrun):
 
     await handle_run_completed(testrun.id)
 
-    assert delete_pvc_mock.call_count == 2
-    assert delete_pvc_mock.call_args_list[0].args == ('node-ro-pvc-absd234weefw', 'cykubed')
-    assert delete_pvc_mock.call_args_list[1].args == ('build-ro-pvc-deadbeef0101', 'cykubed')
+    assert delete_pvc_mock.call_count == 3
+    assert delete_pvc_mock.call_args_list[0].args == ('node-pvc-absd234weefw', 'cykubed')
+    assert delete_pvc_mock.call_args_list[1].args == ('node-ro-pvc-absd234weefw', 'cykubed')
+    assert delete_pvc_mock.call_args_list[2].args == ('build-ro-pvc-deadbeef0101', 'cykubed')
 
 

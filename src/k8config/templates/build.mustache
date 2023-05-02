@@ -10,7 +10,7 @@ metadata:
   name: "{{job_name}}"
   namespace: "{{namespace}}"
 spec:
-  backoffLimit: 5
+  backoffLimit: 0
   ttlSecondsAfterFinished: 3600
   activeDeadlineSeconds: {{deadline}}
   template:

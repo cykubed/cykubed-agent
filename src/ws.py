@@ -36,12 +36,12 @@ async def handle_start_run(tr: NewTestRun):
 
 async def handle_delete_project(project_id: int):
     if settings.K8:
-        jobs.delete_jobs_for_project(project_id)
+        await jobs.delete_jobs_for_project(project_id)
 
 
 async def handle_cancel_run(trid: int):
     if settings.K8:
-        jobs.delete_jobs(trid)
+        await jobs.delete_jobs(trid)
     await db.cancel_testrun(trid)
 
 
@@ -71,6 +71,7 @@ async def consumer_handler(websocket):
 
 
 async def handle_agent_message(websocket, rawmsg: str):
+    logger.debug(f'Msg: {rawmsg}')
     event = AgentEvent.parse_raw(rawmsg)
     if event.type == AgentEventType.clone_completed:
         # clone completed - kick off the build

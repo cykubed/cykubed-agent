@@ -1,5 +1,7 @@
 import datetime
 
+from loguru import logger
+
 from common.redisutils import async_redis
 from common.schemas import NewTestRun, CacheItem, AgentTestRun, CacheItemType
 from common.utils import utcnow
@@ -42,6 +44,7 @@ async def get_testrun(id: int) -> AgentTestRun | None:
 
 
 async def save_testrun(item: AgentTestRun):
+    logger.debug(f'Save testrun {item.json()}')
     await async_redis().set(f'testrun:{id}', item.json())
 
 

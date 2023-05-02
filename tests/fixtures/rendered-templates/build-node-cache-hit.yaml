@@ -11,7 +11,7 @@ metadata:
     namespace: cykubed
 spec:
     activeDeadlineSeconds: 3600
-    backoffLimit: 5
+    backoffLimit: 0
     template:
         spec:
             containers:
