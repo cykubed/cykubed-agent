@@ -149,11 +149,12 @@ async def set_build_state(state: TestRunBuildState):
     await async_redis().set(f'testrun:{state.trid}:state', state.json())
 
 
-async def get_build_state(trid: int) -> TestRunBuildState:
+async def get_build_state(trid: int, check=False) -> TestRunBuildState:
     st = await async_redis().get(f'testrun:{trid}:state')
     if st:
         return TestRunBuildState.parse_raw(st)
-    raise BuildFailedException('Missing state')
+    if check:
+        raise BuildFailedException("Missing state")
 
 
 async def handle_new_run(testrun: schemas.NewTestRun):
@@ -184,7 +185,7 @@ async def handle_clone_completed(event: AgentCloneCompletedEvent):
     to build the node_modules and later snapshot it
     """
     trid = event.testrun_id
-    state = await get_build_state(trid)
+    state = await get_build_state(trid, True)
 
     if not event.specs:
         # no specs - default pass
@@ -230,7 +231,7 @@ async def build_completed(testrun_id: int):
     logger.info(f'Build completed for testrun {testrun_id}')
     try:
         testrun = await get_testrun(testrun_id)
-        state = await get_build_state(testrun_id)
+        state = await get_build_state(testrun_id, True)
         context = common_context(testrun)
         if state.rw_node_pvc:
             # take a snapshot of the node dist
@@ -267,7 +268,8 @@ async def handle_run_completed(testrun_id):
     :param testrun_id:
     """
     state = await get_build_state(testrun_id)
-    await state.delete()
+    if state:
+        await state.delete()
 
 
 async def prune_cache_loop():
@@ -280,14 +282,18 @@ async def prune_cache_loop():
         await asyncio.sleep(300)
 
 
+async def delete_cache_item(item):
+    if item.type == CacheItemType.snapshot:
+        # delete volume
+        await async_delete_snapshot(item.name)
+    else:
+        # delete pvc
+        await async_delete_pvc(item.name)
+
+
 async def prune_cache():
     async for item in expired_cached_items_iter():
-        if item.type == CacheItemType.snapshot:
-            # delete volume
-            await async_delete_snapshot(item.name)
-        else:
-            # delete pvc
-            await async_delete_pvc(item.name)
+        await delete_cache_item(item)
 
 
 def delete_pvc(name: str):
@@ -423,3 +429,8 @@ async def cancel_testrun(trid: int):
     if st:
         await st.delete()
 
+
+async def clear_cache():
+    async for key in async_redis().scan_iter('cache:*'):
+        item = await get_cached_item(key[6:], False)
+        await delete_cache_item(item)

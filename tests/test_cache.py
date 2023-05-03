@@ -8,6 +8,7 @@ from common.schemas import NewTestRun, CacheItemType
 from db import add_cached_item, expired_cached_items_iter, get_cached_item
 from jobs import prune_cache
 from settings import settings
+from ws import handle_websocket_message
 
 
 @freeze_time('2022-04-03 14:10:00Z')
@@ -50,6 +51,18 @@ async def test_prune_cache(redis, mocker, k8_custom_api_mock):
 
     await prune_cache()
 
+    delete_snapshot.assert_called_once()
+    assert delete_snapshot.call_args.kwargs == {'group': 'snapshot.storage.k8s.io',
+                                                'version': 'v1beta1',
+                                                'namespace': 'cykubed',
+                                                'plural': 'volumesnapshots',
+                                                'name': 'key1'}
+
+
+async def test_clear_cache(redis, mocker, k8_custom_api_mock):
+    await add_cached_item('key1')
+    delete_snapshot = k8_custom_api_mock.delete_namespaced_custom_object = mocker.Mock()
+    await handle_websocket_message({'command': 'clear_cache', 'payload': ''})
     delete_snapshot.assert_called_once()
     assert delete_snapshot.call_args.kwargs == {'group': 'snapshot.storage.k8s.io',
                                                 'version': 'v1beta1',

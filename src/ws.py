@@ -53,6 +53,8 @@ async def handle_websocket_message(data: dict):
         await handle_delete_project(payload['project_id'])
     elif cmd == 'cancel':
         await jobs.cancel_testrun(payload['testrun_id'])
+    elif cmd == 'clear_cache':
+        await jobs.clear_cache()
 
 
 async def consumer_handler(websocket):
@@ -89,22 +91,22 @@ async def handle_agent_message(websocket, rawmsg: str):
         await websocket.send(rawmsg)
 
 
+# async def producer_handler(websocket):
+#     redis = async_redis()
+#     while app.is_running():
+#         try:
+#             msglist = await redis.lpop('messages', 100)
+#             if msglist is not None:
+#                 for rawmsg in msglist:
+#                     await handle_agent_message(websocket, rawmsg)
+#             await asyncio.sleep(2)
+#         except RedisError as ex:
+#             if not app.is_running():
+#                 return
+#             logger.error(f"Failed to fetch messages from Redis: {ex}")
+
+
 async def producer_handler(websocket):
-    redis = async_redis()
-    while app.is_running():
-        try:
-            msglist = await redis.lpop('messages', 100)
-            if msglist is not None:
-                for rawmsg in msglist:
-                    await handle_agent_message(websocket, rawmsg)
-            await asyncio.sleep(2)
-        except RedisError as ex:
-            if not app.is_running():
-                return
-            logger.error(f"Failed to fetch messages from Redis: {ex}")
-
-
-async def producer_handler_pubsub(websocket):
     redis = async_redis()
     async with redis.pubsub() as pubsub:
         await pubsub.subscribe('msgavail')
@@ -120,6 +122,7 @@ async def producer_handler_pubsub(websocket):
                 if not app.is_running():
                     return
                 logger.error(f"Failed to fetch messages from Redis: {ex}")
+
 
 async def connect():
     """

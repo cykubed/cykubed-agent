@@ -51,11 +51,15 @@ metadata:
   name: agent
   namespace: {{ .Release.Namespace }}
 spec:
+{{- if eq .Values.architecture "standalone" }}
+  replicas: 1
+{{ else }}
   replicas: {{ .Values.replicas }}
   updateStrategy:
     type: RollingUpdate
     rollingUpdate:
       maxUnavailable: 1
+{{- end }}
   serviceName: agent
   selector:
     matchLabels:
