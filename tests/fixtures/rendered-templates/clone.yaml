@@ -54,5 +54,5 @@ spec:
             volumes:
             -   name: build-volume
                 persistentVolumeClaim:
-                    claimName: build-pvc-deadbeef0101
+                    claimName: build-pvc
     ttlSecondsAfterFinished: 3600

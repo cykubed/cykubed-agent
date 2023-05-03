@@ -13,7 +13,7 @@ import jobs
 from app import app
 from common.enums import AgentEventType
 from common.redisutils import async_redis, ping_redis
-from common.schemas import NewTestRun, AgentEvent, AgentBuildCompleted
+from common.schemas import NewTestRun, AgentEvent, AgentBuildCompleted, AgentCloneCompletedEvent
 from settings import settings
 
 
@@ -28,7 +28,7 @@ async def handle_start_run(tr: NewTestRun):
         # Store in Redis and kick off a new build job
         await db.new_testrun(tr)
         # and create a new one
-        await jobs.create_clone_job(tr)
+        await jobs.handle_new_run(tr)
     except:
         logger.exception(f"Failed to start test run {tr.id}", tr=tr)
         await app.httpclient.post(f'/agent/testrun/{tr.id}/status/failed')
@@ -37,12 +37,6 @@ async def handle_start_run(tr: NewTestRun):
 async def handle_delete_project(project_id: int):
     if settings.K8:
         await jobs.delete_jobs_for_project(project_id)
-
-
-async def handle_cancel_run(trid: int):
-    if settings.K8:
-        await jobs.delete_jobs(trid)
-    await db.cancel_testrun(trid)
 
 
 async def handle_websocket_message(data: dict):
@@ -58,7 +52,7 @@ async def handle_websocket_message(data: dict):
     elif cmd == 'delete_project':
         await handle_delete_project(payload['project_id'])
     elif cmd == 'cancel':
-        await handle_cancel_run(payload['testrun_id'])
+        await jobs.cancel_testrun(payload['testrun_id'])
 
 
 async def consumer_handler(websocket):
@@ -75,15 +69,15 @@ async def handle_agent_message(websocket, rawmsg: str):
     event = AgentEvent.parse_raw(rawmsg)
     if event.type == AgentEventType.clone_completed:
         # clone completed - kick off the build
-        await jobs.handle_clone_completed(event.testrun_id)
+        await jobs.handle_clone_completed(AgentCloneCompletedEvent.parse_raw(rawmsg))
     elif event.type == AgentEventType.build_completed:
         # build completed - create runner jobs
         await jobs.build_completed(event.testrun_id)
         # and notify the server
-        tr = await db.get_testrun(event.testrun_id)
+        state = await jobs.get_build_state(event.testrun_id)
         resp = await app.httpclient.post(f'/agent/testrun/{event.testrun_id}/build-completed',
-                                         data=AgentBuildCompleted(duration=event.duration,
-                                                             specs=tr.specs).dict())
+                                         content=AgentBuildCompleted(duration=event.duration,
+                                                             specs=state.specs).json())
         if resp.status_code != 200:
             logger.error(f'Failed to update server that build was completed:'
                          f' {resp.status_code}: {resp.text}')
@@ -103,12 +97,29 @@ async def producer_handler(websocket):
             if msglist is not None:
                 for rawmsg in msglist:
                     await handle_agent_message(websocket, rawmsg)
-            await asyncio.sleep(1)
+            await asyncio.sleep(2)
         except RedisError as ex:
             if not app.is_running():
                 return
             logger.error(f"Failed to fetch messages from Redis: {ex}")
 
+
+async def producer_handler_pubsub(websocket):
+    redis = async_redis()
+    async with redis.pubsub() as pubsub:
+        await pubsub.subscribe('msgavail')
+        while app.is_running():
+            await pubsub.get_message(ignore_subscribe_messages=True, timeout=10)
+            try:
+                msglist = await redis.lpop('messages', 100)
+                if msglist is not None:
+                    for rawmsg in msglist:
+                        await handle_agent_message(websocket, rawmsg)
+                await asyncio.sleep(1)
+            except RedisError as ex:
+                if not app.is_running():
+                    return
+                logger.error(f"Failed to fetch messages from Redis: {ex}")
 
 async def connect():
     """

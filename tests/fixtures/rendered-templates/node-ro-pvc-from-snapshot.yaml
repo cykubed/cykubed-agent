@@ -6,7 +6,7 @@ metadata:
         local_id: '1'
         project_id: '10'
         testrun_id: '20'
-    name: node-ro-pvc-absd234weefw
+    name: node-ro-pvc
     namespace: cykubed
 spec:
     accessModes:
@@ -14,7 +14,7 @@ spec:
     dataSource:
         apiGroup: snapshot.storage.k8s.io
         kind: VolumeSnapshot
-        name: node-snap-absd234weefw
+        name: node-absd234weefw
     resources:
         requests:
             storage: 4.0Gi

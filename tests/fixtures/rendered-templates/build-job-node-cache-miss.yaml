@@ -58,8 +58,8 @@ spec:
             volumes:
             -   name: node-volume
                 persistentVolumeClaim:
-                    claimName: node-pvc-absd234weefw
+                    claimName: node-rw-pvc
             -   name: build-volume
                 persistentVolumeClaim:
-                    claimName: build-pvc-deadbeef0101
+                    claimName: build-rw-pvc
     ttlSecondsAfterFinished: 3600

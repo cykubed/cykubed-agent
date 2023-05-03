@@ -7,7 +7,7 @@ metadata:
         project_id: '10'
         sha: deadbeef0101
         testrun_id: '20'
-    name: node-pvc-absd234weefw
+    name: node-rw-pvc
     namespace: cykubed
 spec:
     accessModes:

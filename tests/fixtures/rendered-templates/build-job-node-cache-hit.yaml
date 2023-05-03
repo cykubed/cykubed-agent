@@ -58,9 +58,9 @@ spec:
             volumes:
             -   name: node-volume
                 persistentVolumeClaim:
-                    claimName: node-ro-pvc-absd234weefw
+                    claimName: node-ro-pvc
                     readOnly: true
             -   name: build-volume
                 persistentVolumeClaim:
-                    claimName: build-pvc-deadbeef0101
+                    claimName: build-rw-pvc
     ttlSecondsAfterFinished: 3600

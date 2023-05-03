@@ -1,9 +1,7 @@
 import datetime
 
-from loguru import logger
-
 from common.redisutils import async_redis
-from common.schemas import NewTestRun, CacheItem, AgentTestRun, CacheItemType
+from common.schemas import NewTestRun, CacheItem, CacheItemType
 from common.utils import utcnow
 from settings import settings
 
@@ -20,32 +18,16 @@ async def new_testrun(tr: NewTestRun):
     await r.set(f'testrun:{tr.id}:run_duration', 0, ex=24*3600)
 
 
-async def cancel_testrun(trid: int):
+async def get_testrun(id: int) -> NewTestRun | None:
     """
-    Just remove the keys
-    :param trid: test run ID
-    """
-    r = async_redis()
-    await r.delete(f'testrun:{trid}:specs')
-    await r.delete(f'testrun:{trid}')
-    await r.srem(f'testruns', str(trid))
-
-
-async def get_testrun(id: int) -> AgentTestRun | None:
-    """
-    Used by agents and runners to return a deserialised AgentTestRun
+    Used by agents and runners to return a deserialised NewTestRun
     :param id:
     :return:
     """
     d = await async_redis().get(f'testrun:{id}')
     if d:
-        return AgentTestRun.parse_raw(d)
+        return NewTestRun.parse_raw(d)
     return None
-
-
-async def save_testrun(item: AgentTestRun):
-    logger.debug(f'Save testrun {item.json()}')
-    await async_redis().set(f'testrun:{id}', item.json())
 
 
 async def get_cached_item(key: str, update_expiry=True) -> CacheItem | None:
@@ -60,7 +42,7 @@ async def get_cached_item(key: str, update_expiry=True) -> CacheItem | None:
     return item
 
 
-async def add_cached_item(key: str, itemtype: CacheItemType) -> CacheItem:
+async def add_cached_item(key: str, itemtype: CacheItemType = CacheItemType.snapshot) -> CacheItem:
     ttl = settings.NODE_DISTRIBUTION_CACHE_TTL if itemtype == CacheItemType.snapshot \
         else settings.APP_DISTRIBUTION_CACHE_TTL
     item = CacheItem(name=key,
@@ -71,28 +53,16 @@ async def add_cached_item(key: str, itemtype: CacheItemType) -> CacheItem:
     return item
 
 
+def get_pvc_expiry_time() -> str:
+    return (utcnow() + datetime.timedelta(seconds=settings.APP_DISTRIBUTION_CACHE_TTL)).isoformat()
+
+
+def get_snapshot_expiry_time() -> str:
+    return (utcnow() + datetime.timedelta(seconds=settings.NODE_DISTRIBUTION_CACHE_TTL)).isoformat()
+
+
 async def remove_cached_item(key: str):
     await async_redis().delete(f'cache:{key}')
-
-
-def get_build_ro_pvc_name(tr: AgentTestRun):
-    return f"build-ro-pvc-{tr.sha}"
-
-
-def get_build_pvc_name(tr: AgentTestRun):
-    return f"build-pvc-{tr.sha}"
-
-
-def get_node_snapshot_name(tr: AgentTestRun):
-    return f"node-snap-{tr.cache_key}"
-
-
-def get_node_pvc_name(tr: AgentTestRun):
-    return f"node-pvc-{tr.cache_key}"
-
-
-def get_node_ro_pvc_name(tr: AgentTestRun):
-    return f"node-ro-pvc-{tr.cache_key}"
 
 
 async def expired_cached_items_iter():

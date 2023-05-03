@@ -1,14 +1,13 @@
-import json
 import os.path
 
 import yaml
 from freezegun import freeze_time
 from httpx import Response
 
-from common.enums import TestRunStatus, AgentEventType
-from common.schemas import NewTestRun, AgentTestRun, AgentEvent, CacheItemType
-from db import get_cached_item, add_cached_item, get_node_snapshot_name
-from jobs import handle_clone_completed, handle_run_completed
+from common.enums import AgentEventType
+from common.schemas import NewTestRun, AgentEvent, AgentCloneCompletedEvent
+from db import get_cached_item, add_cached_item, new_testrun
+from jobs import handle_run_completed, get_build_state, set_build_state, TestRunBuildState
 from ws import handle_start_run, handle_agent_message
 
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), 'fixtures')
@@ -35,12 +34,22 @@ async def test_start_run(redis, mocker, testrun: NewTestRun,
         respx_mock.post('https://api.cykubed.com/agent/testrun/20/status/building') \
             .mock(return_value=Response(200))
 
+    def get_new_pvc_name(prefix: str) -> str:
+        return f'{prefix}-pvc'
+
+    mocker.patch('jobs.get_new_pvc_name', side_effect=get_new_pvc_name)
+
     delete_jobs = mocker.patch('jobs.delete_jobs_for_branch')
     await handle_start_run(testrun)
+
     # this will add an entry to the testrun collection
     saved_tr_json = redis.get(f'testrun:{testrun.id}')
     savedtr = NewTestRun.parse_raw(saved_tr_json)
     assert savedtr == testrun
+
+    state = await get_build_state(testrun.id)
+    assert state.rw_build_pvc == 'build-pvc'
+    assert state.trid == testrun.id
 
     delete_jobs.assert_called_once_with(testrun.id, 'master')
     # there will be two calls here: one to create the PVC, another to run the build Job
@@ -50,8 +59,6 @@ async def test_start_run(redis, mocker, testrun: NewTestRun,
     compare_rendered_template_from_mock(mock_create_from_yaml, 'build-pvc', 0)
     compare_rendered_template_from_mock(mock_create_from_yaml, 'clone', 1)
 
-    assert get_cached_item('build-pvc-deadbeef0101')
-
     assert update_status.called == 1
 
 
@@ -60,7 +67,7 @@ async def test_clone_completed_cache_miss(redis, mocker, mock_create_from_yaml,
                                           k8_core_api_mock,
                                           testrun: NewTestRun):
     """
-    Clone completed and we have no cached node dist: we'll need to create a RW
+    Clone completed, and we have no cached node dist: we'll need to create a RW
     PVC for the node dist
     :param redis:
     :param mocker:
@@ -71,21 +78,26 @@ async def test_clone_completed_cache_miss(redis, mocker, mock_create_from_yaml,
     :return:
     """
     websocket = mocker.AsyncMock()
-    specs = ['cypress/e2e/spec1.ts', 'cypress/e2e/spec2.ts']
-    atr = AgentTestRun(specs=specs, cache_key='absd234weefw', **testrun.dict())
-    redis.sadd(f'testrun:{testrun.id}:specs', *specs)
-    testrun.status = TestRunStatus.running
-    redis.set(f'testrun:{testrun.id}', atr.json())
+    await new_testrun(testrun)
+    await set_build_state(TestRunBuildState(trid=testrun.id, rw_build_pvc='build-rw-pvc'))
 
-    read_pvc = k8_core_api_mock.read_namespaced_persistent_volume_claim \
-        = mocker.Mock(return_value=None)
-    await handle_agent_message(websocket, AgentEvent(type=AgentEventType.clone_completed,
-                                                     testrun_id=testrun.id).json())
+    mocker.patch('jobs.get_new_pvc_name', side_effect=lambda prefix: f'{prefix}-pvc')
 
-    read_pvc.assert_called_once_with('node-pvc-absd234weefw', 'cykubed')
+    # read_pvc = k8_core_api_mock.read_namespaced_persistent_volume_claim \
+    #     = mocker.Mock(return_value=None)
+    await handle_agent_message(websocket, AgentCloneCompletedEvent(cache_key='absd234weefw',
+                                                                   specs=['test1.ts'],
+                                                                   testrun_id=testrun.id).json())
+
     # it will create two object: the node (RW) PVC and the build job
     compare_rendered_template_from_mock(mock_create_from_yaml, 'node-rw-pvc', 0)
-    compare_rendered_template_from_mock(mock_create_from_yaml, 'build', 1)
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'build-job-node-cache-miss', 1)
+
+    state = await get_build_state(testrun.id)
+    assert state.rw_node_pvc == 'node-rw-pvc'
+    assert state.ro_node_pvc is None
+    assert state.specs == ['test1.ts']
+    assert state.node_snapshot_name == 'node-absd234weefw'
 
     assert get_cached_item('node-pvc-absd234weefw')
 
@@ -96,8 +108,8 @@ async def test_clone_completed_cache_hit(redis, mocker, mock_create_from_yaml,
                                          k8_custom_api_mock,
                                          testrun: NewTestRun):
     """
-    Clone completed but this time we have a snapshot for a node distribution,
-    so go straight to creating a RO PVC from the snapshot
+    Clone completed, but we have a snapshot for a node distribution. Created a RO PVC from the snapshot and a RO
+    PVC from the build PVC, before creating the build job.
     :param redis:
     :param mocker:
     :param mock_create_from_yaml:
@@ -108,117 +120,154 @@ async def test_clone_completed_cache_hit(redis, mocker, mock_create_from_yaml,
     """
 
     websocket = mocker.AsyncMock()
-    specs = ['cypress/e2e/spec1.ts']
-    testrun.status = 'building'
-    atr = AgentTestRun(specs=specs, node_cache_hit=True,
-                       cache_key='absd234weefw', **testrun.dict())
-    redis.set(f'testrun:{testrun.id}', atr.json())
-    await add_cached_item(get_node_snapshot_name(atr), CacheItemType.snapshot)
+    await new_testrun(testrun)
+    await set_build_state(TestRunBuildState(trid=testrun.id, rw_build_pvc='build-rw-pvc'))
+    await add_cached_item('node-absd234weefw')
+
+    mocker.patch('jobs.get_new_pvc_name', side_effect=lambda prefix: f'{prefix}-pvc')
 
     # it will also check that the snapshot exists
     read_snapshot = k8_custom_api_mock.get_namespaced_custom_object = mocker.Mock(return_value=True)
 
-    await handle_agent_message(websocket, AgentEvent(type=AgentEventType.clone_completed,
-                                                     testrun_id=testrun.id).json())
+    await handle_agent_message(websocket, AgentCloneCompletedEvent(cache_key='absd234weefw',
+                                                                   specs=['test2.js'],
+                                                                   testrun_id=testrun.id).json())
 
     read_snapshot.assert_called_once()
     assert read_snapshot.call_args.kwargs == {'group': 'snapshot.storage.k8s.io',
                                               'version': 'v1beta1',
                                               'namespace': 'cykubed',
                                               'plural': 'volumesnapshots',
-                                              'name': 'node-snap-absd234weefw'}
+                                              'name': 'node-absd234weefw'}
 
     k8_core_api_mock.assert_not_called()
 
     # it will create a RO PVC for the node cache and the build job
     compare_rendered_template_from_mock(mock_create_from_yaml, 'node-ro-pvc-from-snapshot', 0)
-    compare_rendered_template_from_mock(mock_create_from_yaml, 'build-node-cache-hit', 1)
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'build-job-node-cache-hit', 1)
 
-    assert get_cached_item('node-ro-pvc-absd234weefw')
-
-
-@freeze_time('2022-04-03 14:10:00Z')
-async def test_check_add_cached_item(redis):
-    await add_cached_item('node-snap-absd234weefw', CacheItemType.snapshot)
-    cachestr = redis.get(f'cache:node-snap-absd234weefw')
-
-    assert json.loads(cachestr) == {'name': 'node-snap-absd234weefw',
-                                    'ttl': 108000,
-                                    'type': 'snapshot',
-                                    'expires': '2022-04-04T20:10:00+00:00'
-                                    }
+    state = await get_build_state(testrun.id)
+    assert state.rw_node_pvc is None
+    assert state.ro_node_pvc == 'node-ro-pvc'
+    assert state.node_snapshot_name is None
 
 
 @freeze_time('2022-04-03 14:10:00Z')
-async def test_create_build_job_node_cache_hit(redis, mock_create_from_yaml, mocker,
-                                               respx_mock, k8_core_api_mock,
-                                               k8_custom_api_mock,
-                                               testrun: NewTestRun):
-    specs = ['cypress/e2e/spec1.ts']
-    testrun.status = TestRunStatus.running
-    atr = AgentTestRun(specs=specs, node_cache_hit=True, cache_key='absd234weefw', **testrun.dict())
-    redis.set(f'testrun:{testrun.id}', atr.json())
-    redis.sadd(f'testrun:{testrun.id}:specs', *specs)
-
-    read_pvc = k8_core_api_mock.read_namespaced_persistent_volume_claim \
-        = mocker.Mock(return_value=True)
-    read_snapshot = k8_custom_api_mock.get_namespaced_custom_object = mocker.Mock(return_value=True)
-
-    await add_cached_item('node-snap-absd234weefw', CacheItemType.snapshot)
-
-    await handle_clone_completed(testrun.id)
-
-    read_pvc.assert_not_called()
-    read_snapshot.assert_called_once()
-    compare_rendered_template_from_mock(mock_create_from_yaml, 'node-ro-pvc-from-snapshot', 0)
-    compare_rendered_template_from_mock(mock_create_from_yaml, 'build-node-cache-hit', 1)
-
-
-@freeze_time('2022-04-03 14:10:00Z')
-async def test_build_completed(redis, mock_create_from_yaml,
-                               respx_mock, mocker,
-                               k8_core_api_mock,
-                               k8_custom_api_mock,
-                               testrun: NewTestRun):
+async def test_build_completed_cache_miss(redis, mock_create_from_yaml,
+                                           respx_mock, mocker,
+                                           k8_core_api_mock,
+                                           k8_custom_api_mock,
+                                           testrun: NewTestRun):
+    """
+    A build is completed without using a cached node distribution. We will need to create snapshot for the node dist
+    and then create RO PVCs for both build and node before creating the runner job.
+    :param redis:
+    :param mock_create_from_yaml:
+    :param respx_mock:
+    :param mocker:
+    :param k8_core_api_mock:
+    :param k8_custom_api_mock:
+    :param testrun:
+    :return:
+    """
     msg = AgentEvent(type=AgentEventType.build_completed,
                      duration=10,
                      testrun_id=testrun.id)
+    mocker.patch('jobs.get_new_pvc_name', side_effect=lambda prefix: f'{prefix}-pvc')
 
     build_completed = \
         respx_mock.post('https://api.cykubed.com/agent/testrun/20/build-completed') \
             .mock(return_value=Response(200))
     websocket = mocker.AsyncMock()
-    specs = ['cypress/e2e/test/test1.spec.ts']
-    atr = AgentTestRun(specs=specs, cache_key='absd234weefw', **testrun.dict())
-    redis.set(f'testrun:{testrun.id}', atr.json())
+
+    await new_testrun(testrun)
+    await set_build_state(TestRunBuildState(trid=testrun.id, rw_build_pvc='build-rw-pvc',
+                                            rw_node_pvc='node-rw-pvc',
+                                            specs=['test1.ts'],
+                                            node_snapshot_name='node-absd234weefw'))
 
     await handle_agent_message(websocket, msg.json())
+
+    state = await get_build_state(testrun.id)
+    assert state.ro_node_pvc == 'node-ro-pvc'
 
     # not cached - so create a snapshot
     k8_create_custom = k8_custom_api_mock.create_namespaced_custom_object
     k8_create_custom.assert_called_once()
     compare_rendered_template([k8_create_custom.call_args.kwargs['body']], 'node-snapshot')
 
-    assert mock_create_from_yaml.call_count == 2
-    # compare_rendered_template_from_mock(mock_create_from_yaml, 'node-snapshot', 0)
+    assert mock_create_from_yaml.call_count == 3
     compare_rendered_template_from_mock(mock_create_from_yaml, 'node-ro-clone-pvc', 0)
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'build-ro-clone-pvc', 1)
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'runner', 2)
+
+    assert build_completed.called == 1
+
+
+@freeze_time('2022-04-03 14:10:00Z')
+async def test_build_completed_cache_hit(redis, mock_create_from_yaml,
+                                           respx_mock, mocker,
+                                           k8_core_api_mock,
+                                           k8_custom_api_mock,
+                                           testrun: NewTestRun):
+    """
+    A build is completed using a cached node distribution. We will already have a RO node PVC, so we just need
+    to create a RO PVCs for the build and the create the runner job.
+    :param redis:
+    :param mock_create_from_yaml:
+    :param respx_mock:
+    :param mocker:
+    :param k8_core_api_mock:
+    :param k8_custom_api_mock:
+    :param testrun:
+    :return:
+    """
+    msg = AgentEvent(type=AgentEventType.build_completed, duration=15, testrun_id=testrun.id)
+    mocker.patch('jobs.get_new_pvc_name', side_effect=lambda prefix: f'{prefix}-pvc')
+
+    build_completed = \
+        respx_mock.post('https://api.cykubed.com/agent/testrun/20/build-completed').mock(return_value=Response(200))
+    websocket = mocker.AsyncMock()
+
+    await new_testrun(testrun)
+    await set_build_state(TestRunBuildState(trid=testrun.id,
+                                            rw_build_pvc='build-rw-pvc',
+                                            ro_node_pvc='node-ro-pvc',
+                                            specs=['test1.ts']))
+
+    await handle_agent_message(websocket, msg.json())
+
+    state = await get_build_state(testrun.id)
+    assert state.ro_build_pvc == 'build-ro-pvc'
+
+    # it won't create a snapshot
+    k8_custom_api_mock.create_namespaced_custom_object.assert_not_called()
+
+    assert mock_create_from_yaml.call_count == 2
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'build-ro-clone-pvc', 0)
     compare_rendered_template_from_mock(mock_create_from_yaml, 'runner', 1)
 
     assert build_completed.called == 1
 
 
 async def test_run_completed(redis, k8_core_api_mock, testrun):
-    specs = ['cypress/e2e/test/test1.spec.ts']
-    atr = AgentTestRun(specs=specs, cache_key='absd234weefw', **testrun.dict())
-    redis.set(f'testrun:{atr.id}', atr.json())
+    await new_testrun(testrun)
+    await set_build_state(TestRunBuildState(trid=testrun.id,
+                                            rw_build_pvc='build-rw-pvc',
+                                            ro_build_pvc='build-ro-pvc',
+                                            rw_node_pvc='node-rw-pvc',
+                                            ro_node_pvc='node-ro-pvc',
+                                            specs=['test1.ts'],
+                                            node_snapshot_name='node-absd234weefw'))
 
     delete_pvc_mock = k8_core_api_mock.delete_namespaced_persistent_volume_claim
 
     await handle_run_completed(testrun.id)
 
-    assert delete_pvc_mock.call_count == 3
-    assert delete_pvc_mock.call_args_list[0].args == ('node-pvc-absd234weefw', 'cykubed')
-    assert delete_pvc_mock.call_args_list[1].args == ('node-ro-pvc-absd234weefw', 'cykubed')
-    assert delete_pvc_mock.call_args_list[2].args == ('build-ro-pvc-deadbeef0101', 'cykubed')
+    assert delete_pvc_mock.call_count == 4
+    pvcs = {x.args[0] for x in delete_pvc_mock.call_args_list}
+    assert pvcs == {'build-rw-pvc', 'build-ro-pvc', 'node-rw-pvc', 'node-ro-pvc'}
 
-
+    assert redis.get(f'testrun:20:state') is None
+    assert redis.get(f'testrun:20') is None
+    assert redis.get(f'testrun:20:specs') is None

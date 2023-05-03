@@ -6,14 +6,14 @@ metadata:
         local_id: '1'
         project_id: '10'
         testrun_id: '20'
-    name: node-ro-pvc-absd234weefw
+    name: node-ro-pvc
     namespace: cykubed
 spec:
     accessModes:
     - ReadOnlyMany
     dataSource:
         kind: PersistentVolumeClaim
-        name: node-pvc-absd234weefw
+        name: node-rw-pvc
     resources:
         requests:
             storage: 4.0Gi

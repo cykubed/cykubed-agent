@@ -5,14 +5,16 @@ metadata:
         branch: master
         local_id: '1'
         project_id: '10'
-        sha: deadbeef0101
         testrun_id: '20'
-    name: build-pvc
+    name: build-ro-pvc
     namespace: cykubed
 spec:
     accessModes:
-    - ReadWriteOnce
+    - ReadOnlyMany
+    dataSource:
+        kind: PersistentVolumeClaim
+        name: build-rw-pvc
     resources:
         requests:
-            storage: 4Gi
+            storage: 4.0Gi
     storageClassName: cykubed-storageclass
