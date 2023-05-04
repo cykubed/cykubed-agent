@@ -3,7 +3,7 @@ kind: Job
 metadata:
   labels:
     cykubed-job: "runner"
-    project_id: "{{project_id}}"
+    project_id: "{{project.id}}"
     local_id: "{{local_id}}"
     testrun_id: "{{testrun_id}}"
     branch: "{{branch}}"
@@ -13,11 +13,11 @@ spec:
   backoffLimit: 10
   ttlSecondsAfterFinished: 3600
   parallelism: {{parallelism}}
-  activeDeadlineSeconds: {{deadline}}
+  activeDeadlineSeconds: {{project.runner_deadline}}
   template:
     metadata:
       labels:
-        project_id: "{{project_id}}"
+        project_id: "{{project.id}}"
         local_id: "{{local_id}}"
         testrun_id: "{{testrun_id}}"
         branch: "{{branch}}"
@@ -32,18 +32,18 @@ spec:
           persistentVolumeClaim:
             readOnly: true
             claimName: "{{node_pvc_name}}"
-      {{#gke_spot_enabled}}
+      {{#project.spot_enabled}}
       affinity:
         nodeAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: {{gke_spot_percentage}}
+          - weight: {{project.spot_percentage}}
             preference:
               matchExpressions:
               - key: cloud.google.com/gke-spot
                 operator: In
                 values:
                 - "true"
-      {{/gke_spot_enabled}}
+      {{/project.spot_enabled}}
       securityContext:
         runAsNonRoot: true
         fsGroup: 10000
@@ -53,7 +53,7 @@ spec:
       priorityClassName: "cykubed-low-priority"
       containers:
       - name: "cykubed-runner"
-        image: {{runner_image}}
+        image: {{project.runner_image}}
         env:
         - name: BUILD_DIR
           value: "/build"
@@ -62,7 +62,7 @@ spec:
         - name: CYPRESS_RETRIES
           value: "{{cypress_retries}}"
         - name: TZ
-          value: "{{timezone}}"
+          value: "{{project.timezone}}"
         - name: REDIS_PASSWORD
           valueFrom:
             secretKeyRef:
@@ -76,11 +76,11 @@ spec:
         args: [ "run", "{{testrun_id}}"]
         resources:
           limits:
-            cpu: "{{cpu_limit}}"
-            memory: "{{memory_limit}}G"
+            cpu: "{{project.runner_cpu}}"
+            memory: "{{project.runner_memory}}G"
           requests:
-            cpu: "{{cpu_request}}"
-            memory: "{{memory_request}}G"
+            cpu: "{{project.runner_cpu}}"
+            memory: "{{project.runner_memory}}G"
         volumeMounts:
         - mountPath: "/build"
           name: build-volume

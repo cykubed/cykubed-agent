@@ -16,5 +16,5 @@ spec:
         name: build-rw-pvc
     resources:
         requests:
-            storage: 4.0Gi
+            storage: 10.0Gi
     storageClassName: cykubed-storageclass

@@ -3,7 +3,7 @@ kind: Job
 metadata:
   labels:
     cykubed-job: "checkout"
-    project_id: "{{project_id}}"
+    project_id: "{{project.id}}"
     local_id: "{{local_id}}"
     testrun_id: "{{testrun_id}}"
     branch: "{{branch}}"
@@ -11,8 +11,8 @@ metadata:
   namespace: "{{namespace}}"
 spec:
   backoffLimit: 5
-  ttlSecondsAfterFinished: 3600
-  activeDeadlineSeconds: {{deadline}}
+  ttlSecondsAfterFinished: 600
+  activeDeadlineSeconds: 600
   template:
     spec:
       securityContext:
@@ -29,7 +29,7 @@ spec:
       priorityClassName: "cykubed-low-priority"
       containers:
       - name: "cloner"
-        image: "{{runner_image}}"
+        image: "{{project.runner_image}}"
         env:
         - name: REDIS_PASSWORD
           valueFrom:
@@ -46,11 +46,11 @@ spec:
         args: [ "clone", "{{testrun_id}}"]
         resources:
           limits:
-            cpu: "{{cpu_limit}}"
-            memory: "{{memory_limit}}G"
+            cpu: 200m
+            memory: 1G
           requests:
-            cpu: "{{cpu_request}}"
-            memory: "{{memory_request}}G"
+            cpu: 200m
+            memory: 1G
         volumeMounts:
         - mountPath: "/build"
           name: build-volume

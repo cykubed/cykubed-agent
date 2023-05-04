@@ -38,24 +38,14 @@ def common_context(testrun: schemas.NewTestRun):
     return dict(sha=testrun.sha,
                 namespace=settings.NAMESPACE,
                 storage_class=settings.STORAGE_CLASS,
-                project_id=testrun.project.id,
-                project_name=testrun.project.name,
                 local_id=testrun.local_id,
                 testrun_id=testrun.id,
                 testrun=testrun,
                 branch=testrun.branch,
                 redis_secret_name=settings.REDIS_SECRET_NAME,
-                runner_image=testrun.project.runner_image,
-                timezone=testrun.project.timezone,
                 token=settings.API_TOKEN,
-                cpu_request=testrun.project.runner_cpu,
-                cpu_limit=testrun.project.runner_cpu,
-                gke_spot_enabled=testrun.project.spot_enabled,
-                gke_spot_percentage=testrun.project.spot_percentage,
-                deadline=testrun.project.runner_deadline,
-                memory_request=testrun.project.runner_memory,
-                memory_limit=testrun.project.runner_memory,
-                storage=testrun.project.runner_ephemeral_storage)
+                storage=testrun.project.build_ephemeral_storage,
+                project=testrun.project)
 
 
 async def render_template(jobtype, context):
@@ -210,6 +200,7 @@ async def handle_clone_completed(event: AgentCloneCompletedEvent):
         state.ro_node_pvc = get_new_pvc_name('node-ro')
         context['snapshot_name'] = node_snapshot_name
         context['node_pvc_name'] = context['ro_pvc_name'] = state.ro_node_pvc
+        context['storage'] = testrun.project.build_ephemeral_storage
         await create_k8_objects('ro-pvc-from-snapshot', context)
         await set_build_state(state)
     else:
@@ -217,6 +208,7 @@ async def handle_clone_completed(event: AgentCloneCompletedEvent):
         state.rw_node_pvc = context['node_pvc_name'] = context['pvc_name'] = get_new_pvc_name('node-rw')
         state.node_snapshot_name = node_snapshot_name
         await set_build_state(state)
+        context['storage'] = testrun.project.build_ephemeral_storage
         await create_k8_objects('rw-pvc', context)
 
     # now create the Job

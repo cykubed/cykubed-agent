@@ -3,16 +3,16 @@ kind: Job
 metadata:
   labels:
     cykubed-job: "builder"
-    project_id: "{{project_id}}"
+    project_id: "{{project.id}}"
     local_id: "{{local_id}}"
     testrun_id: "{{testrun_id}}"
     branch: "{{branch}}"
-  name: "cykubed-build-{{project_name}}-{{testrun_id}}"
+  name: "cykubed-build-{{project.name}}-{{testrun_id}}"
   namespace: "{{namespace}}"
 spec:
   backoffLimit: 0
   ttlSecondsAfterFinished: 3600
-  activeDeadlineSeconds: {{deadline}}
+  activeDeadlineSeconds: {{project.build_deadline}}
   template:
     spec:
       securityContext:
@@ -35,7 +35,7 @@ spec:
       priorityClassName: "cykubed-low-priority"
       containers:
       - name: "cykubed-builder"
-        image: "{{runner_image}}"
+        image: "{{project.runner_image}}"
         env:
         - name: REDIS_PASSWORD
           valueFrom:
@@ -54,12 +54,12 @@ spec:
         args: [ "build", "{{testrun_id}}"]
         resources:
           limits:
-            cpu: "{{cpu_limit}}"
-            memory: "{{memory_limit}}G"
+            cpu: "{{project.build_cpu}}"
+            memory: "{{project.build_memory}}G"
             ephemeral-storage: "3Gi"
           requests:
-            cpu: "{{cpu_request}}"
-            memory: "{{memory_request}}G"
+            cpu: "{{project.build_cpu}}"
+            memory: "{{project.build_memory}}G"
             ephemeral-storage: "3Gi"
         volumeMounts:
         - mountPath: "/node"

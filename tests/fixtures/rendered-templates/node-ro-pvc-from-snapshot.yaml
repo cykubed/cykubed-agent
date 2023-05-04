@@ -17,5 +17,5 @@ spec:
         name: node-absd234weefw
     resources:
         requests:
-            storage: 4.0Gi
+            storage: 10.0Gi
     storageClassName: cykubed-storageclass

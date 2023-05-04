@@ -34,8 +34,13 @@ async def project() -> Project:
                    agent_id=1,
                    start_runners_first=False,
                    platform=PlatformEnum.GITHUB,
+                   build_cpu='4.0',
+                   build_memory=6.0,
+                   runner_cpu='2',
+                   runner_memory=4.0,
                    runner_image='cykubed-runner:1234',
                    url='git@github.org/dummy.git',
+                   build_deadline=3600,
                    organisation=org)
 
 

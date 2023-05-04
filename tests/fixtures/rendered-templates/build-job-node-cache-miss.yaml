@@ -37,13 +37,13 @@ spec:
                 name: cykubed-builder
                 resources:
                     limits:
-                        cpu: '2.0'
+                        cpu: '4.0'
                         ephemeral-storage: 3Gi
-                        memory: 4.0G
+                        memory: 6.0G
                     requests:
-                        cpu: '2.0'
+                        cpu: '4.0'
                         ephemeral-storage: 3Gi
-                        memory: 4.0G
+                        memory: 6.0G
                 volumeMounts:
                 -   mountPath: /node
                     name: node-volume
