@@ -9,7 +9,7 @@ cache:
   size: "10Gi"
 gcpServiceAccount: ""
 platform: "minikube"
-architecture: "standalone"
+architecture: "replicated"
 redis:
   sentinel:
     enabled: true

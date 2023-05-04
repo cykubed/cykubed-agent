@@ -70,7 +70,7 @@ spec:
         app: agent
     spec:
       priorityClassName: cykubed-high-priority
-      serviceAccountName: cykubed
+      serviceAccountName: cykubed-agent
       securityContext:
         runAsUser: 10000
         runAsGroup: 10000
