@@ -3,7 +3,7 @@ apiVersion: snapshot.storage.k8s.io/v1
 kind: VolumeSnapshotClass
 metadata:
   name: "cykubed-snapshotclass"
-  namespace: cykubed
+  namespace: {{ .Release.Namespace }}
 driver: pd.csi.storage.gke.io
 deletionPolicy: Delete
 ---
@@ -15,6 +15,7 @@ metadata:
     addonmanager.kubernetes.io/mode: EnsureExists
     k8s-app: gcp-compute-persistent-disk-csi-driver
   name: cykubed-storageclass
+  namespace: {{ .Release.Namespace }}
 parameters:
   type: pd-ssd
 provisioner: pd.csi.storage.gke.io
@@ -32,6 +33,7 @@ metadata:
   labels:
     addonmanager.kubernetes.io/mode: EnsureExists
   name: cykubed-snapshotclass
+  namespace: {{ .Release.Namespace }}
 ---
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
@@ -39,6 +41,7 @@ metadata:
   labels:
     addonmanager.kubernetes.io/mode: Reconcile
   name: cykubed-storageclass
+  namespace: {{ .Release.Namespace }}
 provisioner: hostpath.csi.k8s.io
 reclaimPolicy: Delete
 volumeBindingMode: Immediate
@@ -90,7 +93,7 @@ spec:
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: "cykubed-redis"
+                  name: "{{ .Release.Name }}-redis"
                   key: "redis-password"
           envFrom:
             - configMapRef:
