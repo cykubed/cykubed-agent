@@ -44,6 +44,7 @@ def common_context(testrun: schemas.NewTestRun):
                 testrun_id=testrun.id,
                 testrun=testrun,
                 branch=testrun.branch,
+                redis_secret_name=settings.REDIS_SECRET_NAME,
                 runner_image=testrun.project.runner_image,
                 timezone=testrun.project.timezone,
                 token=settings.API_TOKEN,

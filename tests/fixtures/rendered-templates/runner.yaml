@@ -38,7 +38,7 @@ spec:
                     valueFrom:
                         secretKeyRef:
                             key: redis-password
-                            name: cykubed-redis
+                            name: cykubed-agent-redis
                 envFrom:
                 -   configMapRef:
                         name: cykubed-agent-configmap

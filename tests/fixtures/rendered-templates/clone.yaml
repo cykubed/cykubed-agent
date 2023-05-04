@@ -23,7 +23,7 @@ spec:
                     valueFrom:
                         secretKeyRef:
                             key: redis-password
-                            name: cykubed-redis
+                            name: cykubed-agent-redis
                 -   name: BUILD_DIR
                     value: /build
                 envFrom:
