@@ -80,7 +80,7 @@ spec:
         fsGroup: 10000
       containers:
         - name: agent
-          image: "europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:{{ .Values.tag }}"
+          image: "europe-docker.pkg.dev/cykubeapp/cykubed/agent:{{ .Values.tag }}"
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           resources:
             requests:

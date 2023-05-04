@@ -18,7 +18,7 @@ steps:
    secretEnv: ['CYKUBE_API_TOKEN']
 
  - name: 'gcr.io/cloud-builders/docker'
-   args: [ 'pull',  'europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:latest']
+   args: [ 'pull',  'europe-docker.pkg.dev/cykubeapp/cykubed/agent:latest']
 
  - name: 'gcr.io/cloud-builders/docker'
    entrypoint: 'bash'
@@ -27,7 +27,7 @@ steps:
      - '-c'
      - |-       
        echo "Building agent:$(cat /workspace/version.txt)" && 
-       docker build -t "europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:$(cat /workspace/version.txt)"  -t "europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:$SHORT_SHA" -t "europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:latest" --cache-from="europe-west2-docker.pkg.dev/cykubeapp/cykube/agent:latest" .
+       docker build -t "europe-docker.pkg.dev/cykubeapp/cykubed/agent:$(cat /workspace/version.txt)"  -t "europe-docker.pkg.dev/cykubeapp/cykubed/agent:$SHORT_SHA" -t "europe-docker.pkg.dev/cykubeapp/cykubed/agent:latest" --cache-from="europe-docker.pkg.dev/cykubeapp/cykubed/agent:latest" .
 
  - name: 'gcr.io/cloud-builders/docker'
    id: 'Push image'
@@ -35,7 +35,7 @@ steps:
    args:
      - '-c'
      - |-       
-       docker push -a europe-west2-docker.pkg.dev/cykubeapp/cykube/agent 
+       docker push -a europe-docker.pkg.dev/cykubeapp/cykubed/agent 
 
  - name: 'gcr.io/$PROJECT_ID/helm:3.7.0'
    entrypoint: 'bash'
