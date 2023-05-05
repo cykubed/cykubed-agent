@@ -36,6 +36,7 @@ async def project() -> Project:
                    platform=PlatformEnum.GITHUB,
                    build_cpu='4.0',
                    build_memory=6.0,
+                   build_ephemeral_storage=10,
                    runner_cpu='2',
                    runner_memory=4.0,
                    runner_image='cykubed-runner:1234',

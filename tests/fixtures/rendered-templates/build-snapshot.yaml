@@ -1,0 +1,9 @@
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshot
+metadata:
+    name: build-deadbeef0101
+    namespace: cykubed
+spec:
+    source:
+        persistentVolumeClaimName: build-rw-pvc
+    volumeSnapshotClassName: cykubed-snapshotclass

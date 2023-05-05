@@ -6,7 +6,7 @@ from httpx import Response
 
 from common.enums import AgentEventType
 from common.schemas import NewTestRun, AgentEvent, AgentCloneCompletedEvent
-from db import get_cached_item, add_cached_item, new_testrun
+from db import get_cached_item, add_cached_item, new_testrun, add_build_snapshot_cache_item
 from jobs import handle_run_completed, get_build_state, set_build_state, TestRunBuildState
 from ws import handle_start_run, handle_agent_message
 
@@ -26,8 +26,8 @@ def compare_rendered_template_from_mock(create_from_yaml_mock, jobtype: str, ind
     compare_rendered_template(yamlobjects, jobtype)
 
 
-async def test_start_run(redis, mocker, testrun: NewTestRun,
-                         respx_mock, mock_create_from_yaml):
+async def test_start_run_cache_miss(redis, mocker, testrun: NewTestRun,
+                                    respx_mock, mock_create_from_yaml):
     """
     """
     update_status = \
@@ -60,6 +60,39 @@ async def test_start_run(redis, mocker, testrun: NewTestRun,
     compare_rendered_template_from_mock(mock_create_from_yaml, 'clone', 1)
 
     assert update_status.called == 1
+
+
+async def test_start_run_cache_hit(redis, mocker, testrun: NewTestRun,
+                                    k8_custom_api_mock,
+                                    respx_mock, mock_create_from_yaml):
+    """
+    """
+    update_status = \
+        respx_mock.post('https://api.cykubed.com/agent/testrun/20/status/running') \
+            .mock(return_value=Response(200))
+
+    def get_new_pvc_name(prefix: str) -> str:
+        return f'{prefix}-pvc'
+
+    mocker.patch('jobs.get_new_pvc_name', side_effect=get_new_pvc_name)
+
+    await add_build_snapshot_cache_item('deadbeef0101', 'node-absd234weefw', ['spec1.ts'])
+
+    delete_jobs = mocker.patch('jobs.delete_jobs_for_branch')
+
+    await handle_start_run(testrun)
+
+    delete_jobs.assert_called_once_with(testrun.id, 'master')
+
+    # this will add an entry to the testrun collection
+    saved_tr_json = redis.get(f'testrun:{testrun.id}')
+    savedtr = NewTestRun.parse_raw(saved_tr_json)
+    assert savedtr == testrun
+
+    assert mock_create_from_yaml.call_count == 3
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'build-ro-pvc-from-snapshot', 0)
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'node-ro-pvc-from-snapshot', 1)
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'runner', 2)
 
 
 async def test_clone_completed_cache_miss(redis, mocker, mock_create_from_yaml,
@@ -191,14 +224,16 @@ async def test_build_completed_cache_miss(redis, mock_create_from_yaml,
     state = await get_build_state(testrun.id)
     assert state.ro_node_pvc == 'node-ro-pvc'
 
-    # not cached - so create a snapshot
+    # not cached - so create a snapshot of the node dist
     k8_create_custom = k8_custom_api_mock.create_namespaced_custom_object
-    k8_create_custom.assert_called_once()
-    compare_rendered_template([k8_create_custom.call_args.kwargs['body']], 'node-snapshot')
+    assert k8_create_custom.call_count == 2
+
+    compare_rendered_template([k8_create_custom.call_args_list[0].kwargs['body']], 'node-snapshot')
+    compare_rendered_template([k8_create_custom.call_args_list[1].kwargs['body']], 'build-snapshot')
 
     assert mock_create_from_yaml.call_count == 3
-    compare_rendered_template_from_mock(mock_create_from_yaml, 'node-ro-clone-pvc', 0)
-    compare_rendered_template_from_mock(mock_create_from_yaml, 'build-ro-clone-pvc', 1)
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'node-ro-pvc-from-snapshot', 0)
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'build-ro-pvc-from-snapshot', 1)
     compare_rendered_template_from_mock(mock_create_from_yaml, 'runner', 2)
 
     assert build_completed.called == 1
@@ -239,12 +274,19 @@ async def test_build_completed_cache_hit(redis, mock_create_from_yaml,
 
     state = await get_build_state(testrun.id)
     assert state.ro_build_pvc == 'build-ro-pvc'
+    assert state.rw_build_pvc == 'build-rw-pvc'
+    assert state.ro_node_pvc == 'node-ro-pvc'
+    assert state.rw_node_pvc is None
 
-    # it won't create a snapshot
-    k8_custom_api_mock.create_namespaced_custom_object.assert_not_called()
+    # it will still create a snapshot of the build PVC
+    k8_create_custom = k8_custom_api_mock.create_namespaced_custom_object
+    assert k8_create_custom.call_count == 1
 
+    compare_rendered_template([k8_create_custom.call_args_list[0].kwargs['body']], 'build-snapshot')
+
+    # we'll already have a RO node PVC
     assert mock_create_from_yaml.call_count == 2
-    compare_rendered_template_from_mock(mock_create_from_yaml, 'build-ro-clone-pvc', 0)
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'build-ro-pvc-from-snapshot', 0)
     compare_rendered_template_from_mock(mock_create_from_yaml, 'runner', 1)
 
     assert build_completed.called == 1

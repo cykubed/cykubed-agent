@@ -1,7 +1,7 @@
 import datetime
 
 from common.redisutils import async_redis
-from common.schemas import NewTestRun, CacheItem, CacheItemType
+from common.schemas import NewTestRun, CacheItem
 from common.utils import utcnow
 from settings import settings
 
@@ -42,15 +42,22 @@ async def get_cached_item(key: str, update_expiry=True) -> CacheItem | None:
     return item
 
 
-async def add_cached_item(key: str, itemtype: CacheItemType = CacheItemType.snapshot) -> CacheItem:
-    ttl = settings.NODE_DISTRIBUTION_CACHE_TTL if itemtype == CacheItemType.snapshot \
-        else settings.APP_DISTRIBUTION_CACHE_TTL
+async def add_cached_item(key: str, ttl=settings.NODE_DISTRIBUTION_CACHE_TTL,
+                          **kwargs) -> CacheItem:
     item = CacheItem(name=key,
                      ttl=ttl,
-                     type=itemtype,
-                     expires=utcnow() + datetime.timedelta(seconds=ttl))
+                     expires=utcnow() + datetime.timedelta(seconds=ttl), **kwargs)
     await async_redis().set(f'cache:{key}', item.json())
     return item
+
+
+async def add_build_snapshot_cache_item(sha: str, node_snapshot_name: str, specs: list[str]) -> CacheItem:
+    return await add_cached_item(f'build-{sha}', ttl=settings.APP_DISTRIBUTION_CACHE_TTL,
+                                 node_snapshot=node_snapshot_name, specs=specs)
+
+
+async def get_build_snapshot_cache_item(sha: str) -> CacheItem:
+    return await get_cached_item(f'build-{sha}')
 
 
 def get_pvc_expiry_time() -> str:

@@ -18,8 +18,9 @@ from common import schemas
 from common.exceptions import InvalidTemplateException, BuildFailedException
 from common.k8common import get_core_api, get_custom_api
 from common.redisutils import async_redis
-from common.schemas import CacheItemType, AgentCloneCompletedEvent
-from db import get_testrun, expired_cached_items_iter, get_cached_item, remove_cached_item, add_cached_item
+from common.schemas import AgentCloneCompletedEvent
+from db import get_testrun, expired_cached_items_iter, get_cached_item, remove_cached_item, add_cached_item, \
+    add_build_snapshot_cache_item, get_build_snapshot_cache_item
 from settings import settings
 
 TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), 'k8config', 'templates')
@@ -160,13 +161,33 @@ async def handle_new_run(testrun: schemas.NewTestRun):
     state = TestRunBuildState(trid=testrun.id, rw_build_pvc=get_new_pvc_name('build'))
     await async_redis().set(f'testrun:{testrun.id}:state', state.json())
 
-    context = common_context(testrun)
-    context['pvc_name'] = state.rw_build_pvc
-    await create_k8_objects('rw-pvc', context)
-    # and clone
-    context['build_pvc_name'] = state.rw_build_pvc
-    await create_k8_objects('clone', context)
-    await app.update_status(testrun.id, 'building')
+    build_snap_cache_item = await get_build_snapshot_cache_item(testrun.sha)
+    if build_snap_cache_item and build_snap_cache_item.node_snapshot:
+        # this is a rerun of a previous build: use the snapshot to create a build PVC
+        # (there should already be a node snapshot)
+        state.node_snapshot_name = build_snap_cache_item.node_snapshot
+        state.specs = build_snap_cache_item.specs
+        # create a RO PVC from the build snapshot
+        context = common_context(testrun)
+        context['snapshot_name'] = build_snap_cache_item.name
+        state.ro_build_pvc = context['ro_pvc_name'] = get_new_pvc_name('build-ro')
+        await create_k8_objects('ro-pvc-from-snapshot', context)
+        # ditto for the node snapshot
+        context['snapshot_name'] = state.node_snapshot_name
+        state.ro_node_pvc = context['ro_pvc_name'] = get_new_pvc_name('node-ro')
+        await set_build_state(state)
+        await create_k8_objects('ro-pvc-from-snapshot', context)
+        # and create the runner job
+        await create_runner_job(testrun, state)
+    else:
+        # otherwise we'll need to clone and build as usual
+        context = common_context(testrun)
+        context['pvc_name'] = state.rw_build_pvc
+        await create_k8_objects('rw-pvc', context)
+        # and clone
+        context['build_pvc_name'] = state.rw_build_pvc
+        await create_k8_objects('clone', context)
+        await app.update_status(testrun.id, 'building')
 
 
 async def handle_clone_completed(event: AgentCloneCompletedEvent):
@@ -233,26 +254,37 @@ async def build_completed(testrun_id: int):
             await create_k8_snapshot('pvc-snapshot', context)
             await add_cached_item(state.node_snapshot_name)
             # and create a RO PVC from it
-            context['rw_pvc_name'] = state.rw_node_pvc
             state.ro_node_pvc = context['ro_pvc_name'] = context['pvc_name'] = get_new_pvc_name('node-ro')
             await set_build_state(state)
-            await create_k8_objects('ro-pvc-from-pvc', context)
+            await create_k8_objects('ro-pvc-from-snapshot', context)
 
-        # create a many-read-only volume from the build pvc
-        context['rw_pvc_name'] = state.rw_build_pvc
+        # snapshot the build pvc
+        build_snapshot_name = context['snapshot_name'] = f'build-{testrun.sha}'
+        context['pvc_name'] = state.rw_build_pvc
+        await create_k8_snapshot('pvc-snapshot', context)
+        await add_build_snapshot_cache_item(build_snapshot_name, state.node_snapshot_name, state.specs)
+
+        # create a many-read-only volume from the snapshot
         state.ro_build_pvc = context['ro_pvc_name'] = get_new_pvc_name('build-ro')
         await set_build_state(state)
-        await create_k8_objects('ro-pvc-from-pvc', context)
-        # next create the runner job: limit the parallism as there's no point having more runners than specs
-        context = common_context(testrun)
-        context.update(dict(name=f'cykubed-runner-{testrun.project.name}-{testrun.id}',
-                            parallelism=min(testrun.project.parallelism, len(state.specs)),
-                            build_pvc_name=state.ro_build_pvc,
-                            node_pvc_name=state.ro_node_pvc))
-        await create_k8_objects('runner', context)
+        await create_k8_objects('ro-pvc-from-snapshot', context)
+
+        # finally create the runner job
+        await create_runner_job(testrun, state)
+
     except Exception as ex:
         logger.exception("Failed to complete the build")
         raise ex
+
+
+async def create_runner_job(testrun: schemas.NewTestRun, state: TestRunBuildState):
+    # next create the runner job: limit the parallism as there's no point having more runners than specs
+    context = common_context(testrun)
+    context.update(dict(name=f'cykubed-runner-{testrun.project.name}-{testrun.id}',
+                        parallelism=min(testrun.project.parallelism, len(state.specs)),
+                        build_pvc_name=state.ro_build_pvc,
+                        node_pvc_name=state.ro_node_pvc))
+    await create_k8_objects('runner', context)
 
 
 async def handle_run_completed(testrun_id):
@@ -276,12 +308,8 @@ async def prune_cache_loop():
 
 
 async def delete_cache_item(item):
-    if item.type == CacheItemType.snapshot:
-        # delete volume
-        await async_delete_snapshot(item.name)
-    else:
-        # delete pvc
-        await async_delete_pvc(item.name)
+    # delete volume
+    await async_delete_snapshot(item.name)
 
 
 async def prune_cache():
