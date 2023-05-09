@@ -13,7 +13,7 @@ import jobs
 from app import app
 from common.enums import AgentEventType
 from common.redisutils import async_redis, ping_redis
-from common.schemas import NewTestRun, AgentEvent, AgentBuildCompleted, AgentCloneCompletedEvent
+from common.schemas import NewTestRun, AgentEvent, AgentCloneCompletedEvent
 from settings import settings
 
 
@@ -74,15 +74,7 @@ async def handle_agent_message(websocket, rawmsg: str):
         await jobs.handle_clone_completed(AgentCloneCompletedEvent.parse_raw(rawmsg))
     elif event.type == AgentEventType.build_completed:
         # build completed - create runner jobs
-        await jobs.build_completed(event.testrun_id)
-        # and notify the server
-        state = await jobs.get_build_state(event.testrun_id)
-        resp = await app.httpclient.post(f'/agent/testrun/{event.testrun_id}/build-completed',
-                                         content=AgentBuildCompleted(duration=event.duration,
-                                                             specs=state.specs).json())
-        if resp.status_code != 200:
-            logger.error(f'Failed to update server that build was completed:'
-                         f' {resp.status_code}: {resp.text}')
+        await jobs.handle_build_completed(event)
     elif event.type == AgentEventType.run_completed:
         # run completed - clean up
         await jobs.handle_run_completed(event.testrun_id)

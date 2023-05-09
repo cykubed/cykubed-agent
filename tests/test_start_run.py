@@ -71,6 +71,9 @@ async def test_start_run_cache_hit(redis, mocker, testrun: NewTestRun,
         respx_mock.post('https://api.cykubed.com/agent/testrun/20/status/running') \
             .mock(return_value=Response(200))
 
+    build_completed = \
+        respx_mock.post('https://api.cykubed.com/agent/testrun/20/build-completed').mock(return_value=Response(200))
+
     def get_new_pvc_name(prefix: str) -> str:
         return f'{prefix}-pvc'
 
@@ -93,6 +96,9 @@ async def test_start_run_cache_hit(redis, mocker, testrun: NewTestRun,
     compare_rendered_template_from_mock(mock_create_from_yaml, 'build-ro-pvc-from-snapshot', 0)
     compare_rendered_template_from_mock(mock_create_from_yaml, 'node-ro-pvc-from-snapshot', 1)
     compare_rendered_template_from_mock(mock_create_from_yaml, 'runner', 2)
+
+    assert build_completed.call_count == 1
+    assert update_status.call_count == 1
 
 
 async def test_clone_completed_cache_miss(redis, mocker, mock_create_from_yaml,
@@ -211,6 +217,11 @@ async def test_build_completed_cache_miss(redis, mock_create_from_yaml,
     build_completed = \
         respx_mock.post('https://api.cykubed.com/agent/testrun/20/build-completed') \
             .mock(return_value=Response(200))
+
+    update_status = \
+        respx_mock.post('https://api.cykubed.com/agent/testrun/20/status/running') \
+            .mock(return_value=Response(200))
+
     websocket = mocker.AsyncMock()
 
     await new_testrun(testrun)
@@ -223,6 +234,8 @@ async def test_build_completed_cache_miss(redis, mock_create_from_yaml,
 
     state = await get_build_state(testrun.id)
     assert state.ro_node_pvc == 'node-ro-pvc'
+
+    assert redis.get(f'cache:build-{testrun.sha}') is not None
 
     # not cached - so create a snapshot of the node dist
     k8_create_custom = k8_custom_api_mock.create_namespaced_custom_object
@@ -237,6 +250,7 @@ async def test_build_completed_cache_miss(redis, mock_create_from_yaml,
     compare_rendered_template_from_mock(mock_create_from_yaml, 'runner', 2)
 
     assert build_completed.called == 1
+    assert update_status.called == 1
 
 
 @freeze_time('2022-04-03 14:10:00Z')
@@ -264,6 +278,10 @@ async def test_build_completed_cache_hit(redis, mock_create_from_yaml,
         respx_mock.post('https://api.cykubed.com/agent/testrun/20/build-completed').mock(return_value=Response(200))
     websocket = mocker.AsyncMock()
 
+    update_status = \
+        respx_mock.post('https://api.cykubed.com/agent/testrun/20/status/running') \
+            .mock(return_value=Response(200))
+
     await new_testrun(testrun)
     await set_build_state(TestRunBuildState(trid=testrun.id,
                                             rw_build_pvc='build-rw-pvc',
@@ -290,6 +308,7 @@ async def test_build_completed_cache_hit(redis, mock_create_from_yaml,
     compare_rendered_template_from_mock(mock_create_from_yaml, 'runner', 1)
 
     assert build_completed.called == 1
+    assert update_status.called == 1
 
 
 async def test_run_completed(redis, k8_core_api_mock, testrun):

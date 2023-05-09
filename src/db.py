@@ -18,6 +18,10 @@ async def new_testrun(tr: NewTestRun):
     await r.set(f'testrun:{tr.id}:run_duration', 0, ex=24*3600)
 
 
+async def set_specs(tr: NewTestRun, specs: list[str]):
+    await async_redis().sadd(f'testrun:{tr.id}:specs', *specs)
+
+
 async def get_testrun(id: int) -> NewTestRun | None:
     """
     Used by agents and runners to return a deserialised NewTestRun
