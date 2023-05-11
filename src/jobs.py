@@ -135,6 +135,11 @@ class TestRunBuildState(BaseModel):
                          f' {resp.status_code}: {resp.text}')
 
     async def delete(self):
+        await self.delete_redis_state()
+        if settings.K8:
+            await self.delete_pvcs()
+
+    async def delete_pvcs(self):
         await async_delete_pvc(self.rw_build_pvc)
         if self.ro_build_pvc:
             await async_delete_pvc(self.ro_build_pvc)
@@ -142,6 +147,8 @@ class TestRunBuildState(BaseModel):
             await async_delete_pvc(self.rw_node_pvc)
         if self.ro_node_pvc:
             await async_delete_pvc(self.ro_node_pvc)
+
+    async def delete_redis_state(self):
         r = async_redis()
         await r.delete(f'testrun:{self.trid}:state')
         await r.delete(f'testrun:{self.trid}:specs')
@@ -226,6 +233,11 @@ async def handle_clone_completed(event: AgentCloneCompletedEvent):
     state.specs = event.specs
     logger.info(f"Found {len(event.specs)} spec files")
     await db.set_specs(testrun, state.specs)
+
+    if not settings.K8:
+        await state.notify(10)
+        logger.info(f'Run runner with args "run {testrun.id}"', trid=testrun.id)
+        return
 
     # check for node snapshot
     node_snapshot_name = f'node-{event.cache_key}'
@@ -468,7 +480,9 @@ async def cancel_testrun(trid: int):
     Delete all state (including PVCs)
     :param trid: test run ID
     """
-    await delete_jobs(trid)
+    if settings.K8:
+        await delete_jobs(trid)
+
     st = await get_build_state(trid)
     if st:
         await st.delete()
