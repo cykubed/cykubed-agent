@@ -12,7 +12,7 @@ import db
 import jobs
 from app import app
 from common.enums import AgentEventType
-from common.redisutils import async_redis, ping_redis
+from common.redisutils import async_redis, ping_redis, get_specfile_log_key
 from common.schemas import NewTestRun, AgentEvent, AgentCloneCompletedEvent
 from settings import settings
 
@@ -39,6 +39,14 @@ async def handle_delete_project(project_id: int):
         await jobs.delete_jobs_for_project(project_id)
 
 
+async def handle_fetch_log(trid: int, file: str):
+    key = get_specfile_log_key(trid, file)
+    logs = await async_redis().lrange(key, 0, -1)
+    if logs:
+        log = ''.join(logs)
+        await app.httpclient.post(f'/agent/testrun/{trid}/spec-log', {'file': file, 'log': log})
+
+
 async def handle_websocket_message(data: dict):
     """
     Handle a message from the websocket
@@ -55,6 +63,8 @@ async def handle_websocket_message(data: dict):
         await jobs.cancel_testrun(payload['testrun_id'])
     elif cmd == 'clear_cache':
         await jobs.clear_cache()
+    elif cmd == 'fetch_log':
+        await handle_fetch_log(data['testrun_id'], data['spec'])
 
 
 async def consumer_handler(websocket):
