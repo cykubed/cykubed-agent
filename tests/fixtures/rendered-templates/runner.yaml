@@ -49,11 +49,9 @@ spec:
                 resources:
                     limits:
                         cpu: '2.0'
-                        ephemeral-storage: 10.0Gi
                         memory: 4.0G
                     requests:
                         cpu: '2.0'
-                        ephemeral-storage: 10.0Gi
                         memory: 4.0G
                 volumeMounts:
                 -   mountPath: /build
@@ -69,12 +67,32 @@ spec:
                 runAsUser: 10000
             serviceAccountName: cykubed
             volumes:
-            -   name: build-volume
-                persistentVolumeClaim:
-                    claimName: build-ro-pvc
-                    readOnly: true
-            -   name: node-volume
-                persistentVolumeClaim:
-                    claimName: node-ro-pvc
-                    readOnly: true
+            -   ephemeral:
+                    volumeClaimTemplate:
+                        spec:
+                            accessModes:
+                            - ReadWriteOnce
+                            dataSource:
+                                apiGroup: snapshot.storage.k8s.io
+                                kind: VolumeSnapshot
+                                name: build-deadbeef0101
+                            resources:
+                                requests:
+                                    storage: 10.0Gi
+                            storageClassName: cykubed-storageclass
+                name: build-volume
+            -   ephemeral:
+                    volumeClaimTemplate:
+                        spec:
+                            accessModes:
+                            - ReadWriteOnce
+                            dataSource:
+                                apiGroup: snapshot.storage.k8s.io
+                                kind: VolumeSnapshot
+                                name: node-absd234weefw
+                            resources:
+                                requests:
+                                    storage: 10.0Gi
+                            storageClassName: cykubed-storageclass
+                name: node-volume
     ttlSecondsAfterFinished: 3600
