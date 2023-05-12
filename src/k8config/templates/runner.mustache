@@ -78,9 +78,11 @@ spec:
           limits:
             cpu: "{{project.runner_cpu}}"
             memory: "{{project.runner_memory}}G"
+            ephemeral-storage: "{{project.runner_ephemeral_storage}}Gi"
           requests:
             cpu: "{{project.runner_cpu}}"
             memory: "{{project.runner_memory}}G"
+            ephemeral-storage: "{{project.runner_ephemeral_storage}}Gi"
         volumeMounts:
         - mountPath: "/build"
           name: build-volume
