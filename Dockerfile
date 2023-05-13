@@ -15,6 +15,7 @@ RUN poetry config installer.max-workers 10
 RUN poetry install --no-root --with=dev
 #RUN poetry install --no-root --without=dev
 
+ENV TZ=UTC
 COPY  --chown=cykubed:cykubed src .
 
 ENTRYPOINT ["python", "main.py"]
