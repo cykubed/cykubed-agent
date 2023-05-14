@@ -33,6 +33,7 @@ def rest_logsink(msg: loguru.Message):
                                                          source='agent'))
 
         sync_redis().rpush('messages', item.json())
+        sync_redis().publish('msgavail', "")
 
 
 def configure_logging():
