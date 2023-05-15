@@ -56,7 +56,7 @@ async def test_start_run_cache_miss(redis, mocker, testrun: NewTestRun,
     assert savedtr == testrun
 
     state = await get_build_state(testrun.id)
-    assert state.rw_build_pvc == 'build-pvc'
+    assert state.rw_build_pvc == 'build-rw-pvc'
     assert state.trid == testrun.id
 
     delete_jobs.assert_called_once_with(testrun.id, 'master')
@@ -64,7 +64,7 @@ async def test_start_run_cache_miss(redis, mocker, testrun: NewTestRun,
     assert mock_create_from_yaml.call_count == 2
 
     # mock out the actual Job to check the rendered template
-    compare_rendered_template_from_mock(mock_create_from_yaml, 'build-pvc', 0)
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'build-rw-pvc', 0)
     compare_rendered_template_from_mock(mock_create_from_yaml, 'clone', 1)
 
     assert update_status.called == 1
@@ -100,8 +100,10 @@ async def test_start_run_cache_hit(redis, mocker, testrun: NewTestRun,
     savedtr = NewTestRun.parse_raw(saved_tr_json)
     assert savedtr == testrun
 
-    assert mock_create_from_yaml.call_count == 1
-    compare_rendered_template_from_mock(mock_create_from_yaml, 'runner', 0)
+    assert mock_create_from_yaml.call_count == 3
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'build-ro-pvc-from-snapshot', 0)
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'node-ro-pvc-from-snapshot', 1)
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'runner', 2)
 
     assert build_completed.call_count == 1
     assert update_status.call_count == 1
@@ -140,6 +142,7 @@ async def test_clone_completed_cache_miss(redis, mocker, mock_create_from_yaml,
 
     state = await get_build_state(testrun.id)
     assert state.rw_node_pvc == 'node-rw-pvc'
+    assert state.ro_node_pvc is None
     assert state.specs == ['test1.ts']
     assert state.node_snapshot_name == 'node-absd234weefw'
 
@@ -191,14 +194,16 @@ async def test_full_run(redis, mocker, mock_create_from_yaml,
     await handle_run_completed(testrun.id)
 
     # clean up
-    assert delete_pvc_mock.call_count == 2
+    assert delete_pvc_mock.call_count == 4
 
     # this will have created 2 PVCs, 2 snapshots and 2 Jobs
     kinds_and_names = get_kind_and_names(mock_create_from_yaml)
-    assert [('PersistentVolumeClaim', 'build-pvc'),
+    assert [('PersistentVolumeClaim', 'build-rw-pvc'),
             ('Job', 'cykubed-clone-20-deadbeef0101'),
             ('PersistentVolumeClaim', 'node-rw-pvc'),
             ('Job', 'cykubed-build-project-20'),
+            ('PersistentVolumeClaim', 'node-ro-pvc'),
+            ('PersistentVolumeClaim', 'build-ro-pvc'),
             ('Job', 'cykubed-runner-project-20')] == kinds_and_names
 
     assert k8_create_custom.call_count == 2
@@ -247,10 +252,13 @@ async def test_clone_completed_cache_hit(redis, mocker, mock_create_from_yaml,
     k8_core_api_mock.assert_not_called()
 
     # it will create a RO PVC for the node cache and the build job
-    compare_rendered_template_from_mock(mock_create_from_yaml, 'build-job-node-cache-hit', 0)
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'node-ro-pvc-from-snapshot', 0)
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'build-job-node-cache-hit', 1)
 
     state = await get_build_state(testrun.id)
     assert state.rw_node_pvc is None
+    assert state.ro_node_pvc == 'node-ro-pvc'
+    assert state.node_snapshot_name is None
 
 
 @freeze_time('2022-04-03 14:10:00Z')
@@ -287,8 +295,7 @@ async def test_build_completed_cache_miss(redis, mock_create_from_yaml,
     websocket = mocker.AsyncMock()
 
     await new_testrun(testrun)
-    await set_build_state(TestRunBuildState(trid=testrun.id,
-                                            rw_build_pvc='build-pvc',
+    await set_build_state(TestRunBuildState(trid=testrun.id, rw_build_pvc='build-rw-pvc',
                                             rw_node_pvc='node-rw-pvc',
                                             specs=['test1.ts'],
                                             node_snapshot_name='node-absd234weefw'))
@@ -296,6 +303,7 @@ async def test_build_completed_cache_miss(redis, mock_create_from_yaml,
     await handle_agent_message(websocket, msg.json())
 
     state = await get_build_state(testrun.id)
+    assert state.ro_node_pvc == 'node-ro-pvc'
 
     assert redis.get(f'cache:build-{testrun.sha}') is not None
 
@@ -306,8 +314,10 @@ async def test_build_completed_cache_miss(redis, mock_create_from_yaml,
     compare_rendered_template([k8_create_custom.call_args_list[0].kwargs['body']], 'node-snapshot')
     compare_rendered_template([k8_create_custom.call_args_list[1].kwargs['body']], 'build-snapshot')
 
-    assert mock_create_from_yaml.call_count == 1
-    compare_rendered_template_from_mock(mock_create_from_yaml, 'runner', 0)
+    assert mock_create_from_yaml.call_count == 3
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'node-ro-pvc-from-snapshot', 0)
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'build-ro-pvc-from-snapshot', 1)
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'runner', 2)
 
     assert build_completed.called == 1
     assert update_status.called == 1
@@ -344,14 +354,16 @@ async def test_build_completed_cache_hit(redis, mock_create_from_yaml,
 
     await new_testrun(testrun)
     await set_build_state(TestRunBuildState(trid=testrun.id,
-                                            rw_build_pvc='build-pvc',
-                                            node_snapshot_name='node-absd234weefw',
+                                            rw_build_pvc='build-rw-pvc',
+                                            ro_node_pvc='node-ro-pvc',
                                             specs=['test1.ts']))
 
     await handle_agent_message(websocket, msg.json())
 
     state = await get_build_state(testrun.id)
-    assert state.rw_build_pvc == 'build-pvc'
+    assert state.ro_build_pvc == 'build-ro-pvc'
+    assert state.rw_build_pvc == 'build-rw-pvc'
+    assert state.ro_node_pvc == 'node-ro-pvc'
     assert state.rw_node_pvc is None
 
     # it will still create a snapshot of the build PVC
@@ -361,8 +373,9 @@ async def test_build_completed_cache_hit(redis, mock_create_from_yaml,
     compare_rendered_template([k8_create_custom.call_args_list[0].kwargs['body']], 'build-snapshot')
 
     # we'll already have a RO node PVC
-    assert mock_create_from_yaml.call_count == 1
-    compare_rendered_template_from_mock(mock_create_from_yaml, 'runner', 0)
+    assert mock_create_from_yaml.call_count == 2
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'build-ro-pvc-from-snapshot', 0)
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'runner', 1)
 
     assert build_completed.called == 1
     assert update_status.called == 1
@@ -372,7 +385,9 @@ async def test_run_completed(redis, k8_core_api_mock, testrun):
     await new_testrun(testrun)
     await set_build_state(TestRunBuildState(trid=testrun.id,
                                             rw_build_pvc='build-rw-pvc',
+                                            ro_build_pvc='build-ro-pvc',
                                             rw_node_pvc='node-rw-pvc',
+                                            ro_node_pvc='node-ro-pvc',
                                             specs=['test1.ts'],
                                             node_snapshot_name='node-absd234weefw'))
 
@@ -380,9 +395,9 @@ async def test_run_completed(redis, k8_core_api_mock, testrun):
 
     await handle_run_completed(testrun.id)
 
-    assert delete_pvc_mock.call_count == 2
+    assert delete_pvc_mock.call_count == 4
     pvcs = {x.args[0] for x in delete_pvc_mock.call_args_list}
-    assert pvcs == {'build-rw-pvc', 'node-rw-pvc'}
+    assert pvcs == {'build-rw-pvc', 'build-ro-pvc', 'node-rw-pvc', 'node-ro-pvc'}
 
     assert redis.get(f'testrun:20:state') is None
     assert redis.get(f'testrun:20') is None

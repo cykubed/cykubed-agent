@@ -54,5 +54,5 @@ spec:
             volumes:
             -   name: build-volume
                 persistentVolumeClaim:
-                    claimName: build-pvc
+                    claimName: build-rw-pvc
     ttlSecondsAfterFinished: 600

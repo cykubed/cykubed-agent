@@ -81,7 +81,7 @@ async def create_k8_snapshot(jobtype, context):
 # Don't try to reuse - just delete everything at the end and let the Redis cache catch the stragglers
 #
 
-async def create_k8_objects(jobtype, context):
+async def create_k8_objects(jobtype, context) -> str:
     try:
         k8sclient = client.ApiClient()
         yamlobjects = await render_template(jobtype, context)
@@ -94,6 +94,7 @@ async def create_k8_objects(jobtype, context):
                                     yaml_objects=yamlobjects, namespace=settings.NAMESPACE)
         else:
             logger.debug(f"K8 disabled: not creating {name}")
+        return name
     except YAMLError as ex:
         raise InvalidTemplateException(f'Invalid YAML in {jobtype} template: {ex}')
     except ChevronError as ex:
@@ -118,12 +119,14 @@ def get_new_pvc_name(prefix: str) -> str:
 
 class TestRunBuildState(BaseModel):
     trid: int
-    rw_build_pvc: str
     specs: list[str] = []
     parallelism: Optional[int]
-    build_snapshot_name: Optional[str]
     node_snapshot_name: Optional[str]
+    jobs: list[str] = []
+    rw_build_pvc: str
     rw_node_pvc: Optional[str]
+    ro_build_pvc: Optional[str]
+    ro_node_pvc: Optional[str]
 
     async def notify(self, duration=0):
         resp = await app.httpclient.post(f'/agent/testrun/{self.trid}/build-completed',
@@ -134,14 +137,23 @@ class TestRunBuildState(BaseModel):
                          f' {resp.status_code}: {resp.text}')
 
     async def delete(self):
+        """
+        Delete PVCs and Jobs
+        """
         await self.delete_redis_state()
         if settings.K8:
             await self.delete_pvcs()
+            for job in self.jobs:
+                await async_delete_job(job)
 
     async def delete_pvcs(self):
         await async_delete_pvc(self.rw_build_pvc)
+        if self.ro_build_pvc:
+            await async_delete_pvc(self.ro_build_pvc)
         if self.rw_node_pvc:
             await async_delete_pvc(self.rw_node_pvc)
+        if self.ro_node_pvc:
+            await async_delete_pvc(self.ro_node_pvc)
 
     async def delete_redis_state(self):
         r = async_redis()
@@ -172,18 +184,26 @@ async def handle_new_run(testrun: schemas.NewTestRun):
     """
     # stop existing jobs
     await delete_jobs_for_branch(testrun.id, testrun.branch)
-    state = TestRunBuildState(trid=testrun.id, rw_build_pvc=get_new_pvc_name('build'))
+    state = TestRunBuildState(trid=testrun.id, rw_build_pvc=get_new_pvc_name('build-rw'))
     await async_redis().set(f'testrun:{testrun.id}:state', state.json())
 
     build_snap_cache_item = await get_build_snapshot_cache_item(testrun.sha)
     if build_snap_cache_item and build_snap_cache_item.node_snapshot:
         # this is a rerun of a previous build: use the snapshot to create a build PVC
         # (there should already be a node snapshot)
-        state.build_snapshot_name = build_snap_cache_item.name
         state.node_snapshot_name = build_snap_cache_item.node_snapshot
         state.specs = build_snap_cache_item.specs
         await db.set_specs(testrun, state.specs)
+        # create a RO PVC from the build snapshot
+        context = common_context(testrun)
+        context['snapshot_name'] = build_snap_cache_item.name
+        state.ro_build_pvc = context['ro_pvc_name'] = get_new_pvc_name('build-ro')
+        await create_k8_objects('ro-pvc-from-snapshot', context)
+        # ditto for the node snapshot
+        context['snapshot_name'] = state.node_snapshot_name
+        state.ro_node_pvc = context['ro_pvc_name'] = get_new_pvc_name('node-ro')
         await set_build_state(state)
+        await create_k8_objects('ro-pvc-from-snapshot', context)
         # tell the main server
         await state.notify()
         # and create the runner job
@@ -195,7 +215,8 @@ async def handle_new_run(testrun: schemas.NewTestRun):
         await create_k8_objects('rw-pvc', context)
         # and clone
         context['build_pvc_name'] = state.rw_build_pvc
-        await create_k8_objects('clone', context)
+        state.jobs.append(await create_k8_objects('clone', context))
+        await set_build_state(state)
         await app.update_status(testrun.id, 'building')
 
 
@@ -233,19 +254,25 @@ async def handle_clone_completed(event: AgentCloneCompletedEvent):
 
     if await get_cached_snapshot(node_snapshot_name):
         logger.info(f'Found node cache snapshot {node_snapshot_name}', trid=trid)
-        # we have a cached node distribution (i.e a VolumeSnapshot for it)
-        state.node_snapshot_name = context['node_snapshot_name'] = node_snapshot_name
+        # we have a cached node distribution (i.e a VolumeSnapshot for it) - create a read-only PVC
+        state.ro_node_pvc = get_new_pvc_name('node-ro')
+        context['snapshot_name'] = node_snapshot_name
+        context['node_pvc_name'] = context['ro_pvc_name'] = state.ro_node_pvc
+        context['storage'] = testrun.project.build_ephemeral_storage
+        await create_k8_objects('ro-pvc-from-snapshot', context)
+        await set_build_state(state)
     else:
+        # otherwise this will need to build the node dist: create a RW pvc
         # otherwise this will need to build the node dist: create a RW pvc
         state.rw_node_pvc = context['node_pvc_name'] = context['pvc_name'] = get_new_pvc_name('node-rw')
         state.node_snapshot_name = node_snapshot_name
+        await set_build_state(state)
         context['storage'] = testrun.project.build_ephemeral_storage
         await create_k8_objects('rw-pvc', context)
 
-    await set_build_state(state)
-
     # now create the Job
-    await create_k8_objects('build', context)
+    state.jobs.append(await create_k8_objects('build', context))
+    await set_build_state(state)
 
 
 async def handle_build_completed(event: AgentEvent):
@@ -265,13 +292,21 @@ async def handle_build_completed(event: AgentEvent):
             context['pvc_name'] = state.rw_node_pvc
             await create_k8_snapshot('pvc-snapshot', context)
             await add_cached_item(state.node_snapshot_name)
+            # and create a RO PVC from it
+            state.ro_node_pvc = context['ro_pvc_name'] = context['pvc_name'] = get_new_pvc_name('node-ro')
+            await set_build_state(state)
+            await create_k8_objects('ro-pvc-from-snapshot', context)
 
         # snapshot the build pvc
-        state.build_snapshot_name = context['snapshot_name'] = f'build-{testrun.sha}'
+        context['snapshot_name'] = f'build-{testrun.sha}'
         context['pvc_name'] = state.rw_build_pvc
         await create_k8_snapshot('pvc-snapshot', context)
         await add_build_snapshot_cache_item(testrun.sha, state.node_snapshot_name, state.specs)
+
+        # create a many-read-only volume from the snapshot
+        state.ro_build_pvc = context['ro_pvc_name'] = get_new_pvc_name('build-ro')
         await set_build_state(state)
+        await create_k8_objects('ro-pvc-from-snapshot', context)
 
         # tell the main server
         await state.notify(event.duration)
@@ -289,9 +324,10 @@ async def create_runner_job(testrun: schemas.NewTestRun, state: TestRunBuildStat
     context = common_context(testrun)
     context.update(dict(name=f'cykubed-runner-{testrun.project.name}-{testrun.id}',
                         parallelism=min(testrun.project.parallelism, len(state.specs)),
-                        build_snapshot_name=state.build_snapshot_name,
-                        node_snapshot_name=state.node_snapshot_name))
-    await create_k8_objects('runner', context)
+                        build_pvc_name=state.ro_build_pvc,
+                        node_pvc_name=state.ro_node_pvc))
+    state.jobs.append(await create_k8_objects('runner', context))
+    await set_build_state(state)
     await app.update_status(testrun.id, 'running')
 
 
@@ -380,6 +416,11 @@ def get_snapshot(name: str):
             raise BuildFailedException('Failed to determine existence of snapshot')
 
 
+def delete_job(name: str):
+    logger.info(f"Deleting existing job {name}")
+    client.BatchV1Api().delete_namespaced_job(name, settings.NAMESPACE)
+
+
 async def async_get_snapshot(name: str):
     return await asyncio.to_thread(get_snapshot, name)
 
@@ -392,13 +433,17 @@ async def async_delete_snapshot(name: str):
     await asyncio.to_thread(delete_snapshot, name)
 
 
+async def async_delete_job(name: str):
+    await asyncio.to_thread(delete_job, name)
+
+
 async def async_get_pvc(name: str):
     return await asyncio.to_thread(get_pvc, name)
 
 
-async def delete_job(job, trid: int = None):
+async def delete_testrun_job(job, trid: int = None):
     logger.info(f"Deleting existing job {job.metadata.name}", trid=trid)
-    client.BatchV1Api().delete_namespaced_job(job.metadata.name, settings.NAMESPACE)
+    await async_delete_job(job.metadata.name)
     poditems = get_core_api().list_namespaced_pod(settings.NAMESPACE,
                                                   label_selector=f"job-name={job.metadata.name}").items
     if poditems:
@@ -421,7 +466,7 @@ async def delete_jobs_for_branch(trid: int, branch: str):
             logger.info(f'Found {len(jobs.items)} existing Jobs - deleting them', trid=trid)
             # delete it (there should just be one, but iterate anyway)
             for job in jobs.items:
-                await delete_job(job, trid)
+                await delete_testrun_job(job, trid)
 
 
 async def delete_jobs_for_project(project_id):
@@ -430,7 +475,7 @@ async def delete_jobs_for_project(project_id):
     if jobs.items:
         logger.info(f'Found {len(jobs.items)} existing Jobs - deleting them')
         for job in jobs.items:
-            await delete_job(job)
+            await delete_testrun_job(job)
 
 
 async def delete_jobs(testrun_id: int):
@@ -438,7 +483,7 @@ async def delete_jobs(testrun_id: int):
     api = client.BatchV1Api()
     jobs = api.list_namespaced_job(settings.NAMESPACE, label_selector=f"testrun_id={testrun_id}")
     for job in jobs.items:
-        await delete_job(job, testrun_id)
+        await delete_testrun_job(job, testrun_id)
 
 
 def is_pod_running(podname: str):
@@ -455,7 +500,6 @@ async def cancel_testrun(trid: int):
     Delete all state (including PVCs)
     :param trid: test run ID
     """
-    logger.info(f'Cancelling testrun {trid}')
     if settings.K8:
         await delete_jobs(trid)
 
@@ -465,7 +509,6 @@ async def cancel_testrun(trid: int):
 
 
 async def clear_cache():
-    logger.info(f'Clearing cache')
     async for key in async_redis().scan_iter('cache:*'):
         item = await get_cached_item(key[6:], False)
         await delete_cache_item(item)
