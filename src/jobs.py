@@ -455,6 +455,7 @@ async def cancel_testrun(trid: int):
     Delete all state (including PVCs)
     :param trid: test run ID
     """
+    logger.info(f'Cancelling testrun {trid}')
     if settings.K8:
         await delete_jobs(trid)
 
@@ -464,6 +465,7 @@ async def cancel_testrun(trid: int):
 
 
 async def clear_cache():
+    logger.info(f'Clearing cache')
     async for key in async_redis().scan_iter('cache:*'):
         item = await get_cached_item(key[6:], False)
         await delete_cache_item(item)

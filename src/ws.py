@@ -40,11 +40,13 @@ async def handle_start_run(tr: NewTestRun):
 
 
 async def handle_delete_project(project_id: int):
+    logger.info(f'Deleting project {project_id}')
     if settings.K8:
         await jobs.delete_jobs_for_project(project_id)
 
 
 async def handle_fetch_log(trid: int, file: str):
+    logger.info(f'Fetch cypress log for testrun {trid} and spec {file}')
     key = get_specfile_log_key(trid, file)
     logs = await async_redis().lrange(key, 0, -1)
     if logs:
@@ -60,6 +62,7 @@ async def handle_websocket_message(data: dict):
     """
     cmd = data['command']
     payload = data['payload']
+    logger.debug(f'Received {cmd} command')
     if cmd == 'start':
         await handle_start_run(NewTestRun.parse_raw(payload))
     elif cmd == 'delete_project':
