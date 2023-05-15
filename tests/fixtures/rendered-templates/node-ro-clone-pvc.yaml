@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+    labels:
+        branch: master
+        local_id: '1'
+        project_id: '10'
+        testrun_id: '20'
+    name: node-ro-pvc
+    namespace: cykubed
+spec:
+    accessModes:
+    - ReadOnlyMany
+    dataSource:
+        kind: PersistentVolumeClaim
+        name: node-rw-pvc
+    resources:
+        requests:
+            storage: 10.0Gi
+    storageClassName: cykubed-storageclass

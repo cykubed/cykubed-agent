@@ -25,31 +25,13 @@ spec:
       serviceAccountName: "cykubed"
       volumes:
         - name: build-volume
-          ephemeral:
-            volumeClaimTemplate:
-              spec:
-                accessModes: [ "ReadWriteOnce" ]
-                storageClassName: "cykubed-storageclass"
-                dataSource:
-                  apiGroup: snapshot.storage.k8s.io
-                  kind: VolumeSnapshot
-                  name: {{build_snapshot_name}}
-                resources:
-                  requests:
-                    storage: "{{storage}}Gi"
+          persistentVolumeClaim:
+            readOnly: true
+            claimName: "{{build_pvc_name}}"
         - name: node-volume
-          ephemeral:
-            volumeClaimTemplate:
-              spec:
-                accessModes: [ "ReadWriteOnce" ]
-                storageClassName: "cykubed-storageclass"
-                dataSource:
-                  apiGroup: snapshot.storage.k8s.io
-                  kind: VolumeSnapshot
-                  name: {{node_snapshot_name}}
-                resources:
-                  requests:
-                    storage: "{{storage}}Gi"
+          persistentVolumeClaim:
+            readOnly: true
+            claimName: "{{node_pvc_name}}"
       {{#project.spot_enabled}}
       affinity:
         nodeAffinity:

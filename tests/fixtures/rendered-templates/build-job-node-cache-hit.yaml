@@ -58,20 +58,10 @@ spec:
                 runAsUser: 10000
             serviceAccountName: cykubed
             volumes:
-            -   ephemeral:
-                    volumeClaimTemplate:
-                        spec:
-                            accessModes:
-                            - ReadWriteOnce
-                            dataSource:
-                                apiGroup: snapshot.storage.k8s.io
-                                kind: VolumeSnapshot
-                                name: node-absd234weefw
-                            resources:
-                                requests:
-                                    storage: 10.0Gi
-                            storageClassName: cykubed-storageclass
-                name: node-volume
+            -   name: node-volume
+                persistentVolumeClaim:
+                    claimName: node-ro-pvc
+                    readOnly: true
             -   name: build-volume
                 persistentVolumeClaim:
                     claimName: build-rw-pvc
