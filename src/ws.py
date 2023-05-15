@@ -118,20 +118,15 @@ async def handle_agent_message(websocket, rawmsg: str):
 
 async def producer_handler(websocket):
     redis = async_redis()
-    async with redis.pubsub() as pubsub:
-        await pubsub.subscribe('msgavail')
-        while app.is_running():
-            await pubsub.get_message(ignore_subscribe_messages=True, timeout=10)
-            try:
-                msglist = await redis.lpop('messages', 100)
-                if msglist is not None:
-                    for rawmsg in msglist:
-                        await handle_agent_message(websocket, rawmsg)
-                await asyncio.sleep(1)
-            except RedisError as ex:
-                if not app.is_running():
-                    return
-                logger.error(f"Failed to fetch messages from Redis: {ex}")
+    while app.is_running():
+        try:
+            key, rawmsg = await redis.blpop('messages')
+            if rawmsg:
+                await handle_agent_message(websocket, rawmsg)
+        except RedisError as ex:
+            if not app.is_running():
+                return
+            logger.error(f"Failed to fetch messages from Redis: {ex}")
 
 
 async def connect():

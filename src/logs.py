@@ -3,6 +3,7 @@ from __future__ import annotations
 import loguru
 from loguru import logger
 
+from app import app
 from common import schemas
 from common.cloudlogging import configure_stackdriver_logging
 from common.enums import AgentEventType
@@ -30,7 +31,7 @@ def rest_logsink(msg: loguru.Message):
                                        msg=AppLogMessage(ts=msg.record['time'],
                                                          level=msg.record['level'].name.lower(),
                                                          msg=msg,
-                                                         source='agent'))
+                                                         source=app.hostname))
 
         sync_redis().rpush('messages', item.json())
         sync_redis().publish('msgavail', "")
