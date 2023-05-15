@@ -21,6 +21,14 @@ def compare_rendered_template(yamlobjects, jobtype: str):
         assert expected == asyaml
 
 
+def get_kind_and_names(create_from_yaml_mock):
+    ret = []
+    for args in create_from_yaml_mock.call_args_list:
+        yamlobjs = args[1]['yaml_objects'][0]
+        ret.append( (yamlobjs['kind'], yamlobjs['metadata']['name']) )
+    return ret
+
+
 def compare_rendered_template_from_mock(create_from_yaml_mock, jobtype: str, index=0):
     yamlobjects = create_from_yaml_mock.call_args_list[index][1]['yaml_objects']
     compare_rendered_template(yamlobjects, jobtype)
@@ -48,7 +56,7 @@ async def test_start_run_cache_miss(redis, mocker, testrun: NewTestRun,
     assert savedtr == testrun
 
     state = await get_build_state(testrun.id)
-    assert state.rw_build_pvc == 'build-pvc'
+    assert state.rw_build_pvc == 'build-rw-pvc'
     assert state.trid == testrun.id
 
     delete_jobs.assert_called_once_with(testrun.id, 'master')
@@ -56,7 +64,7 @@ async def test_start_run_cache_miss(redis, mocker, testrun: NewTestRun,
     assert mock_create_from_yaml.call_count == 2
 
     # mock out the actual Job to check the rendered template
-    compare_rendered_template_from_mock(mock_create_from_yaml, 'build-pvc', 0)
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'build-rw-pvc', 0)
     compare_rendered_template_from_mock(mock_create_from_yaml, 'clone', 1)
 
     assert update_status.called == 1
@@ -139,6 +147,68 @@ async def test_clone_completed_cache_miss(redis, mocker, mock_create_from_yaml,
     assert state.node_snapshot_name == 'node-absd234weefw'
 
     assert get_cached_item('node-pvc-absd234weefw')
+
+
+async def test_full_run(redis, mocker, mock_create_from_yaml,
+                                          respx_mock,
+                                          k8_core_api_mock,
+                                        k8_custom_api_mock,
+                                          testrun: NewTestRun):
+    building_update_status = \
+        respx_mock.post('https://api.cykubed.com/agent/testrun/20/status/building') \
+            .mock(return_value=Response(200))
+    running_update_status = \
+        respx_mock.post('https://api.cykubed.com/agent/testrun/20/status/running') \
+            .mock(return_value=Response(200))
+    build_completed = \
+        respx_mock.post('https://api.cykubed.com/agent/testrun/20/build-completed').mock(return_value=Response(200))
+    delete_jobs = mocker.patch('jobs.delete_jobs_for_branch')
+    mocker.patch('jobs.get_new_pvc_name', side_effect=lambda prefix: f'{prefix}-pvc')
+    k8_create_custom = k8_custom_api_mock.create_namespaced_custom_object
+
+    await handle_start_run(testrun)
+
+    delete_jobs.assert_called_once()
+
+    assert building_update_status.call_count == 1
+
+    # clone completed
+    websocket = mocker.AsyncMock()
+    await handle_agent_message(websocket, AgentCloneCompletedEvent(cache_key='absd234weefw',
+                                                                   specs=['test1.ts'],
+                                                                   testrun_id=testrun.id).json())
+
+    # build completed
+    msg = AgentEvent(type=AgentEventType.build_completed,
+                     duration=10,
+                     testrun_id=testrun.id)
+
+    await handle_agent_message(websocket, msg.json())
+
+    assert build_completed.call_count == 1
+    assert running_update_status.call_count == 1
+
+    # run completed
+    delete_pvc_mock = k8_core_api_mock.delete_namespaced_persistent_volume_claim
+
+    await handle_run_completed(testrun.id)
+
+    # clean up
+    assert delete_pvc_mock.call_count == 4
+
+    # this will have created 2 PVCs, 2 snapshots and 2 Jobs
+    kinds_and_names = get_kind_and_names(mock_create_from_yaml)
+    assert [('PersistentVolumeClaim', 'build-rw-pvc'),
+            ('Job', 'cykubed-clone-20-deadbeef0101'),
+            ('PersistentVolumeClaim', 'node-rw-pvc'),
+            ('Job', 'cykubed-build-project-20'),
+            ('PersistentVolumeClaim', 'node-ro-pvc'),
+            ('PersistentVolumeClaim', 'build-ro-pvc'),
+            ('Job', 'cykubed-runner-project-20')] == kinds_and_names
+
+    assert k8_create_custom.call_count == 2
+    compare_rendered_template([k8_create_custom.call_args_list[0].kwargs['body']], 'node-snapshot')
+    compare_rendered_template([k8_create_custom.call_args_list[1].kwargs['body']], 'build-snapshot')
 
 
 async def test_clone_completed_cache_hit(redis, mocker, mock_create_from_yaml,

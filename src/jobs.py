@@ -81,7 +81,7 @@ async def create_k8_snapshot(jobtype, context):
 # Don't try to reuse - just delete everything at the end and let the Redis cache catch the stragglers
 #
 
-async def create_k8_objects(jobtype, context):
+async def create_k8_objects(jobtype, context) -> str:
     try:
         k8sclient = client.ApiClient()
         yamlobjects = await render_template(jobtype, context)
@@ -94,6 +94,7 @@ async def create_k8_objects(jobtype, context):
                                     yaml_objects=yamlobjects, namespace=settings.NAMESPACE)
         else:
             logger.debug(f"K8 disabled: not creating {name}")
+        return name
     except YAMLError as ex:
         raise InvalidTemplateException(f'Invalid YAML in {jobtype} template: {ex}')
     except ChevronError as ex:
@@ -121,6 +122,7 @@ class TestRunBuildState(BaseModel):
     specs: list[str] = []
     parallelism: Optional[int]
     node_snapshot_name: Optional[str]
+    jobs: list[str] = []
     rw_build_pvc: str
     rw_node_pvc: Optional[str]
     ro_build_pvc: Optional[str]
@@ -135,9 +137,14 @@ class TestRunBuildState(BaseModel):
                          f' {resp.status_code}: {resp.text}')
 
     async def delete(self):
+        """
+        Delete PVCs and Jobs
+        """
         await self.delete_redis_state()
         if settings.K8:
             await self.delete_pvcs()
+            for job in self.jobs:
+                await async_delete_job(job)
 
     async def delete_pvcs(self):
         await async_delete_pvc(self.rw_build_pvc)
@@ -177,7 +184,7 @@ async def handle_new_run(testrun: schemas.NewTestRun):
     """
     # stop existing jobs
     await delete_jobs_for_branch(testrun.id, testrun.branch)
-    state = TestRunBuildState(trid=testrun.id, rw_build_pvc=get_new_pvc_name('build'))
+    state = TestRunBuildState(trid=testrun.id, rw_build_pvc=get_new_pvc_name('build-rw'))
     await async_redis().set(f'testrun:{testrun.id}:state', state.json())
 
     build_snap_cache_item = await get_build_snapshot_cache_item(testrun.sha)
@@ -208,7 +215,8 @@ async def handle_new_run(testrun: schemas.NewTestRun):
         await create_k8_objects('rw-pvc', context)
         # and clone
         context['build_pvc_name'] = state.rw_build_pvc
-        await create_k8_objects('clone', context)
+        state.jobs.append(await create_k8_objects('clone', context))
+        await set_build_state(state)
         await app.update_status(testrun.id, 'building')
 
 
@@ -255,6 +263,7 @@ async def handle_clone_completed(event: AgentCloneCompletedEvent):
         await set_build_state(state)
     else:
         # otherwise this will need to build the node dist: create a RW pvc
+        # otherwise this will need to build the node dist: create a RW pvc
         state.rw_node_pvc = context['node_pvc_name'] = context['pvc_name'] = get_new_pvc_name('node-rw')
         state.node_snapshot_name = node_snapshot_name
         await set_build_state(state)
@@ -262,7 +271,8 @@ async def handle_clone_completed(event: AgentCloneCompletedEvent):
         await create_k8_objects('rw-pvc', context)
 
     # now create the Job
-    await create_k8_objects('build', context)
+    state.jobs.append(await create_k8_objects('build', context))
+    await set_build_state(state)
 
 
 async def handle_build_completed(event: AgentEvent):
@@ -316,7 +326,8 @@ async def create_runner_job(testrun: schemas.NewTestRun, state: TestRunBuildStat
                         parallelism=min(testrun.project.parallelism, len(state.specs)),
                         build_pvc_name=state.ro_build_pvc,
                         node_pvc_name=state.ro_node_pvc))
-    await create_k8_objects('runner', context)
+    state.jobs.append(await create_k8_objects('runner', context))
+    await set_build_state(state)
     await app.update_status(testrun.id, 'running')
 
 
@@ -405,6 +416,11 @@ def get_snapshot(name: str):
             raise BuildFailedException('Failed to determine existence of snapshot')
 
 
+def delete_job(name: str):
+    logger.info(f"Deleting existing job {name}")
+    client.BatchV1Api().delete_namespaced_job(name, settings.NAMESPACE)
+
+
 async def async_get_snapshot(name: str):
     return await asyncio.to_thread(get_snapshot, name)
 
@@ -417,13 +433,17 @@ async def async_delete_snapshot(name: str):
     await asyncio.to_thread(delete_snapshot, name)
 
 
+async def async_delete_job(name: str):
+    await asyncio.to_thread(delete_job, name)
+
+
 async def async_get_pvc(name: str):
     return await asyncio.to_thread(get_pvc, name)
 
 
-async def delete_job(job, trid: int = None):
+async def delete_testrun_job(job, trid: int = None):
     logger.info(f"Deleting existing job {job.metadata.name}", trid=trid)
-    client.BatchV1Api().delete_namespaced_job(job.metadata.name, settings.NAMESPACE)
+    await async_delete_job(job.metadata.name)
     poditems = get_core_api().list_namespaced_pod(settings.NAMESPACE,
                                                   label_selector=f"job-name={job.metadata.name}").items
     if poditems:
@@ -446,7 +466,7 @@ async def delete_jobs_for_branch(trid: int, branch: str):
             logger.info(f'Found {len(jobs.items)} existing Jobs - deleting them', trid=trid)
             # delete it (there should just be one, but iterate anyway)
             for job in jobs.items:
-                await delete_job(job, trid)
+                await delete_testrun_job(job, trid)
 
 
 async def delete_jobs_for_project(project_id):
@@ -455,7 +475,7 @@ async def delete_jobs_for_project(project_id):
     if jobs.items:
         logger.info(f'Found {len(jobs.items)} existing Jobs - deleting them')
         for job in jobs.items:
-            await delete_job(job)
+            await delete_testrun_job(job)
 
 
 async def delete_jobs(testrun_id: int):
@@ -463,7 +483,7 @@ async def delete_jobs(testrun_id: int):
     api = client.BatchV1Api()
     jobs = api.list_namespaced_job(settings.NAMESPACE, label_selector=f"testrun_id={testrun_id}")
     for job in jobs.items:
-        await delete_job(job, testrun_id)
+        await delete_testrun_job(job, testrun_id)
 
 
 def is_pod_running(podname: str):

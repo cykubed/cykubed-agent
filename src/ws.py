@@ -40,11 +40,13 @@ async def handle_start_run(tr: NewTestRun):
 
 
 async def handle_delete_project(project_id: int):
+    logger.info(f'Deleting project {project_id}')
     if settings.K8:
         await jobs.delete_jobs_for_project(project_id)
 
 
 async def handle_fetch_log(trid: int, file: str):
+    logger.info(f'Fetch cypress log for testrun {trid} and spec {file}')
     key = get_specfile_log_key(trid, file)
     logs = await async_redis().lrange(key, 0, -1)
     if logs:
@@ -60,6 +62,7 @@ async def handle_websocket_message(data: dict):
     """
     cmd = data['command']
     payload = data['payload']
+    logger.debug(f'Received {cmd} command')
     if cmd == 'start':
         await handle_start_run(NewTestRun.parse_raw(payload))
     elif cmd == 'delete_project':
@@ -115,20 +118,15 @@ async def handle_agent_message(websocket, rawmsg: str):
 
 async def producer_handler(websocket):
     redis = async_redis()
-    async with redis.pubsub() as pubsub:
-        await pubsub.subscribe('msgavail')
-        while app.is_running():
-            await pubsub.get_message(ignore_subscribe_messages=True, timeout=10)
-            try:
-                msglist = await redis.lpop('messages', 100)
-                if msglist is not None:
-                    for rawmsg in msglist:
-                        await handle_agent_message(websocket, rawmsg)
-                await asyncio.sleep(1)
-            except RedisError as ex:
-                if not app.is_running():
-                    return
-                logger.error(f"Failed to fetch messages from Redis: {ex}")
+    while app.is_running():
+        try:
+            key, rawmsg = await redis.blpop('messages')
+            if rawmsg:
+                await handle_agent_message(websocket, rawmsg)
+        except RedisError as ex:
+            if not app.is_running():
+                return
+            logger.error(f"Failed to fetch messages from Redis: {ex}")
 
 
 async def connect():
