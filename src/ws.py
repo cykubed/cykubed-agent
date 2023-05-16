@@ -79,9 +79,12 @@ async def consumer_handler(websocket):
     while app.is_running():
         try:
             message = await websocket.recv()
-            await handle_websocket_message(json.loads(message))
         except ConnectionClosed:
             return
+        try:
+            await handle_websocket_message(json.loads(message))
+        except Exception:
+            logger.exception(f'Failed to handle msg {message}')
 
 
 async def handle_agent_message(websocket, rawmsg: str):
@@ -107,7 +110,10 @@ async def producer_handler(websocket):
         try:
             key, rawmsg = await redis.blpop('messages')
             if rawmsg:
-                await handle_agent_message(websocket, rawmsg)
+                try:
+                    await handle_agent_message(websocket, rawmsg)
+                except Exception:
+                    logger.exception(f'Failed to handle agent message {rawmsg}')
         except RedisError as ex:
             if not app.is_running():
                 return
