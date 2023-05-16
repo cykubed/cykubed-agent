@@ -1,6 +1,5 @@
 import asyncio
 import json
-import os
 import signal
 from asyncio import sleep, exceptions, create_task
 
@@ -115,16 +114,6 @@ async def producer_handler(websocket):
             logger.error(f"Failed to fetch messages from Redis: {ex}")
 
 
-def mark_not_ready():
-    if os.path.exists(settings.LIVENESS_FILE):
-        os.remove(settings.LIVENESS_FILE)
-
-
-def mark_ready():
-    with open(settings.LIVENESS_FILE, 'w') as f:
-        f.write('OK')
-
-
 async def connect():
     """
     Connect to the main cykube servers via a websocket
@@ -154,7 +143,7 @@ async def connect():
 
             async with websockets.connect(url, extra_headers=headers) as ws:
                 logger.info("Connected")
-                mark_ready()
+                app.ws_connected = True
                 done, pending = await asyncio.wait([create_task(consumer_handler(ws)),
                                                     create_task(producer_handler(ws))],
                                                    return_when=asyncio.FIRST_COMPLETED)
@@ -183,23 +172,23 @@ async def connect():
                 await sleep(1)
         except exceptions.TimeoutError:
             logger.debug('Could not connect: try later...')
-            mark_not_ready()
+            app.ws_connected = False
             await sleep(1)
         except ConnectionRefusedError:
-            mark_not_ready()
+            app.ws_connected = False
             await sleep(10)
         except OSError:
             logger.warning("Cannot ensure_connection to cykube - sleep for 60 secs")
-            mark_not_ready()
+            app.ws_connected = False
             await sleep(10)
         except InvalidStatusCode as ex:
             if ex.status_code == 403:
                 logger.error("Permission denied: please check that you have used the correct API token")
-            mark_not_ready()
+            app.ws_connected = False
             await sleep(10)
         except Exception as ex:
             logger.exception('Could not connect: try later...')
-            mark_not_ready()
+            app.ws_connected = False
             await sleep(10)
 
 

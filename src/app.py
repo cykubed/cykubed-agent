@@ -9,6 +9,7 @@ class App(object):
     def __init__(self):
         self.running = True
         self.ws = None
+        self.ws_connected = False
         if settings.HOSTNAME:
             self.hostname = settings.HOSTNAME
         else:

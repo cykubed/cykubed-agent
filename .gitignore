@@ -1,4 +1,5 @@
 .idea
+.venv
 build
 # Created by .ignore support plugin (hsz.mobi)
 ### Python template
