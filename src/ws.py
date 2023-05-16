@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import signal
 from asyncio import sleep, exceptions, create_task
 
@@ -85,7 +86,7 @@ async def consumer_handler(websocket):
 
 
 async def handle_agent_message(websocket, rawmsg: str):
-    logger.debug(f'Msg: {rawmsg}')
+    # logger.debug(f'Msg: {rawmsg}')
     event = AgentEvent.parse_raw(rawmsg)
     if event.type == AgentEventType.clone_completed:
         # clone completed - kick off the build
@@ -101,21 +102,6 @@ async def handle_agent_message(websocket, rawmsg: str):
         await websocket.send(rawmsg)
 
 
-# async def producer_handler(websocket):
-#     redis = async_redis()
-#     while app.is_running():
-#         try:
-#             msglist = await redis.lpop('messages', 100)
-#             if msglist is not None:
-#                 for rawmsg in msglist:
-#                     await handle_agent_message(websocket, rawmsg)
-#             await asyncio.sleep(2)
-#         except RedisError as ex:
-#             if not app.is_running():
-#                 return
-#             logger.error(f"Failed to fetch messages from Redis: {ex}")
-
-
 async def producer_handler(websocket):
     redis = async_redis()
     while app.is_running():
@@ -127,6 +113,16 @@ async def producer_handler(websocket):
             if not app.is_running():
                 return
             logger.error(f"Failed to fetch messages from Redis: {ex}")
+
+
+def mark_not_ready():
+    if os.path.exists(settings.LIVENESS_FILE):
+        os.remove(settings.LIVENESS_FILE)
+
+
+def mark_ready():
+    with open(settings.LIVENESS_FILE, 'w') as f:
+        f.write('OK')
 
 
 async def connect():
@@ -150,7 +146,6 @@ async def connect():
     loop.add_signal_handler(signal.SIGTERM, lambda: asyncio.create_task(handle_sigterm_runner()))
 
     while app.is_running():
-
         try:
             logger.debug("Try to connect websocket")
             domain = settings.MAIN_API_URL[settings.MAIN_API_URL.find('//') + 2:]
@@ -159,6 +154,7 @@ async def connect():
 
             async with websockets.connect(url, extra_headers=headers) as ws:
                 logger.info("Connected")
+                mark_ready()
                 done, pending = await asyncio.wait([create_task(consumer_handler(ws)),
                                                     create_task(producer_handler(ws))],
                                                    return_when=asyncio.FIRST_COMPLETED)
@@ -187,18 +183,23 @@ async def connect():
                 await sleep(1)
         except exceptions.TimeoutError:
             logger.debug('Could not connect: try later...')
+            mark_not_ready()
             await sleep(1)
         except ConnectionRefusedError:
+            mark_not_ready()
             await sleep(10)
         except OSError:
             logger.warning("Cannot ensure_connection to cykube - sleep for 60 secs")
+            mark_not_ready()
             await sleep(10)
         except InvalidStatusCode as ex:
             if ex.status_code == 403:
                 logger.error("Permission denied: please check that you have used the correct API token")
+            mark_not_ready()
             await sleep(10)
         except Exception as ex:
             logger.exception('Could not connect: try later...')
+            mark_not_ready()
             await sleep(10)
 
 

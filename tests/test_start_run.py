@@ -100,6 +100,9 @@ async def test_start_run_cache_hit(redis, mocker, testrun: NewTestRun,
     savedtr = NewTestRun.parse_raw(saved_tr_json)
     assert savedtr == testrun
 
+    assert redis.smembers('testrun:20:specs') == {'spec1.ts'}
+    assert int(redis.get('testrun:20:to-complete')) == 1
+
     assert mock_create_from_yaml.call_count == 3
     compare_rendered_template_from_mock(mock_create_from_yaml, 'build-ro-pvc-from-snapshot', 0)
     compare_rendered_template_from_mock(mock_create_from_yaml, 'node-ro-pvc-from-snapshot', 1)
@@ -146,6 +149,9 @@ async def test_clone_completed_cache_miss(redis, mocker, mock_create_from_yaml,
     assert state.specs == ['test1.ts']
     assert state.node_snapshot_name == 'node-absd234weefw'
 
+    assert redis.smembers('testrun:20:specs') == {'test1.ts'}
+    assert int(redis.get('testrun:20:to-complete')) == 1
+
     assert get_cached_item('node-pvc-absd234weefw')
 
 
@@ -177,6 +183,9 @@ async def test_full_run(redis, mocker, mock_create_from_yaml,
     await handle_agent_message(websocket, AgentCloneCompletedEvent(cache_key='absd234weefw',
                                                                    specs=['test1.ts'],
                                                                    testrun_id=testrun.id).json())
+
+    assert redis.smembers('testrun:20:specs') == {'test1.ts'}
+    assert int(redis.get('testrun:20:to-complete')) == 1
 
     # build completed
     msg = AgentEvent(type=AgentEventType.build_completed,

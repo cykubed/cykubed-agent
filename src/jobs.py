@@ -336,6 +336,7 @@ async def handle_run_completed(testrun_id):
     Just delete the PVCs
     :param testrun_id:
     """
+    logger.info(f'Run {testrun_id} completed - cleanup')
     state = await get_build_state(testrun_id)
     if state:
         await state.delete()
@@ -417,8 +418,15 @@ def get_snapshot(name: str):
 
 
 def delete_job(name: str):
-    logger.info(f"Deleting existing job {name}")
-    client.BatchV1Api().delete_namespaced_job(name, settings.NAMESPACE)
+    try:
+        logger.info(f"Deleting existing job {name}")
+        client.BatchV1Api().delete_namespaced_job(name, settings.NAMESPACE,
+                                                  propagation_policy='Background')
+    except ApiException as ex:
+        if ex.status == 404:
+            return
+        else:
+            logger.error(f'Failed to delete job {name}')
 
 
 async def async_get_snapshot(name: str):
@@ -444,13 +452,6 @@ async def async_get_pvc(name: str):
 async def delete_testrun_job(job, trid: int = None):
     logger.info(f"Deleting existing job {job.metadata.name}", trid=trid)
     await async_delete_job(job.metadata.name)
-    poditems = get_core_api().list_namespaced_pod(settings.NAMESPACE,
-                                                  label_selector=f"job-name={job.metadata.name}").items
-    if poditems:
-        for pod in poditems:
-            logger.info(f'Deleting pod {pod.metadata.name}', id=trid)
-            get_core_api().delete_namespaced_pod(pod.metadata.name, settings.NAMESPACE)
-
     tr = await get_testrun(trid)
     if tr:
         # just in case the test run failed and didn't clean up, do it here
@@ -500,6 +501,7 @@ async def cancel_testrun(trid: int):
     Delete all state (including PVCs)
     :param trid: test run ID
     """
+    logger.info(f'Cancel testrun {trid}')
     if settings.K8:
         await delete_jobs(trid)
 

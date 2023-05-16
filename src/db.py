@@ -20,6 +20,7 @@ async def new_testrun(tr: NewTestRun):
 
 async def set_specs(tr: NewTestRun, specs: list[str]):
     await async_redis().sadd(f'testrun:{tr.id}:specs', *specs)
+    await async_redis().set(f'testrun:{tr.id}:to-complete', len(specs))
 
 
 async def get_testrun(id: int) -> NewTestRun | None:

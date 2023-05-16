@@ -12,6 +12,8 @@ class AgentSettings(BaseSettings):
     SERVER_START_TIMEOUT: int = 60
     CYPRESS_RUN_TIMEOUT: int = 10*60
 
+    LIVENESS_FILE = '/tmp/cykubed-live'
+
     # keep app distributions for 1 hr in case of reruns
     APP_DISTRIBUTION_CACHE_TTL: int = 3600
     # keep the node distributions for 30 days
