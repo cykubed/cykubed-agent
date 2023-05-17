@@ -88,8 +88,8 @@ async def consumer_handler(websocket):
 
 
 async def handle_agent_message(websocket, rawmsg: str):
-    # logger.debug(f'Msg: {rawmsg}')
     event = AgentEvent.parse_raw(rawmsg)
+    logger.debug(f'Msg: {event.type} for {event.testrun_id}')
     if event.type == AgentEventType.clone_completed:
         # clone completed - kick off the build
         await jobs.handle_clone_completed(AgentCloneCompletedEvent.parse_raw(rawmsg))
@@ -108,7 +108,7 @@ async def producer_handler(websocket):
     redis = async_redis()
     while app.is_running():
         try:
-            key, rawmsg = await redis.blpop('messages')
+            key, rawmsg = await redis.blpop('messages', 10)
             if rawmsg:
                 try:
                     await handle_agent_message(websocket, rawmsg)
@@ -118,6 +118,8 @@ async def producer_handler(websocket):
             if not app.is_running():
                 return
             logger.error(f"Failed to fetch messages from Redis: {ex}")
+        except Exception as ex:
+            logger.exception(f'Unexpected exceptoin in producer_handler: {ex}')
 
 
 async def connect():
