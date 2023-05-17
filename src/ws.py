@@ -108,8 +108,9 @@ async def producer_handler(websocket):
     redis = async_redis()
     while app.is_running():
         try:
-            key, rawmsg = await redis.blpop('messages', 10)
-            if rawmsg:
+            msgitem = await redis.blpop('messages', 10)
+            if msgitem:
+                rawmsg = msgitem[1]
                 try:
                     await handle_agent_message(websocket, rawmsg)
                 except Exception:
