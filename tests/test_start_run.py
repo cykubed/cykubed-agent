@@ -7,7 +7,7 @@ from httpx import Response
 from common.enums import AgentEventType
 from common.schemas import NewTestRun, AgentEvent, AgentCloneCompletedEvent
 from db import get_cached_item, add_cached_item, new_testrun, add_build_snapshot_cache_item
-from jobs import handle_run_completed, get_build_state, set_build_state, TestRunBuildState
+from jobs import handle_run_completed, get_build_state, TestRunBuildState
 from ws import handle_start_run, handle_agent_message
 
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), 'fixtures')
@@ -25,7 +25,7 @@ def get_kind_and_names(create_from_yaml_mock):
     ret = []
     for args in create_from_yaml_mock.call_args_list:
         yamlobjs = args[1]['yaml_objects'][0]
-        ret.append( (yamlobjs['kind'], yamlobjs['metadata']['name']) )
+        ret.append((yamlobjs['kind'], yamlobjs['metadata']['name']))
     return ret
 
 
@@ -71,8 +71,8 @@ async def test_start_run_cache_miss(redis, mocker, testrun: NewTestRun,
 
 
 async def test_start_run_cache_hit(redis, mocker, testrun: NewTestRun,
-                                    k8_custom_api_mock,
-                                    respx_mock, mock_create_from_yaml):
+                                   k8_custom_api_mock,
+                                   respx_mock, mock_create_from_yaml):
     """
     """
     update_status = \
@@ -129,7 +129,8 @@ async def test_clone_completed_cache_miss(redis, mocker, mock_create_from_yaml,
     """
     websocket = mocker.AsyncMock()
     await new_testrun(testrun)
-    await set_build_state(TestRunBuildState(trid=testrun.id, rw_build_pvc='build-rw-pvc'))
+    state = TestRunBuildState(trid=testrun.id, rw_build_pvc='build-rw-pvc')
+    await state.save()
 
     mocker.patch('jobs.get_new_pvc_name', side_effect=lambda prefix: f'{prefix}-pvc')
 
@@ -156,10 +157,10 @@ async def test_clone_completed_cache_miss(redis, mocker, mock_create_from_yaml,
 
 
 async def test_full_run(redis, mocker, mock_create_from_yaml,
-                                          respx_mock,
-                                          k8_core_api_mock,
-                                        k8_custom_api_mock,
-                                          testrun: NewTestRun):
+                        respx_mock,
+                        k8_core_api_mock,
+                        k8_custom_api_mock,
+                        testrun: NewTestRun):
     building_update_status = \
         respx_mock.post('https://api.cykubed.com/agent/testrun/20/status/building') \
             .mock(return_value=Response(200))
@@ -239,7 +240,8 @@ async def test_clone_completed_cache_hit(redis, mocker, mock_create_from_yaml,
 
     websocket = mocker.AsyncMock()
     await new_testrun(testrun)
-    await set_build_state(TestRunBuildState(trid=testrun.id, rw_build_pvc='build-rw-pvc'))
+    state = TestRunBuildState(trid=testrun.id, rw_build_pvc='build-rw-pvc')
+    await state.save()
     await add_cached_item('node-absd234weefw')
 
     mocker.patch('jobs.get_new_pvc_name', side_effect=lambda prefix: f'{prefix}-pvc')
@@ -272,10 +274,10 @@ async def test_clone_completed_cache_hit(redis, mocker, mock_create_from_yaml,
 
 @freeze_time('2022-04-03 14:10:00Z')
 async def test_build_completed_cache_miss(redis, mock_create_from_yaml,
-                                           respx_mock, mocker,
-                                           k8_core_api_mock,
-                                           k8_custom_api_mock,
-                                           testrun: NewTestRun):
+                                          respx_mock, mocker,
+                                          k8_core_api_mock,
+                                          k8_custom_api_mock,
+                                          testrun: NewTestRun):
     """
     A build is completed without using a cached node distribution. We will need to create snapshot for the node dist
     and then create RO PVCs for both build and node before creating the runner job.
@@ -304,10 +306,11 @@ async def test_build_completed_cache_miss(redis, mock_create_from_yaml,
     websocket = mocker.AsyncMock()
 
     await new_testrun(testrun)
-    await set_build_state(TestRunBuildState(trid=testrun.id, rw_build_pvc='build-rw-pvc',
-                                            rw_node_pvc='node-rw-pvc',
-                                            specs=['test1.ts'],
-                                            node_snapshot_name='node-absd234weefw'))
+    state = TestRunBuildState(trid=testrun.id, rw_build_pvc='build-rw-pvc',
+                              rw_node_pvc='node-rw-pvc',
+                              specs=['test1.ts'],
+                              node_snapshot_name='node-absd234weefw')
+    await state.save()
 
     await handle_agent_message(websocket, msg.json())
 
@@ -334,10 +337,10 @@ async def test_build_completed_cache_miss(redis, mock_create_from_yaml,
 
 @freeze_time('2022-04-03 14:10:00Z')
 async def test_build_completed_cache_hit(redis, mock_create_from_yaml,
-                                           respx_mock, mocker,
-                                           k8_core_api_mock,
-                                           k8_custom_api_mock,
-                                           testrun: NewTestRun):
+                                         respx_mock, mocker,
+                                         k8_core_api_mock,
+                                         k8_custom_api_mock,
+                                         testrun: NewTestRun):
     """
     A build is completed using a cached node distribution. We will already have a RO node PVC, so we just need
     to create a RO PVCs for the build and the create the runner job.
@@ -362,10 +365,11 @@ async def test_build_completed_cache_hit(redis, mock_create_from_yaml,
             .mock(return_value=Response(200))
 
     await new_testrun(testrun)
-    await set_build_state(TestRunBuildState(trid=testrun.id,
-                                            rw_build_pvc='build-rw-pvc',
-                                            ro_node_pvc='node-ro-pvc',
-                                            specs=['test1.ts']))
+    state = TestRunBuildState(trid=testrun.id,
+                              rw_build_pvc='build-rw-pvc',
+                              ro_node_pvc='node-ro-pvc',
+                              specs=['test1.ts'])
+    await state.save()
 
     await handle_agent_message(websocket, msg.json())
 
@@ -392,13 +396,14 @@ async def test_build_completed_cache_hit(redis, mock_create_from_yaml,
 
 async def test_run_completed(redis, k8_core_api_mock, testrun):
     await new_testrun(testrun)
-    await set_build_state(TestRunBuildState(trid=testrun.id,
-                                            rw_build_pvc='build-rw-pvc',
-                                            ro_build_pvc='build-ro-pvc',
-                                            rw_node_pvc='node-rw-pvc',
-                                            ro_node_pvc='node-ro-pvc',
-                                            specs=['test1.ts'],
-                                            node_snapshot_name='node-absd234weefw'))
+    state = TestRunBuildState(trid=testrun.id,
+                              rw_build_pvc='build-rw-pvc',
+                              ro_build_pvc='build-ro-pvc',
+                              rw_node_pvc='node-rw-pvc',
+                              ro_node_pvc='node-ro-pvc',
+                              specs=['test1.ts'],
+                              node_snapshot_name='node-absd234weefw')
+    await state.save()
 
     delete_pvc_mock = k8_core_api_mock.delete_namespaced_persistent_volume_claim
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import loguru
 from loguru import logger
 
@@ -9,7 +11,6 @@ from common.cloudlogging import configure_stackdriver_logging
 from common.enums import AgentEventType
 from common.redisutils import sync_redis
 from common.schemas import AppLogMessage
-from common.utils import disable_hc_logging
 
 
 def without_keys(d, keys):
@@ -37,7 +38,8 @@ def rest_logsink(msg: loguru.Message):
 
 
 def configure_logging():
-    disable_hc_logging()
+    # disable logging for health check
+    logging.getLogger("aiohttp.access").disabled = True
     configure_stackdriver_logging('cykube-agent')
     logger.add(rest_logsink,
                format="{message}", level="INFO")

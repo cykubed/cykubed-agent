@@ -128,6 +128,9 @@ class TestRunBuildState(BaseModel):
     ro_build_pvc: Optional[str]
     ro_node_pvc: Optional[str]
 
+    async def save(self):
+        await async_redis().set(f'testrun:{self.trid}:state', self.json())
+
     async def notify(self, duration=0):
         resp = await app.httpclient.post(f'/agent/testrun/{self.trid}/build-completed',
                                          content=AgentBuildCompleted(duration=duration,
@@ -163,10 +166,6 @@ class TestRunBuildState(BaseModel):
         await r.srem('testruns', str(self.trid))
 
 
-async def set_build_state(state: TestRunBuildState):
-    await async_redis().set(f'testrun:{state.trid}:state', state.json())
-
-
 async def get_build_state(trid: int, check=False) -> TestRunBuildState:
     st = await async_redis().get(f'testrun:{trid}:state')
     if st:
@@ -198,11 +197,12 @@ async def handle_new_run(testrun: schemas.NewTestRun):
         context = common_context(testrun)
         context['snapshot_name'] = build_snap_cache_item.name
         state.ro_build_pvc = context['ro_pvc_name'] = get_new_pvc_name('build-ro')
+        await state.save()
         await create_k8_objects('ro-pvc-from-snapshot', context)
         # ditto for the node snapshot
         context['snapshot_name'] = state.node_snapshot_name
         state.ro_node_pvc = context['ro_pvc_name'] = get_new_pvc_name('node-ro')
-        await set_build_state(state)
+        await state.save()
         await create_k8_objects('ro-pvc-from-snapshot', context)
         # tell the main server
         await state.notify()
@@ -216,7 +216,7 @@ async def handle_new_run(testrun: schemas.NewTestRun):
         # and clone
         context['build_pvc_name'] = state.rw_build_pvc
         state.jobs.append(await create_k8_objects('clone', context))
-        await set_build_state(state)
+        await state.save()
         await app.update_status(testrun.id, 'building')
 
 
@@ -259,20 +259,20 @@ async def handle_clone_completed(event: AgentCloneCompletedEvent):
         context['snapshot_name'] = node_snapshot_name
         context['node_pvc_name'] = context['ro_pvc_name'] = state.ro_node_pvc
         context['storage'] = testrun.project.build_ephemeral_storage
+        await state.save()
         await create_k8_objects('ro-pvc-from-snapshot', context)
-        await set_build_state(state)
     else:
         # otherwise this will need to build the node dist: create a RW pvc
         # otherwise this will need to build the node dist: create a RW pvc
         state.rw_node_pvc = context['node_pvc_name'] = context['pvc_name'] = get_new_pvc_name('node-rw')
         state.node_snapshot_name = node_snapshot_name
-        await set_build_state(state)
+        await state.save()
         context['storage'] = testrun.project.build_ephemeral_storage
         await create_k8_objects('rw-pvc', context)
 
     # now create the Job
     state.jobs.append(await create_k8_objects('build', context))
-    await set_build_state(state)
+    await state.save()
 
 
 async def handle_build_completed(event: AgentEvent):
@@ -294,18 +294,18 @@ async def handle_build_completed(event: AgentEvent):
             await add_cached_item(state.node_snapshot_name)
             # and create a RO PVC from it
             state.ro_node_pvc = context['ro_pvc_name'] = context['pvc_name'] = get_new_pvc_name('node-ro')
-            await set_build_state(state)
+            await state.save()
             await create_k8_objects('ro-pvc-from-snapshot', context)
 
         # snapshot the build pvc
         context['snapshot_name'] = f'build-{testrun.sha}'
         context['pvc_name'] = state.rw_build_pvc
-        await create_k8_snapshot('pvc-snapshot', context)
         await add_build_snapshot_cache_item(testrun.sha, state.node_snapshot_name, state.specs)
+        await create_k8_snapshot('pvc-snapshot', context)
 
         # create a many-read-only volume from the snapshot
         state.ro_build_pvc = context['ro_pvc_name'] = get_new_pvc_name('build-ro')
-        await set_build_state(state)
+        await state.save()
         await create_k8_objects('ro-pvc-from-snapshot', context)
 
         # tell the main server
@@ -327,7 +327,7 @@ async def create_runner_job(testrun: schemas.NewTestRun, state: TestRunBuildStat
                         build_pvc_name=state.ro_build_pvc,
                         node_pvc_name=state.ro_node_pvc))
     state.jobs.append(await create_k8_objects('runner', context))
-    await set_build_state(state)
+    await state.save()
     await app.update_status(testrun.id, 'running')
 
 
