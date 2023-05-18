@@ -76,4 +76,4 @@ jobs:
       - name: 'Start Google Cloud Build trigger'
         run: |
           export CLOUDSDK_CORE_DISABLE_PROMPTS=1
-          gcloud beta builds triggers run ${{ secrets.CLOUDBUILD_TRIGGER_ID }} --tag=${{ github.event.release.tag_name }}
+          gcloud builds triggers run ${{ secrets.CLOUDBUILD_TRIGGER_ID }} --sha=${{ github.sha }}
