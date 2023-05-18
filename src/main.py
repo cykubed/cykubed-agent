@@ -33,6 +33,11 @@ async def hc_server():
         await asyncio.sleep(60)
 
 
+#
+# TODO restrict prune cache to agent-0. Also add code to remove snapshots that aren't in the cache
+# in Redis (in case the agent is uninstalled but the snapshots are left in)
+
+
 async def run():
     done, pending = await asyncio.wait(
         [asyncio.create_task(prune_cache_loop()),

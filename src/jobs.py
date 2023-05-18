@@ -185,6 +185,7 @@ async def handle_new_run(testrun: schemas.NewTestRun):
     await delete_jobs_for_branch(testrun.id, testrun.branch)
     state = TestRunBuildState(trid=testrun.id, rw_build_pvc=get_new_pvc_name('build-rw'))
     await async_redis().set(f'testrun:{testrun.id}:state', state.json())
+    build_snapshot_name = f'build-{testrun.sha}'
 
     build_snap_cache_item = await get_build_snapshot_cache_item(testrun.sha)
     if build_snap_cache_item and build_snap_cache_item.node_snapshot:
@@ -209,6 +210,11 @@ async def handle_new_run(testrun: schemas.NewTestRun):
         # and create the runner job
         await create_runner_job(testrun, state)
     else:
+        # we already have a build snapshot. We shouldn't really have got here, but clean up anyway
+        build_snap = await async_get_snapshot(build_snapshot_name)
+        if build_snap:
+            await delete_snapshot(build_snapshot_name)
+
         # otherwise we'll need to clone and build as usual
         context = common_context(testrun)
         context['pvc_name'] = state.rw_build_pvc
