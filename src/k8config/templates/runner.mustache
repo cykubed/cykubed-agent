@@ -33,6 +33,12 @@ spec:
             readOnly: true
             claimName: "{{node_pvc_name}}"
       {{#project.spot_enabled}}
+        - name: podinfo
+          downwardAPI:
+            items:
+              - path: "annotations"
+                fieldRef:
+                  fieldPath: metadata.annotations
       affinity:
         nodeAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
@@ -86,3 +92,7 @@ spec:
           name: build-volume
         - mountPath: "/node"
           name: node-volume
+        {{#project.spot_enabled}}
+        - name: podinfo
+          mountPath: /etc/podinfo
+        {{/project.spot_enabled}}

@@ -97,7 +97,7 @@ async def handle_agent_message(websocket, rawmsg: str):
         # build completed - create runner jobs
         await jobs.handle_build_completed(event)
     elif event.type == AgentEventType.run_completed:
-        # run completed - clean up
+        # run completed - notify and clean up
         await jobs.handle_run_completed(event.testrun_id)
     else:
         # post everything else through the websocket
