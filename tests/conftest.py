@@ -12,9 +12,7 @@ def redis(mocker, autouse=True):
     r = Redis(host='localhost', db=1, decode_responses=True)
     r.flushdb()
     aredis = AsyncRedis(host='localhost', db=1, decode_responses=True)
-    mocker.patch('db.async_redis', return_value=aredis)
-    mocker.patch('ws.async_redis', return_value=aredis)
-    mocker.patch('jobs.async_redis', return_value=aredis)
+    mocker.patch('common.redisutils.get_cached_async_redis', return_value=aredis)
     logger.remove()
     return r
 

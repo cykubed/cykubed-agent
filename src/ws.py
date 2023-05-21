@@ -10,6 +10,7 @@ from websockets.exceptions import ConnectionClosedError, InvalidStatusCode, Conn
 
 import db
 import jobs
+import state
 from app import app
 from common.enums import AgentEventType
 from common.redisutils import async_redis, ping_redis, get_specfile_log_key
@@ -32,7 +33,7 @@ async def handle_start_run(tr: NewTestRun):
             await jobs.handle_new_run(tr)
         else:
             # local testing
-            await jobs.set_build_state(jobs.TestRunBuildState(trid=tr.id, rw_build_pvc='dummy'))
+            await jobs.set_build_state(state.TestRunBuildState(trid=tr.id, rw_build_pvc='dummy'))
             logger.info(f'Now run the runner with args "clone {tr.id}"', tr=tr)
     except:
         logger.exception(f"Failed to start test run {tr.id}", tr=tr)
@@ -68,7 +69,10 @@ async def handle_websocket_message(data: dict):
     elif cmd == 'delete_project':
         await handle_delete_project(payload['project_id'])
     elif cmd == 'cancel':
-        await jobs.cancel_testrun(payload['testrun_id'])
+        st = await state.get_build_state(payload['testrun_id'])
+        if st:
+            await jobs.delete_pvcs_and_jobs(st)
+            await st.notify_run_completed()
     elif cmd == 'clear_cache':
         await jobs.clear_cache()
     elif cmd == 'fetch_log':

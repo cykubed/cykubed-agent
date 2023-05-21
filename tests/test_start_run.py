@@ -1,3 +1,4 @@
+import json
 import os.path
 
 import yaml
@@ -7,7 +8,8 @@ from httpx import Response
 from common.enums import AgentEventType
 from common.schemas import NewTestRun, AgentEvent, AgentCloneCompletedEvent
 from db import get_cached_item, add_cached_item, new_testrun, add_build_snapshot_cache_item
-from jobs import handle_run_completed, get_build_state, TestRunBuildState
+from jobs import handle_run_completed
+from state import TestRunBuildState, get_build_state
 from ws import handle_start_run, handle_agent_message
 
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), 'fixtures')
@@ -169,6 +171,9 @@ async def test_full_run(redis, mocker, mock_create_from_yaml,
             .mock(return_value=Response(200))
     build_completed = \
         respx_mock.post('https://api.cykubed.com/agent/testrun/20/build-completed').mock(return_value=Response(200))
+    run_completed = \
+        respx_mock.post('https://api.cykubed.com/agent/testrun/20/run-completed') \
+            .mock(return_value=Response(200))
     delete_jobs = mocker.patch('jobs.delete_jobs_for_branch')
     mocker.patch('jobs.get_new_pvc_name', side_effect=lambda prefix: f'{prefix}-pvc')
     k8_create_custom = k8_custom_api_mock.create_namespaced_custom_object
@@ -202,6 +207,8 @@ async def test_full_run(redis, mocker, mock_create_from_yaml,
     delete_pvc_mock = k8_core_api_mock.delete_namespaced_persistent_volume_claim
 
     await handle_run_completed(testrun.id)
+
+    assert run_completed.called
 
     # clean up
     assert delete_pvc_mock.call_count == 4
@@ -394,7 +401,7 @@ async def test_build_completed_cache_hit(redis, mock_create_from_yaml,
     assert update_status.called == 1
 
 
-async def test_run_completed(redis, k8_core_api_mock, testrun):
+async def test_run_completed(redis, k8_core_api_mock, respx_mock, testrun):
     await new_testrun(testrun)
     state = TestRunBuildState(trid=testrun.id,
                               rw_build_pvc='build-rw-pvc',
@@ -406,8 +413,21 @@ async def test_run_completed(redis, k8_core_api_mock, testrun):
     await state.save()
 
     delete_pvc_mock = k8_core_api_mock.delete_namespaced_persistent_volume_claim
+    run_completed = \
+        respx_mock.post('https://api.cykubed.com/agent/testrun/20/run-completed') \
+            .mock(return_value=Response(200))
+
+    redis.set('testrun:20:build:duration:normal', 420)
+    redis.set('testrun:20:runner:duration:normal', 125)
+    redis.set('testrun:20:runner:duration:spot', 250)
 
     await handle_run_completed(testrun.id)
+
+    assert run_completed.called
+    payload = json.loads(run_completed.calls.last.request.content)
+    assert payload == {'testrun_id': 20,
+                       'total_build_duration': 420, 'total_build_duration_spot': 0,
+                       'total_runner_duration': 125, 'total_runner_duration_spot': 250}
 
     assert delete_pvc_mock.call_count == 4
     pvcs = {x.args[0] for x in delete_pvc_mock.call_args_list}
