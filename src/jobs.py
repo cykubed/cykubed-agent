@@ -309,11 +309,11 @@ async def run_job_tracker():
             st = await get_build_state(key, False)
             if st and st.run_job and utcnow() < st.runner_deadline:
                 # check if the job is finished and we still have remaining specs
-                if not await async_is_job_active(st.run_job):
+                if not await async_is_job_complete(st.run_job):
                     numspecs = await r.scard(f'testrun:{st.trid}:specs')
                     if numspecs:
-                        logger.info(f'Run job {st.trid} is not active but has {numspecs} specs left - recreate it')
                         tr = await get_testrun(st.trid)
+                        logger.info(f'Run job {st.trid} is not active but has {numspecs} specs left - recreate it')
                         st.run_job_index += 1
                         # delete the existing job
                         await async_delete_job(st.run_job)
@@ -417,9 +417,9 @@ async def async_delete_job(name: str):
         await asyncio.to_thread(delete_job, name)
 
 
-async def async_is_job_active(name: str) -> bool:
+async def async_is_job_complete(name: str) -> bool:
     if name:
-        return await asyncio.to_thread(is_job_active, name)
+        return await asyncio.to_thread(is_job_complete, name)
     return False
 
 
@@ -436,12 +436,12 @@ async def delete_testrun_job(job, trid: int = None):
         await handle_run_completed(trid)
 
 
-def is_job_active(name: str) -> bool:
+def is_job_complete(name: str) -> bool:
     api = client.BatchV1Api()
     jobs = api.read_namespaced_job_status(name=name, namespace=settings.NAMESPACE)
     if jobs.items:
         item = jobs.items[0]
-        return item.active is not None and item.completion_time
+        return item.completion_time is not None
 
 
 async def delete_jobs_for_branch(trid: int, branch: str):
