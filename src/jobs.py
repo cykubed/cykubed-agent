@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import os
 import uuid
 
@@ -18,6 +19,7 @@ from common.exceptions import InvalidTemplateException, BuildFailedException
 from common.k8common import get_core_api, get_custom_api
 from common.redisutils import async_redis
 from common.schemas import AgentCloneCompletedEvent, AgentEvent
+from common.utils import utcnow
 from db import get_testrun, expired_cached_items_iter, get_cached_item, remove_cached_item, add_cached_item, \
     add_build_snapshot_cache_item, get_build_snapshot_cache_item
 from settings import settings
@@ -80,6 +82,7 @@ async def create_k8_snapshot(jobtype, context):
 # Don't try to reuse - just delete everything at the end and let the Redis cache catch the stragglers
 #
 
+
 async def create_k8_objects(jobtype, context) -> str:
     try:
         k8sclient = client.ApiClient()
@@ -126,12 +129,13 @@ async def handle_new_run(testrun: schemas.NewTestRun):
     # stop existing jobs
     await delete_jobs_for_branch(testrun.id, testrun.branch)
     state = TestRunBuildState(trid=testrun.id, rw_build_pvc=get_new_pvc_name('build-rw'))
-    await async_redis().set(f'testrun:{testrun.id}:state', state.json())
+    await state.save()
 
     build_snap_cache_item = await get_build_snapshot_cache_item(testrun.sha)
     if build_snap_cache_item and build_snap_cache_item.node_snapshot:
         # this is a rerun of a previous build: use the snapshot to create a build PVC
         # (there should already be a node snapshot)
+        logger.info(f'Found cached build for sha {testrun.sha}: reuse')
         state.node_snapshot_name = build_snap_cache_item.node_snapshot
         state.specs = build_snap_cache_item.specs
         await db.set_specs(testrun, state.specs)
@@ -157,7 +161,7 @@ async def handle_new_run(testrun: schemas.NewTestRun):
         await create_k8_objects('rw-pvc', context)
         # and clone
         context['build_pvc_name'] = state.rw_build_pvc
-        state.jobs.append(await create_k8_objects('clone', context))
+        state.clone_job = await create_k8_objects('clone', context)
         await state.save()
         await app.update_status(testrun.id, 'building')
 
@@ -214,7 +218,7 @@ async def handle_clone_completed(event: AgentCloneCompletedEvent):
         await create_k8_objects('rw-pvc', context)
 
     # now create the Job
-    state.jobs.append(await create_k8_objects('build', context))
+    state.build_job = await create_k8_objects('build', context)
     await state.save()
 
 
@@ -265,11 +269,13 @@ async def handle_build_completed(event: AgentEvent):
 async def create_runner_job(testrun: schemas.NewTestRun, state: TestRunBuildState):
     # next create the runner job: limit the parallism as there's no point having more runners than specs
     context = common_context(testrun)
-    context.update(dict(name=f'cykubed-runner-{testrun.project.name}-{testrun.id}',
+    context.update(dict(name=f'cykubed-runner-{testrun.project.name}-{testrun.id}-{state.run_job_index}',
                         parallelism=min(testrun.project.parallelism, len(state.specs)),
                         build_pvc_name=state.ro_build_pvc,
                         node_pvc_name=state.ro_node_pvc))
-    state.jobs.append(await create_k8_objects('runner', context))
+    if not state.runner_deadline:
+        state.runner_deadline = utcnow() + datetime.timedelta(seconds=testrun.project.runner_deadline)
+    state.run_job = await create_k8_objects('runner', context)
     await state.save()
     await app.update_status(testrun.id, 'running')
 
@@ -292,8 +298,29 @@ async def prune_cache_loop():
     :return:
     """
     while app.is_running():
-        # await prune_cache()
+        await prune_cache()
         await asyncio.sleep(300)
+
+
+async def run_job_tracker():
+    r = async_redis()
+    while app.is_running():
+        async for key in r.scan_iter('testrun:state:*', count=100):
+            st = await get_build_state(key, False)
+            if st and st.run_job and utcnow() < st.runner_deadline:
+                # check if the job is finished and we still have remaining specs
+                if not await async_is_job_active(st.run_job):
+                    numspecs = await r.scard(f'testrun:{st.trid}:specs')
+                    if numspecs:
+                        logger.info(f'Run job {st.trid} is not active but has {numspecs} specs left - recreate it')
+                        tr = await get_testrun(st.trid)
+                        st.run_job_index += 1
+                        # delete the existing job
+                        await async_delete_job(st.run_job)
+                        # and create a new one
+                        await create_runner_job(tr, st)
+
+        await asyncio.sleep(30)
 
 
 async def delete_cache_item(item):
@@ -386,7 +413,14 @@ async def async_delete_snapshot(name: str):
 
 
 async def async_delete_job(name: str):
-    await asyncio.to_thread(delete_job, name)
+    if name:
+        await asyncio.to_thread(delete_job, name)
+
+
+async def async_is_job_active(name: str) -> bool:
+    if name:
+        return await asyncio.to_thread(is_job_active, name)
+    return False
 
 
 async def async_get_pvc(name: str):
@@ -400,6 +434,14 @@ async def delete_testrun_job(job, trid: int = None):
     if tr:
         # just in case the test run failed and didn't clean up, do it here
         await handle_run_completed(trid)
+
+
+def is_job_active(name: str) -> bool:
+    api = client.BatchV1Api()
+    jobs = api.read_namespaced_job_status(name=name, namespace=settings.NAMESPACE)
+    if jobs.items:
+        item = jobs.items[0]
+        return item.active is not None and item.completion_time
 
 
 async def delete_jobs_for_branch(trid: int, branch: str):
@@ -455,8 +497,9 @@ def is_pod_running(podname: str):
 
 async def delete_pvcs_and_jobs(state: TestRunBuildState):
     if settings.K8:
-        for job in state.jobs:
-            await async_delete_job(job)
+        await async_delete_job(state.clone_job)
+        await async_delete_job(state.build_job)
+        await async_delete_job(state.run_job)
         await async_delete_pvc(state.rw_build_pvc)
         if state.ro_build_pvc:
             await async_delete_pvc(state.ro_build_pvc)

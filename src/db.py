@@ -14,8 +14,6 @@ from settings import settings
 async def new_testrun(tr: NewTestRun):
     r = async_redis()
     await r.set(f'testrun:{tr.id}', tr.json(), ex=24 * 3600)
-    await r.sadd('testruns', str(tr.id))
-    await r.set(f'testrun:{tr.id}:run_duration', 0, ex=24 * 3600)
 
 
 async def set_specs(tr: NewTestRun, specs: list[str]):

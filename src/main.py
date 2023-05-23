@@ -12,7 +12,7 @@ import ws
 from app import app
 from common import k8common
 from common.redisutils import sync_redis, ping_redis, async_redis
-from jobs import prune_cache_loop
+from jobs import prune_cache_loop, run_job_tracker
 from logs import configure_logging
 from settings import settings
 
@@ -34,11 +34,12 @@ async def hc_server():
 
 
 async def run():
-    done, pending = await asyncio.wait(
-        [asyncio.create_task(prune_cache_loop()),
-         asyncio.create_task(hc_server()),
-         asyncio.create_task(ws.connect())], return_when=asyncio.FIRST_COMPLETED,
-    )
+    tasks = [asyncio.create_task(hc_server()),
+             asyncio.create_task(ws.connect())]
+    if app.hostname == 'agent-0':
+        tasks += [asyncio.create_task(prune_cache_loop()),
+                  asyncio.create_task(run_job_tracker())]
+    done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
     # cancel the others
     for task in pending:
         task.cancel()

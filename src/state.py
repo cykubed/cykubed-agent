@@ -1,3 +1,4 @@
+import datetime
 from typing import Optional
 
 from loguru import logger
@@ -15,7 +16,11 @@ class TestRunBuildState(BaseModel):
     specs: list[str] = []
     parallelism: Optional[int]
     node_snapshot_name: Optional[str]
-    jobs: list[str] = []
+    clone_job: str = None
+    build_job: str = None
+    run_job: str = None
+    runner_deadline: datetime.datetime = None
+    run_job_index = 0
     rw_build_pvc: str
     rw_node_pvc: Optional[str]
     ro_build_pvc: Optional[str]
@@ -27,7 +32,7 @@ class TestRunBuildState(BaseModel):
         return int(val) if val is not None else 0
 
     async def save(self):
-        await async_redis().set(f'testrun:{self.trid}:state', self.json())
+        await async_redis().set(f'testrun:state:{self.trid}', self.json())
 
     async def notify_build_completed(self):
         resp = await app.httpclient.post(f'/agent/testrun/{self.trid}/build-completed',
@@ -52,14 +57,13 @@ class TestRunBuildState(BaseModel):
 
     async def delete_redis_state(self):
         r = async_redis()
-        await r.delete(f'testrun:{self.trid}:state')
+        await r.delete(f'testrun:state:{self.trid}')
         await r.delete(f'testrun:{self.trid}:specs')
         await r.delete(f'testrun:{self.trid}')
-        await r.srem('testruns', str(self.trid))
 
 
 async def get_build_state(trid: int, check=False) -> TestRunBuildState:
-    st = await async_redis().get(f'testrun:{trid}:state')
+    st = await async_redis().get(f'testrun:state:{trid}')
     if st:
         return TestRunBuildState.parse_raw(st)
     if check:

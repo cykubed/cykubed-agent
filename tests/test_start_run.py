@@ -221,7 +221,7 @@ async def test_full_run(redis, mocker, mock_create_from_yaml,
             ('Job', 'cykubed-build-project-20'),
             ('PersistentVolumeClaim', 'node-ro-pvc'),
             ('PersistentVolumeClaim', 'build-ro-pvc'),
-            ('Job', 'cykubed-runner-project-20')] == kinds_and_names
+            ('Job', 'cykubed-runner-project-20-0')] == kinds_and_names
 
     assert k8_create_custom.call_count == 2
     compare_rendered_template([k8_create_custom.call_args_list[0].kwargs['body']], 'node-snapshot')
@@ -433,6 +433,6 @@ async def test_run_completed(redis, k8_core_api_mock, respx_mock, testrun):
     pvcs = {x.args[0] for x in delete_pvc_mock.call_args_list}
     assert pvcs == {'build-rw-pvc', 'build-ro-pvc', 'node-rw-pvc', 'node-ro-pvc'}
 
-    assert redis.get(f'testrun:20:state') is None
+    assert redis.get(f'testrun:state:20') is None
     assert redis.get(f'testrun:20') is None
     assert redis.get(f'testrun:20:specs') is None
