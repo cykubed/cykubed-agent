@@ -292,6 +292,12 @@ async def handle_run_completed(testrun_id):
         await state.notify_run_completed()
 
 
+async def handle_testrun_error(event: schemas.AgentTestRunErrorEvent):
+    logger.info(f'Run {event.testrun_id} failed at stage {event.report.stage}')
+    await app.httpclient.post(f'/agent/testrun/{event.testrun_id}/error', json=event.report.dict())
+    await handle_run_completed(event.testrun_id)
+
+
 async def prune_cache_loop():
     """
     Pune expired snapshots and PVCs

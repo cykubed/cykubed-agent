@@ -6,9 +6,9 @@ from freezegun import freeze_time
 from httpx import Response
 
 from common.enums import AgentEventType
-from common.schemas import NewTestRun, AgentEvent, AgentCloneCompletedEvent
+from common.schemas import NewTestRun, AgentEvent, AgentCloneCompletedEvent, TestRunErrorReport, AgentTestRunErrorEvent
 from db import get_cached_item, add_cached_item, new_testrun, add_build_snapshot_cache_item
-from jobs import handle_run_completed
+from jobs import handle_run_completed, handle_testrun_error
 from state import TestRunBuildState, get_build_state
 from ws import handle_start_run, handle_agent_message
 
@@ -436,3 +436,22 @@ async def test_run_completed(redis, k8_core_api_mock, respx_mock, testrun):
     assert redis.get(f'testrun:state:20') is None
     assert redis.get(f'testrun:20') is None
     assert redis.get(f'testrun:20:specs') is None
+
+
+async def test_run_error(redis, mocker, respx_mock, testrun):
+    await new_testrun(testrun)
+    report = TestRunErrorReport(testrun_id=testrun.id,
+                                stage='runner',
+                                msg='Argh')
+    handle_run_completed_mock = mocker.patch('jobs.handle_run_completed')
+    run_error = \
+        respx_mock.post('https://api.cykubed.com/agent/testrun/20/error') \
+            .mock(return_value=Response(200))
+    await handle_testrun_error(AgentTestRunErrorEvent(testrun_id=testrun.id,
+                                                      report=report))
+    handle_run_completed_mock.assert_called_once_with(testrun.id)
+
+    assert run_error.called
+
+    payload = json.loads(run_error.calls.last.request.content)
+    assert payload == {'stage': 'runner', 'msg': 'Argh', 'error_code': None}
