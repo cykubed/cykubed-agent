@@ -1,4 +1,4 @@
 [submodule "src/common"]
 	path = src/common
-	url = git@ckgithub:cykubed/cykube-common.git
-x
+	url = git@github.com:cykubed/cykube-common.git
+
