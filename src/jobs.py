@@ -198,6 +198,7 @@ async def handle_clone_completed(event: AgentCloneCompletedEvent):
     node_snapshot_name = f'node-{event.cache_key}'
     context = common_context(testrun)
     context['build_pvc_name'] = state.rw_build_pvc
+    state.node_snapshot_name = node_snapshot_name
 
     if await get_cached_snapshot(node_snapshot_name):
         logger.info(f'Found node cache snapshot {node_snapshot_name}', trid=trid)
@@ -210,9 +211,7 @@ async def handle_clone_completed(event: AgentCloneCompletedEvent):
         await create_k8_objects('ro-pvc-from-snapshot', context)
     else:
         # otherwise this will need to build the node dist: create a RW pvc
-        # otherwise this will need to build the node dist: create a RW pvc
         state.rw_node_pvc = context['node_pvc_name'] = context['pvc_name'] = get_new_pvc_name('node-rw')
-        state.node_snapshot_name = node_snapshot_name
         await state.save()
         context['storage'] = testrun.project.build_ephemeral_storage
         await create_k8_objects('rw-pvc', context)
@@ -368,6 +367,7 @@ def get_pvc(pvc_name: str) -> bool:
 
 def delete_snapshot(name: str):
     try:
+        logger.debug(f'Delete snapshot {name}')
         get_custom_api().delete_namespaced_custom_object(group="snapshot.storage.k8s.io",
                                                     version="v1beta1",
                                                     namespace=settings.NAMESPACE,
@@ -376,7 +376,7 @@ def delete_snapshot(name: str):
     except ApiException as ex:
         if ex.status == 404:
             # already deleted - ignore
-            pass
+            logger.debug(f'Snapshot {name} cannot be deleted as it does not exist')
         else:
             logger.exception(f'Failed to delete snapshot')
             raise BuildFailedException(f'Failed to delete snapshot')

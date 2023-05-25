@@ -33,7 +33,8 @@ async def handle_start_run(tr: NewTestRun):
             await jobs.handle_new_run(tr)
         else:
             # local testing
-            await jobs.set_build_state(state.TestRunBuildState(trid=tr.id, rw_build_pvc='dummy'))
+            st = state.TestRunBuildState(trid=tr.id, rw_build_pvc='dummy')
+            await st.save()
             logger.info(f'Now run the runner with args "clone {tr.id}"', tr=tr)
     except:
         logger.exception(f"Failed to start test run {tr.id}", tr=tr)
@@ -93,7 +94,7 @@ async def consumer_handler(websocket):
 
 async def handle_agent_message(websocket, rawmsg: str):
     event = AgentEvent.parse_raw(rawmsg)
-    logger.debug(f'Msg: {event.type} for {event.testrun_id}')
+    # logger.debug(f'Msg: {event.type} for {event.testrun_id}')
     if event.type == AgentEventType.clone_completed:
         # clone completed - kick off the build
         await jobs.handle_clone_completed(AgentCloneCompletedEvent.parse_raw(rawmsg))

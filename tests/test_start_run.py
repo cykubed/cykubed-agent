@@ -276,7 +276,7 @@ async def test_clone_completed_cache_hit(redis, mocker, mock_create_from_yaml,
     state = await get_build_state(testrun.id)
     assert state.rw_node_pvc is None
     assert state.ro_node_pvc == 'node-ro-pvc'
-    assert state.node_snapshot_name is None
+    assert state.node_snapshot_name == 'node-absd234weefw'
 
 
 @freeze_time('2022-04-03 14:10:00Z')
