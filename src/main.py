@@ -18,7 +18,7 @@ from settings import settings
 
 
 async def handler(request):
-    if not await async_redis().ping() or not app.ws_connected:
+    if not await async_redis().ping(): # or not app.ws_connected:
         return web.Response(status=500)
     return web.Response(text="OK")
 
