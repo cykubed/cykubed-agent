@@ -59,6 +59,8 @@ if __name__ == "__main__":
         logger.debug("Cannot ping_redis Redis - waiting")
         sleep(5)
 
+    logger.info("Connected to Redis")
+
     if settings.K8 and not settings.TEST:
         k8common.init()
     configure_logging()
