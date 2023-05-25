@@ -48,6 +48,7 @@ if __name__ == "__main__":
     #         dsn=settings.SENTRY_DSN,
     #         integrations=[RedisIntegration(), AsyncioIntegration(),], )
     configure_logging()
+    logger.info("Cykubed agent starting")
 
     # block until we can access Redis
     redis = sync_redis()
