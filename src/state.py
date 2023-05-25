@@ -42,6 +42,7 @@ class TestRunBuildState(BaseModel):
                          f' {resp.status_code}: {resp.text}')
 
     async def notify_run_completed(self):
+        logger.info(f'Notify run completed: {self.trid}')
         payload = schemas.TestRunCompleted(
             testrun_id=self.trid,
             total_build_duration=await self.get_duration('build', False),
@@ -56,6 +57,7 @@ class TestRunBuildState(BaseModel):
             logger.error(f'Failed to update testrun duration for testrun {self.trid}')
 
     async def delete_redis_state(self):
+        logger.info(f'Deleting state for testrun {self.trid}')
         r = async_redis()
         await r.delete(f'testrun:state:{self.trid}')
         await r.delete(f'testrun:{self.trid}:specs')

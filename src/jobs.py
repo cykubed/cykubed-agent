@@ -310,6 +310,7 @@ async def prune_cache_loop():
 
 async def run_job_tracker():
     r = async_redis()
+    logger.info('Running job tracker')
     while app.is_running():
         async for key in r.scan_iter('testrun:state:*', count=100):
             st = await get_build_state(key, False)
