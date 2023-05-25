@@ -2,11 +2,8 @@ import asyncio
 import sys
 from time import sleep
 
-import sentry_sdk
 from aiohttp import web
 from loguru import logger
-from sentry_sdk.integrations.asyncio import AsyncioIntegration
-from sentry_sdk.integrations.redis import RedisIntegration
 
 import ws
 from app import app
@@ -46,10 +43,11 @@ async def run():
 
 
 if __name__ == "__main__":
-    if settings.SENTRY_DSN:
-        sentry_sdk.init(
-            dsn=settings.SENTRY_DSN,
-            integrations=[RedisIntegration(), AsyncioIntegration(),], )
+    # if settings.SENTRY_DSN:
+    #     sentry_sdk.init(
+    #         dsn=settings.SENTRY_DSN,
+    #         integrations=[RedisIntegration(), AsyncioIntegration(),], )
+    configure_logging()
 
     # block until we can access Redis
     redis = sync_redis()
@@ -63,7 +61,6 @@ if __name__ == "__main__":
 
     if settings.K8 and not settings.TEST:
         k8common.init()
-    configure_logging()
     try:
         asyncio.run(run())
     except KeyboardInterrupt:
