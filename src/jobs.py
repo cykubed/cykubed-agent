@@ -8,7 +8,7 @@ import chevron
 import yaml
 from chevron import ChevronError
 from kubernetes import client, utils as k8utils
-from kubernetes.client import ApiException
+from kubernetes.client import ApiException, V1JobStatus
 from loguru import logger
 from yaml import YAMLError
 
@@ -16,7 +16,7 @@ import db
 from app import app
 from common import schemas
 from common.exceptions import InvalidTemplateException, BuildFailedException
-from common.k8common import get_core_api, get_custom_api
+from common.k8common import get_core_api, get_custom_api, get_batch_api
 from common.redisutils import async_redis
 from common.schemas import AgentCloneCompletedEvent, AgentEvent
 from common.utils import utcnow
@@ -316,7 +316,8 @@ async def run_job_tracker():
             st = await get_build_state(key, False)
             if st and st.run_job and utcnow() < st.runner_deadline:
                 # check if the job is finished and we still have remaining specs
-                if not await async_is_job_complete(st.run_job):
+                status = await async_get_job_status(st.run_job)
+                if status and status.start_time and status.completion_time and not status.active:
                     numspecs = await r.scard(f'testrun:{st.trid}:specs')
                     if numspecs:
                         tr = await get_testrun(st.trid)
@@ -424,10 +425,10 @@ async def async_delete_job(name: str):
         await asyncio.to_thread(delete_job, name)
 
 
-async def async_is_job_complete(name: str) -> bool:
+async def async_get_job_status(name: str) -> V1JobStatus:
     if name:
-        return await asyncio.to_thread(is_job_complete, name)
-    return False
+        return await asyncio.to_thread(get_job_status, name)
+    return None
 
 
 async def async_get_pvc(name: str):
@@ -443,12 +444,15 @@ async def delete_testrun_job(job, trid: int = None):
         await handle_run_completed(trid)
 
 
-def is_job_complete(name: str) -> bool:
-    api = client.BatchV1Api()
-    jobs = api.read_namespaced_job_status(name=name, namespace=settings.NAMESPACE)
-    if jobs.items:
-        item = jobs.items[0]
-        return item.completion_time is not None
+def get_job_status(name: str) -> V1JobStatus:
+    api = get_batch_api()
+    try:
+        job = api.read_namespaced_job_status(name=name, namespace=settings.NAMESPACE)
+        return job.status
+    except ApiException as ex:
+        if ex.status != 404:
+            logger.exception('Failed to fetch job status')
+        return False
 
 
 async def delete_jobs_for_branch(trid: int, branch: str):
