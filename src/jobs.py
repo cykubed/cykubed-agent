@@ -413,9 +413,12 @@ async def delete_jobs(testrun_id: int):
 
 async def delete_pvcs_and_jobs(state: TestRunBuildState):
     if settings.K8:
-        await async_delete_job(state.clone_job)
-        await async_delete_job(state.build_job)
-        await async_delete_job(state.run_job)
+        if state.clone_job:
+            await async_delete_job(state.clone_job)
+        if state.build_job:
+            await async_delete_job(state.build_job)
+        if state.run_job:
+            await async_delete_job(state.run_job)
         await async_delete_pvc(state.rw_build_pvc)
         if state.ro_build_pvc:
             await async_delete_pvc(state.ro_build_pvc)

@@ -163,6 +163,7 @@ async def test_clone_completed_cache_miss(redis, mocker, mock_create_from_yaml,
 async def test_full_run(redis, mocker, mock_create_from_yaml,
                         respx_mock,
                         k8_core_api_mock,
+                        k8_batch_api_mock,
                         k8_custom_api_mock,
                         testrun: NewTestRun):
     building_update_status = \
@@ -179,6 +180,8 @@ async def test_full_run(redis, mocker, mock_create_from_yaml,
     delete_jobs = mocker.patch('jobs.delete_jobs_for_branch')
     mocker.patch('jobs.get_new_pvc_name', side_effect=lambda prefix: f'{prefix}-pvc')
     k8_create_custom = k8_custom_api_mock.create_namespaced_custom_object
+
+    k8_delete_job = k8_batch_api_mock.delete_namespaced_job
 
     await handle_start_run(testrun)
 
@@ -228,6 +231,11 @@ async def test_full_run(redis, mocker, mock_create_from_yaml,
     assert k8_create_custom.call_count == 2
     compare_rendered_template([k8_create_custom.call_args_list[0].kwargs['body']], 'node-snapshot')
     compare_rendered_template([k8_create_custom.call_args_list[1].kwargs['body']], 'build-snapshot')
+
+    assert k8_delete_job.call_count == 3
+    assert k8_delete_job.call_args_list[0].args == ('cykubed-clone-20-deadbeef0101', 'cykubed')
+    assert k8_delete_job.call_args_list[1].args == ('cykubed-build-project-20', 'cykubed')
+    assert k8_delete_job.call_args_list[2].args == ('cykubed-runner-project-20-0', 'cykubed')
 
 
 async def test_clone_completed_cache_hit(redis, mocker, mock_create_from_yaml,

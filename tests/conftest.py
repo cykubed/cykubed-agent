@@ -46,6 +46,13 @@ async def project() -> Project:
 
 
 @pytest.fixture()
+def k8_batch_api_mock(mocker):
+    batch_api_mock = mocker.MagicMock()
+    mocker.patch('k8.get_batch_api', return_value=batch_api_mock)
+    return batch_api_mock
+
+
+@pytest.fixture()
 def k8_core_api_mock(mocker):
     core_api_mock = mocker.MagicMock()
     mocker.patch('k8.get_core_api', return_value=core_api_mock)

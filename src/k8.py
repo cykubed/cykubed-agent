@@ -70,7 +70,7 @@ def get_snapshot(name: str):
 def delete_job(name: str):
     try:
         logger.info(f"Deleting existing job {name}")
-        client.BatchV1Api().delete_namespaced_job(name, settings.NAMESPACE,
+        get_batch_api().delete_namespaced_job(name, settings.NAMESPACE,
                                                   propagation_policy='Background')
     except ApiException as ex:
         if ex.status == 404:
@@ -116,8 +116,7 @@ async def async_delete_snapshot(name: str):
 
 
 async def async_delete_job(name: str):
-    if name:
-        await asyncio.to_thread(delete_job, name)
+    await asyncio.to_thread(delete_job, name)
 
 
 async def async_get_job_status(name: str) -> V1JobStatus:
