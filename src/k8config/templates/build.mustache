@@ -56,11 +56,11 @@ spec:
           limits:
             cpu: "{{project.build_cpu}}"
             memory: "{{project.build_memory}}G"
-            ephemeral-storage: "3Gi"
+            ephemeral-storage: "2Gi"
           requests:
             cpu: "{{project.build_cpu}}"
             memory: "{{project.build_memory}}G"
-            ephemeral-storage: "3Gi"
+            ephemeral-storage: "2Gi"
         volumeMounts:
         - mountPath: "/node"
           name: node-volume

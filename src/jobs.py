@@ -47,7 +47,6 @@ def common_context(testrun: schemas.NewTestRun):
                 branch=testrun.branch,
                 redis_secret_name=settings.REDIS_SECRET_NAME,
                 token=settings.API_TOKEN,
-                storage=testrun.project.build_ephemeral_storage,
                 project=testrun.project)
 
 
@@ -135,35 +134,59 @@ async def handle_new_run(testrun: schemas.NewTestRun):
     if build_snap_cache_item and build_snap_cache_item.node_snapshot:
         # this is a rerun of a previous build: use the snapshot to create a build PVC
         # (there should already be a node snapshot)
-        logger.info(f'Found cached build for sha {testrun.sha}: reuse')
-        state.node_snapshot_name = build_snap_cache_item.node_snapshot
-        state.specs = build_snap_cache_item.specs
-        await db.set_specs(testrun, state.specs)
-        # create a RO PVC from the build snapshot
-        context = common_context(testrun)
-        context['snapshot_name'] = build_snap_cache_item.name
-        state.ro_build_pvc = context['ro_pvc_name'] = get_new_pvc_name('build-ro')
-        await state.save()
-        await create_k8_objects('ro-pvc-from-snapshot', context)
-        # ditto for the node snapshot
-        context['snapshot_name'] = state.node_snapshot_name
-        state.ro_node_pvc = context['ro_pvc_name'] = get_new_pvc_name('node-ro')
-        await state.save()
-        await create_k8_objects('ro-pvc-from-snapshot', context)
-        # tell the main server
-        await state.notify_build_completed()
-        # and create the runner job
-        await create_runner_job(testrun, state)
+        node_cache_item = await get_cached_item(build_snap_cache_item.node_snapshot)
+        if not node_cache_item:
+            # weirdly we have a build snapshot but no associated node one: delete the build snapshot and rebuild
+            # everything
+            logger.error('Missing node snapshot for cached build: deleting build snapshot')
+            await delete_cache_item(node_cache_item)
+            await create_clone_job(testrun, state)
+        else:
+            # otherwise we can directly created the RO PVCs and the runner job
+            logger.info(f'Found cached build for sha {testrun.sha}: reuse')
+            state.node_snapshot_name = node_cache_item.name
+            state.specs = build_snap_cache_item.specs
+            await create_ro_pvcs_and_runner_job(testrun, state)
     else:
-        # otherwise we'll need to clone and build as usual
-        context = common_context(testrun)
-        context['pvc_name'] = state.rw_build_pvc
-        await create_k8_objects('rw-pvc', context)
-        # and clone
-        context['build_pvc_name'] = state.rw_build_pvc
-        state.clone_job = await create_k8_objects('clone', context)
-        await state.save()
-        await app.update_status(testrun.id, 'building')
+        await create_clone_job(testrun, state)
+
+
+async def create_ro_pvcs_and_runner_job(testrun, state):
+    """
+    Create RO build and node PVCs from the snapshots and the build the runner job
+    """
+    await db.set_specs(testrun, state.specs)
+    # create a RO PVC from the build snapshot
+    context = common_context(testrun)
+    context['snapshot_name'] = get_build_snapshot_name(testrun)
+    context['storage'] = testrun.project.build_storage
+    state.ro_build_pvc = context['ro_pvc_name'] = get_new_pvc_name('build-ro')
+    await create_k8_objects('ro-pvc-from-snapshot', context)
+    # ditto for the node snapshot
+    context['snapshot_name'] = state.node_snapshot_name
+    context['storage'] = testrun.project.node_storage
+    state.ro_node_pvc = context['ro_pvc_name'] = get_new_pvc_name('node-ro')
+    await create_k8_objects('ro-pvc-from-snapshot', context)
+    await state.save()
+    # tell the main server
+    await state.notify_build_completed()
+    # and create the runner job
+    await create_runner_job(testrun, state)
+
+
+async def create_clone_job(testrun, state):
+    """
+    Create a RW PVC for the build and create the clone job
+    """
+    context = common_context(testrun)
+    context['pvc_name'] = state.rw_build_pvc
+    context['storage'] = testrun.project.build_storage
+    await create_k8_objects('rw-pvc', context)
+    # and clone job
+    context['build_pvc_name'] = state.rw_build_pvc
+    state.clone_job = await create_k8_objects('clone', context)
+    await state.save()
+    await app.update_status(testrun.id, 'building')
 
 
 async def handle_clone_completed(event: AgentCloneCompletedEvent):
@@ -173,6 +196,10 @@ async def handle_clone_completed(event: AgentCloneCompletedEvent):
     to build the node_modules and later snapshot it
     """
     trid = event.testrun_id
+    testrun = await get_testrun(trid)
+    if not testrun:
+        raise BuildFailedException('Missing testrun')
+
     state = await get_build_state(trid, True)
 
     if not event.specs:
@@ -182,11 +209,9 @@ async def handle_clone_completed(event: AgentCloneCompletedEvent):
         await state.notify_run_completed()
         return
 
-    testrun = await get_testrun(trid)
-    if not testrun:
-        raise BuildFailedException('Missing testrun')
     state.specs = event.specs
     logger.info(f"Found {len(event.specs)} spec files")
+
     await db.set_specs(testrun, state.specs)
 
     if not settings.K8:
@@ -200,25 +225,27 @@ async def handle_clone_completed(event: AgentCloneCompletedEvent):
     context['build_pvc_name'] = state.rw_build_pvc
     state.node_snapshot_name = node_snapshot_name
 
-    if await get_cached_snapshot(node_snapshot_name):
+    cached_node_item = await get_cached_snapshot(node_snapshot_name)
+    context['storage'] = testrun.project.node_storage
+    if cached_node_item:
         logger.info(f'Found node cache snapshot {node_snapshot_name}', trid=trid)
         # we have a cached node distribution (i.e a VolumeSnapshot for it) - create a read-only PVC
         state.ro_node_pvc = get_new_pvc_name('node-ro')
         context['snapshot_name'] = node_snapshot_name
         context['node_pvc_name'] = context['ro_pvc_name'] = state.ro_node_pvc
-        context['storage'] = testrun.project.build_ephemeral_storage
-        await state.save()
         await create_k8_objects('ro-pvc-from-snapshot', context)
     else:
         # otherwise this will need to build the node dist: create a RW pvc
         state.rw_node_pvc = context['node_pvc_name'] = context['pvc_name'] = get_new_pvc_name('node-rw')
-        await state.save()
-        context['storage'] = testrun.project.build_ephemeral_storage
         await create_k8_objects('rw-pvc', context)
 
     # now create the Job
     state.build_job = await create_k8_objects('build', context)
     await state.save()
+
+
+def get_build_snapshot_name(testrun):
+    return f'build-{testrun.sha}'
 
 
 async def handle_build_completed(event: AgentEvent):
@@ -237,28 +264,18 @@ async def handle_build_completed(event: AgentEvent):
             context['snapshot_name'] = state.node_snapshot_name
             context['pvc_name'] = state.rw_node_pvc
             await create_k8_snapshot('pvc-snapshot', context)
-            await add_cached_item(state.node_snapshot_name)
-            # and create a RO PVC from it
-            state.ro_node_pvc = context['ro_pvc_name'] = context['pvc_name'] = get_new_pvc_name('node-ro')
-            await state.save()
-            await create_k8_objects('ro-pvc-from-snapshot', context)
+            await add_cached_item(state.node_snapshot_name, testrun.project.node_storage)
 
-        # snapshot the build pvc
-        context['snapshot_name'] = f'build-{testrun.sha}'
+        # snapshot the build pvc and record it in the cache
+        context['snapshot_name'] = get_build_snapshot_name(testrun)
         context['pvc_name'] = state.rw_build_pvc
-        await add_build_snapshot_cache_item(testrun.sha, state.node_snapshot_name, state.specs)
         await create_k8_snapshot('pvc-snapshot', context)
+        await add_build_snapshot_cache_item(testrun.sha, state.node_snapshot_name,
+                                            state.specs,
+                                            testrun.project.build_storage)
 
-        # create a many-read-only volume from the snapshot
-        state.ro_build_pvc = context['ro_pvc_name'] = get_new_pvc_name('build-ro')
-        await state.save()
-        await create_k8_objects('ro-pvc-from-snapshot', context)
-
-        # tell the main server
-        await state.notify_build_completed()
-
-        # finally create the runner job
-        await create_runner_job(testrun, state)
+        # finally create the RO pvcs from the snapshots and create the runner job
+        await create_ro_pvcs_and_runner_job(testrun, state)
 
     except Exception as ex:
         logger.exception("Failed to complete the build")

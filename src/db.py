@@ -45,18 +45,23 @@ async def get_cached_item(key: str, update_expiry=True) -> CacheItem | None:
     return item
 
 
-async def add_cached_item(key: str, ttl=settings.NODE_DISTRIBUTION_CACHE_TTL,
+async def add_cached_item(key: str,
+                          storage_size: int,
+                          ttl=settings.NODE_DISTRIBUTION_CACHE_TTL,
                           **kwargs) -> CacheItem:
     item = CacheItem(name=key,
                      ttl=ttl,
+                     storage_size=storage_size,
                      expires=utcnow() + datetime.timedelta(seconds=ttl), **kwargs)
     await async_redis().set(f'cache:{key}', item.json())
     return item
 
 
-async def add_build_snapshot_cache_item(sha: str, node_snapshot_name: str, specs: list[str]) -> CacheItem:
+async def add_build_snapshot_cache_item(sha: str, node_snapshot_name: str, specs: list[str],
+                                        storage_size: int) -> CacheItem:
     return await add_cached_item(f'build-{sha}', ttl=settings.APP_DISTRIBUTION_CACHE_TTL,
-                                 node_snapshot=node_snapshot_name, specs=specs)
+                                 node_snapshot=node_snapshot_name, specs=specs,
+                                 storage_size=storage_size)
 
 
 async def get_build_snapshot_cache_item(sha: str) -> CacheItem:

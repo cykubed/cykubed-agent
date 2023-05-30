@@ -54,7 +54,7 @@ class TestRunBuildState(BaseModel):
         if resp.status_code == 200:
             await self.delete_redis_state()
         else:
-            logger.error(f'Failed to update testrun duration for testrun {self.trid}')
+            logger.error(f'Failed to update testrun duration for testrun {self.trid}: {resp.text}')
 
     async def delete_redis_state(self):
         logger.info(f'Deleting state for testrun {self.trid}')
