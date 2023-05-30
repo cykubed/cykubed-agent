@@ -17,5 +17,5 @@ spec:
         name: build-deadbeef0101
     resources:
         requests:
-            storage: 10.0Gi
+            storage: 1Gi
     storageClassName: cykubed-storageclass

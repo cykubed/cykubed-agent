@@ -14,5 +14,5 @@ spec:
     - ReadWriteOnce
     resources:
         requests:
-            storage: 10.0Gi
+            storage: 10Gi
     storageClassName: cykubed-storageclass

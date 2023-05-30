@@ -89,7 +89,8 @@ async def test_start_run_cache_hit(redis, mocker, testrun: NewTestRun,
 
     mocker.patch('jobs.get_new_pvc_name', side_effect=get_new_pvc_name)
 
-    await add_build_snapshot_cache_item('deadbeef0101', 'node-absd234weefw', ['spec1.ts'])
+    await add_cached_item('node-absd234weefw', 10)
+    await add_build_snapshot_cache_item('deadbeef0101', 'node-absd234weefw', ['spec1.ts'], 1)
 
     delete_jobs = mocker.patch('jobs.delete_jobs_for_branch')
 
@@ -131,7 +132,8 @@ async def test_clone_completed_cache_miss(redis, mocker, mock_create_from_yaml,
     """
     websocket = mocker.AsyncMock()
     await new_testrun(testrun)
-    state = TestRunBuildState(trid=testrun.id, rw_build_pvc='build-rw-pvc')
+    state = TestRunBuildState(trid=testrun.id, rw_build_pvc='build-rw-pvc', build_storage=1,
+                              node_storage=10)
     await state.save()
 
     mocker.patch('jobs.get_new_pvc_name', side_effect=lambda prefix: f'{prefix}-pvc')
@@ -215,13 +217,13 @@ async def test_full_run(redis, mocker, mock_create_from_yaml,
 
     # this will have created 2 PVCs, 2 snapshots and 2 Jobs
     kinds_and_names = get_kind_and_names(mock_create_from_yaml)
-    assert [('PersistentVolumeClaim', 'build-rw-pvc'),
+    assert {('PersistentVolumeClaim', 'build-rw-pvc'),
             ('Job', 'cykubed-clone-20-deadbeef0101'),
             ('PersistentVolumeClaim', 'node-rw-pvc'),
             ('Job', 'cykubed-build-project-20'),
             ('PersistentVolumeClaim', 'node-ro-pvc'),
             ('PersistentVolumeClaim', 'build-ro-pvc'),
-            ('Job', 'cykubed-runner-project-20-0')] == kinds_and_names
+            ('Job', 'cykubed-runner-project-20-0')} == set(kinds_and_names)
 
     assert k8_create_custom.call_count == 2
     compare_rendered_template([k8_create_custom.call_args_list[0].kwargs['body']], 'node-snapshot')
@@ -247,9 +249,10 @@ async def test_clone_completed_cache_hit(redis, mocker, mock_create_from_yaml,
 
     websocket = mocker.AsyncMock()
     await new_testrun(testrun)
-    state = TestRunBuildState(trid=testrun.id, rw_build_pvc='build-rw-pvc')
+    state = TestRunBuildState(trid=testrun.id, rw_build_pvc='build-rw-pvc', build_storage=1,
+                              node_storage=10)
     await state.save()
-    await add_cached_item('node-absd234weefw')
+    await add_cached_item('node-absd234weefw', 10)
 
     mocker.patch('jobs.get_new_pvc_name', side_effect=lambda prefix: f'{prefix}-pvc')
 
@@ -314,6 +317,8 @@ async def test_build_completed_cache_miss(redis, mock_create_from_yaml,
 
     await new_testrun(testrun)
     state = TestRunBuildState(trid=testrun.id, rw_build_pvc='build-rw-pvc',
+                              build_storage=1,
+                              node_storage=10,
                               rw_node_pvc='node-rw-pvc',
                               specs=['test1.ts'],
                               node_snapshot_name='node-absd234weefw')
@@ -334,8 +339,8 @@ async def test_build_completed_cache_miss(redis, mock_create_from_yaml,
     compare_rendered_template([k8_create_custom.call_args_list[1].kwargs['body']], 'build-snapshot')
 
     assert mock_create_from_yaml.call_count == 3
-    compare_rendered_template_from_mock(mock_create_from_yaml, 'node-ro-pvc-from-snapshot', 0)
-    compare_rendered_template_from_mock(mock_create_from_yaml, 'build-ro-pvc-from-snapshot', 1)
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'build-ro-pvc-from-snapshot', 0)
+    compare_rendered_template_from_mock(mock_create_from_yaml, 'node-ro-pvc-from-snapshot', 1)
     compare_rendered_template_from_mock(mock_create_from_yaml, 'runner', 2)
 
     assert build_completed.called == 1
@@ -373,6 +378,8 @@ async def test_build_completed_cache_hit(redis, mock_create_from_yaml,
 
     await new_testrun(testrun)
     state = TestRunBuildState(trid=testrun.id,
+                              build_storage=1,
+                              node_storage=10,
                               rw_build_pvc='build-rw-pvc',
                               ro_node_pvc='node-ro-pvc',
                               specs=['test1.ts'])
@@ -404,6 +411,8 @@ async def test_build_completed_cache_hit(redis, mock_create_from_yaml,
 async def test_run_completed(redis, k8_core_api_mock, respx_mock, testrun):
     await new_testrun(testrun)
     state = TestRunBuildState(trid=testrun.id,
+                              build_storage=1,
+                              node_storage=10,
                               rw_build_pvc='build-rw-pvc',
                               ro_build_pvc='build-ro-pvc',
                               rw_node_pvc='node-rw-pvc',

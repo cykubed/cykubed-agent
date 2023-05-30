@@ -15,13 +15,13 @@ import db
 from app import app
 from common import schemas
 from common.exceptions import InvalidTemplateException, BuildFailedException
-from common.k8common import get_custom_api
 from common.redisutils import async_redis
 from common.schemas import AgentCloneCompletedEvent, AgentEvent
 from common.utils import utcnow
 from db import get_testrun, expired_cached_items_iter, get_cached_item, remove_cached_item, add_cached_item, \
     add_build_snapshot_cache_item, get_build_snapshot_cache_item
-from k8 import async_get_snapshot, async_delete_pvc, async_delete_snapshot, async_delete_job, async_get_job_status
+from k8 import async_get_snapshot, async_delete_pvc, async_delete_snapshot, async_delete_job, async_get_job_status, \
+    async_create_snapshot
 from settings import settings
 from state import TestRunBuildState, get_build_state
 
@@ -65,11 +65,7 @@ async def create_k8_snapshot(jobtype, context):
     """
     try:
         yamlobjects = await render_template(jobtype, context)
-        get_custom_api().create_namespaced_custom_object(group="snapshot.storage.k8s.io",
-                                                         version="v1",
-                                                         namespace=settings.NAMESPACE,
-                                                         plural="volumesnapshots",
-                                                         body=yamlobjects[0])
+        await async_create_snapshot(yamlobjects[0])
     except YAMLError as ex:
         raise InvalidTemplateException(f'Invalid YAML in {jobtype} template: {ex}')
     except ChevronError as ex:
@@ -138,7 +134,7 @@ async def handle_new_run(testrun: schemas.NewTestRun):
             await delete_cache_item(node_cache_item)
             await create_clone_job(testrun, state)
         else:
-            # otherwise we can directly created the RO PVCs and the runner job
+            # otherwise we can directly create the RO PVCs and the runner job
             logger.info(f'Found cached build for sha {testrun.sha}: reuse')
             state.node_snapshot_name = node_cache_item.name
             state.specs = build_snap_cache_item.specs
@@ -161,11 +157,12 @@ async def create_ro_pvcs_and_runner_job(testrun, state):
     context['storage'] = state.build_storage
     state.ro_build_pvc = context['ro_pvc_name'] = get_new_pvc_name('build-ro')
     await create_k8_objects('ro-pvc-from-snapshot', context)
-    # ditto for the node snapshot
-    context['snapshot_name'] = state.node_snapshot_name
-    context['storage'] = state.node_storage
-    state.ro_node_pvc = context['ro_pvc_name'] = get_new_pvc_name('node-ro')
-    await create_k8_objects('ro-pvc-from-snapshot', context)
+    if not state.ro_node_pvc:
+        # ditto for the node snapshot if required
+        context['snapshot_name'] = state.node_snapshot_name
+        context['storage'] = state.node_storage
+        state.ro_node_pvc = context['ro_pvc_name'] = get_new_pvc_name('node-ro')
+        await create_k8_objects('ro-pvc-from-snapshot', context)
     await state.save()
     # tell the main server
     await state.notify_build_completed()

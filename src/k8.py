@@ -45,6 +45,14 @@ def delete_snapshot(name: str):
             raise BuildFailedException(f'Failed to delete snapshot')
 
 
+def create_snapshot(yamlobjects):
+    get_custom_api().create_namespaced_custom_object(group="snapshot.storage.k8s.io",
+                                                     version="v1",
+                                                     namespace=settings.NAMESPACE,
+                                                     plural="volumesnapshots",
+                                                     body=yamlobjects)
+
+
 def get_snapshot(name: str):
     try:
         return get_custom_api().get_namespaced_custom_object(group="snapshot.storage.k8s.io",
@@ -124,3 +132,7 @@ async def async_get_pvc(name: str):
 
 async def async_is_pod_running(podname: str):
     return await asyncio.to_thread(is_pod_running, podname)
+
+
+async def async_create_snapshot(yamlobjects):
+    return await asyncio.to_thread(create_snapshot, yamlobjects)

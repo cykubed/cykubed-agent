@@ -34,7 +34,9 @@ async def project() -> Project:
                    platform=PlatformEnum.GITHUB,
                    build_cpu='4.0',
                    build_memory=6.0,
-                   build_ephemeral_storage=10,
+                   build_storage=1,
+                   node_storage=10,
+                   build_ephemeral_storage=3,
                    runner_cpu='2',
                    runner_memory=4.0,
                    runner_image='cykubed-runner:1234',
@@ -46,14 +48,14 @@ async def project() -> Project:
 @pytest.fixture()
 def k8_core_api_mock(mocker):
     core_api_mock = mocker.MagicMock()
-    mocker.patch('jobs.get_core_api', return_value=core_api_mock)
+    mocker.patch('k8.get_core_api', return_value=core_api_mock)
     return core_api_mock
 
 
 @pytest.fixture()
 def k8_custom_api_mock(mocker):
     api_mock = mocker.MagicMock()
-    mocker.patch('jobs.get_custom_api', return_value=api_mock)
+    mocker.patch('k8.get_custom_api', return_value=api_mock)
     return api_mock
 
 
