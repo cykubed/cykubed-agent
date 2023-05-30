@@ -17,7 +17,7 @@ metadata:
   name: cykubed-storageclass
   namespace: {{ .Release.Namespace }}
 parameters:
-  type: pd-ssd
+  type: pd-balanced
 provisioner: pd.csi.storage.gke.io
 reclaimPolicy: Delete
 volumeBindingMode: WaitForFirstConsumer
