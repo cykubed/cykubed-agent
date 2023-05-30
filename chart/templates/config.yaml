@@ -6,6 +6,9 @@ metadata:
 type: Opaque
 data:
   API_TOKEN: {{ required "Please specify the token" .Values.token | b64enc }}
+{{ if .Values.sentryDsn }}
+  SENTRY_DSN: {{ .Values.sentryDsn | b64enc }}
+{{ end }}
 ---
 apiVersion: v1
 kind: ConfigMap
