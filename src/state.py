@@ -16,6 +16,8 @@ class TestRunBuildState(BaseModel):
     specs: list[str] = []
     parallelism: Optional[int]
     node_snapshot_name: Optional[str]
+    build_storage: int
+    node_storage: int
     clone_job: str = None
     build_job: str = None
     run_job: str = None
