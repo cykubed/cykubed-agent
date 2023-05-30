@@ -36,10 +36,11 @@ async def project() -> Project:
                    build_memory=6.0,
                    build_storage=1,
                    node_storage=10,
-                   build_ephemeral_storage=3,
+                   build_ephemeral_storage=4,
                    runner_cpu='2',
                    runner_memory=4.0,
                    runner_image='cykubed-runner:1234',
+                   runner_ephemeral_storage=2,
                    url='git@github.org/dummy.git',
                    build_deadline=3600,
                    organisation=org)

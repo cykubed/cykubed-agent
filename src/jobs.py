@@ -16,7 +16,7 @@ from app import app
 from common import schemas
 from common.exceptions import InvalidTemplateException, BuildFailedException
 from common.redisutils import async_redis
-from common.schemas import AgentCloneCompletedEvent, AgentEvent
+from common.schemas import AgentCloneCompletedEvent, AgentEvent, TestRunErrorReport
 from common.utils import utcnow
 from db import get_testrun, expired_cached_items_iter, get_cached_item, remove_cached_item, add_cached_item, \
     add_build_snapshot_cache_item, get_build_snapshot_cache_item
@@ -321,27 +321,49 @@ async def prune_cache_loop():
         await asyncio.sleep(300)
 
 
-async def run_job_tracker():
+async def check_jobs_for_testrun(st: TestRunBuildState):
+    logger.debug(f'Check jobs for testrun {st.trid}')
     r = async_redis()
+    if st.build_job and not st.run_job:
+        status = await async_get_job_status(st.build_job)
+        if status.failed:
+            tr = await get_testrun(st.trid)
+            # report it as failed
+            if tr and tr.status != 'failed':
+                logger.info(f'Build for {st.trid} failed')
+                errmsg = TestRunErrorReport(stage='build', msg='Build failed')
+                await handle_testrun_error(schemas.AgentTestRunErrorEvent(testrun_id=st.trid,
+                                                                          report=errmsg))
+                return
+
+    if st.run_job and utcnow() < st.runner_deadline:
+        # check if the job is finished and we still have remaining specs
+        status = await async_get_job_status(st.run_job)
+        if status and status.start_time and status.completion_time and not status.active:
+            numspecs = await r.scard(f'testrun:{st.trid}:specs')
+            if numspecs:
+                tr = await get_testrun(st.trid)
+                logger.info(f'Run job {st.trid} is not active but has {numspecs} specs left - recreate it')
+                st.run_job_index += 1
+                # delete the existing job
+                await async_delete_job(st.run_job)
+                # and create a new one
+                await create_runner_job(tr, st)
+
+
+async def check_jobs():
+    r = async_redis()
+    async for key in r.scan_iter('testrun:state:*', count=100):
+        st = TestRunBuildState.parse_raw(await r.get(key))
+        if st:
+            await check_jobs_for_testrun(st)
+
+
+async def run_job_tracker():
     logger.info('Running job tracker')
     while app.is_running():
-        async for key in r.scan_iter('testrun:state:*', count=100):
-            st = await get_build_state(key, False)
-            if st and st.run_job and utcnow() < st.runner_deadline:
-                # check if the job is finished and we still have remaining specs
-                status = await async_get_job_status(st.run_job)
-                if status and status.start_time and status.completion_time and not status.active:
-                    numspecs = await r.scard(f'testrun:{st.trid}:specs')
-                    if numspecs:
-                        tr = await get_testrun(st.trid)
-                        logger.info(f'Run job {st.trid} is not active but has {numspecs} specs left - recreate it')
-                        st.run_job_index += 1
-                        # delete the existing job
-                        await async_delete_job(st.run_job)
-                        # and create a new one
-                        await create_runner_job(tr, st)
-
         await asyncio.sleep(30)
+        await check_jobs()
 
 
 async def delete_cache_item(item):
