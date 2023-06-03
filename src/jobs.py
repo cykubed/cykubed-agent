@@ -326,7 +326,7 @@ async def check_jobs_for_testrun(st: TestRunBuildState):
     r = async_redis()
     if st.build_job and not st.run_job:
         status = await async_get_job_status(st.build_job)
-        if status.failed:
+        if status and status.failed:
             tr = await get_testrun(st.trid)
             # report it as failed
             if tr and tr.status != 'failed':

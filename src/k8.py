@@ -87,7 +87,7 @@ def get_job_status(name: str) -> V1JobStatus:
     except ApiException as ex:
         if ex.status != 404:
             logger.exception('Failed to fetch job status')
-        return False
+        return None
 
 
 def is_pod_running(podname: str):
