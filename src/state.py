@@ -15,18 +15,15 @@ class TestRunBuildState(BaseModel):
     trid: int
     specs: list[str] = []
     parallelism: Optional[int]
-    node_snapshot_name: Optional[str]
     build_storage: int
-    node_storage: int
     clone_job: str = None
     build_job: str = None
+    prepare_cache_job: str = None
     run_job: str = None
     runner_deadline: datetime.datetime = None
     run_job_index = 0
     rw_build_pvc: str
-    rw_node_pvc: Optional[str]
     ro_build_pvc: Optional[str]
-    ro_node_pvc: Optional[str]
 
     async def get_duration(self, cmd: str, spot: bool):
         spot_or_normal = 'spot' if spot else 'normal'

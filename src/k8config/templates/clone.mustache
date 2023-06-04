@@ -24,7 +24,7 @@ spec:
       volumes:
         - name: build-volume
           persistentVolumeClaim:
-            claimName: "{{build_pvc_name}}"
+            claimName: "{{pvc_name}}"
       restartPolicy: Never
       priorityClassName: "cykubed-low-priority"
       containers:

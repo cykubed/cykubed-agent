@@ -60,7 +60,7 @@ async def add_cached_item(key: str,
 async def add_build_snapshot_cache_item(sha: str, node_snapshot_name: str, specs: list[str],
                                         storage_size: int) -> CacheItem:
     return await add_cached_item(f'build-{sha}', ttl=settings.APP_DISTRIBUTION_CACHE_TTL,
-                                 node_snapshot=node_snapshot_name, specs=specs,
+                                 specs=specs,
                                  storage_size=storage_size)
 
 

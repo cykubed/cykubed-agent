@@ -12,7 +12,18 @@ metadata:
 spec:
   storageClassName: "{{storage_class}}"
   accessModes:
+{{#read_only}}
+    - ReadOnlyMany
+{{/read_only}}
+{{^read_only}}
     - ReadWriteOnce
+{{/read_only}}
+{{#snapshot_name}}
+  dataSource:
+    apiGroup: snapshot.storage.k8s.io
+    kind: VolumeSnapshot
+    name: "{{snapshot_name}}"
+{{/snapshot_name}}
   resources:
     requests:
       storage: "{{storage}}Gi"
