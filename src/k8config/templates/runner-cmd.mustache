@@ -43,7 +43,7 @@ spec:
               name: cykubed-agent-configmap
           - secretRef:
               name: cykubed-agent-secrets
-        args: [ "clone", "{{testrun_id}}"]
+        args: [ "{{command}}", "{{testrun_id}}"]
         resources:
           limits:
             cpu: 200m

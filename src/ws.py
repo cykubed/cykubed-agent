@@ -14,7 +14,8 @@ import state
 from app import app
 from common.enums import AgentEventType
 from common.redisutils import async_redis, ping_redis, get_specfile_log_key
-from common.schemas import NewTestRun, AgentEvent, AgentCloneCompletedEvent, AgentTestRunErrorEvent
+from common.schemas import NewTestRun, AgentEvent, AgentCloneCompletedEvent, AgentTestRunErrorEvent, \
+    AgentBuildCompletedEvent
 from settings import settings
 
 
@@ -95,12 +96,9 @@ async def consumer_handler(websocket):
 async def handle_agent_message(websocket, rawmsg: str):
     event = AgentEvent.parse_raw(rawmsg)
     # logger.debug(f'Msg: {event.type} for {event.testrun_id}')
-    if event.type == AgentEventType.clone_completed:
-        # clone completed - kick off the build
-        await jobs.handle_clone_completed(AgentCloneCompletedEvent.parse_raw(rawmsg))
-    elif event.type == AgentEventType.build_completed:
+    if event.type == AgentEventType.build_completed:
         # build completed - create runner jobs
-        await jobs.handle_build_completed(event)
+        await jobs.handle_build_completed(AgentBuildCompletedEvent.parse_raw(rawmsg))
     elif event.type == AgentEventType.error:
         await jobs.handle_testrun_error(AgentTestRunErrorEvent.parse_raw(rawmsg))
     elif event.type == AgentEventType.run_completed:

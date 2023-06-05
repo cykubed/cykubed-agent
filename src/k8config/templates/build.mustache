@@ -22,15 +22,9 @@ spec:
         runAsGroup: 10000
       serviceAccountName: "cykubed"
       volumes:
-        - name: node-volume
-          persistentVolumeClaim:
-            claimName: "{{node_pvc_name}}"
-{{#snapshot_name}}
-            readOnly: true
-{{/snapshot_name}}
         - name: build-volume
           persistentVolumeClaim:
-            claimName: "{{build_pvc_name}}"
+            claimName: "{{pvc_name}}"
       restartPolicy: Never
       priorityClassName: "cykubed-low-priority"
       containers:
@@ -44,8 +38,6 @@ spec:
               key: "redis-password"
         - name: BUILD_DIR
           value: "/build"
-        - name: NODE_CACHE_DIR
-          value: "/node"
         envFrom:
           - configMapRef:
               name: cykubed-agent-configmap
@@ -62,7 +54,5 @@ spec:
             memory: "{{project.build_memory}}G"
             ephemeral-storage: "{{project.build_ephemeral_storage}}Gi"
         volumeMounts:
-        - mountPath: "/node"
-          name: node-volume
         - mountPath: "/build"
           name: build-volume

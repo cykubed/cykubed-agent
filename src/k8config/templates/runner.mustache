@@ -27,11 +27,7 @@ spec:
         - name: build-volume
           persistentVolumeClaim:
             readOnly: true
-            claimName: "{{build_pvc_name}}"
-        - name: node-volume
-          persistentVolumeClaim:
-            readOnly: true
-            claimName: "{{node_pvc_name}}"
+            claimName: "{{pvc_name}}"
       {{#project.spot_enabled}}
         - name: podinfo
           downwardAPI:
@@ -63,8 +59,6 @@ spec:
         env:
         - name: BUILD_DIR
           value: "/build"
-        - name: NODE_CACHE_DIR
-          value: "/node"
         - name: CYPRESS_RETRIES
           value: "{{cypress_retries}}"
         - name: TZ
@@ -92,8 +86,6 @@ spec:
         volumeMounts:
         - mountPath: "/build"
           name: build-volume
-        - mountPath: "/node"
-          name: node-volume
         {{#project.spot_enabled}}
         - name: podinfo
           mountPath: /etc/podinfo
