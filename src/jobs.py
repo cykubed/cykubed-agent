@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import os
+import sys
 import tempfile
 import uuid
 
@@ -8,7 +9,7 @@ import aiofiles
 import chevron
 import yaml
 from chevron import ChevronError
-from kubernetes import client, utils as k8utils
+from kubernetes_asyncio import client, watch, utils as k8utils
 from loguru import logger
 from yaml import YAMLError
 
@@ -17,13 +18,15 @@ from app import app
 from common import schemas
 from common.exceptions import InvalidTemplateException, BuildFailedException
 from common.redisutils import async_redis
-from common.schemas import  TestRunErrorReport, AgentBuildCompletedEvent
+from common.schemas import TestRunErrorReport, AgentBuildCompletedEvent
 from common.utils import utcnow, get_lock_hash
-from db import get_testrun, expired_cached_items_iter, get_cached_item, remove_cached_item, add_cached_item, \
+from db import get_testrun, expired_cached_items_iter, get_cached_item, remove_cached_item, \
     add_build_snapshot_cache_item, get_build_snapshot_cache_item
 from k8 import async_get_snapshot, async_delete_pvc, async_delete_snapshot, async_delete_job, async_get_job_status, \
     async_create_snapshot
 from settings import settings
+from src.common import k8common
+from src.common.k8common import get_core_api
 from state import TestRunBuildState, get_build_state
 
 TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), 'k8config', 'templates')
@@ -73,6 +76,18 @@ async def create_k8_snapshot(jobtype, context):
         raise InvalidTemplateException(f'Invalid {jobtype} template: {ex}')
 
 
+async def wait_for_pvc_ready(pvc_name: str):
+    v1 = get_core_api()
+    async with watch.Watch().stream(v1.list_namespaced_persistent_volume_claim,
+                                    field_selector=f"metadata.name={pvc_name}",
+                                    namespace=settings.NAMESPACE, timeout_seconds=10) as stream:
+        async for event in stream:
+            pvcobj = event['object']
+            if pvcobj.status.phase == 'Bound':
+                logger.debug(f'PVC {pvc_name} is bound')
+                return
+
+
 async def create_k8_objects(jobtype, context) -> str:
     try:
         k8sclient = client.ApiClient()
@@ -82,8 +97,9 @@ async def create_k8_objects(jobtype, context) -> str:
         name = yamlobjects[0]['metadata']['name']
         logger.info(f'Creating {kind} {name}', id=context['testrun_id'])
         if settings.K8:
-            await asyncio.to_thread(k8utils.create_from_yaml, k8sclient,
-                                    yaml_objects=yamlobjects, namespace=settings.NAMESPACE)
+            await k8utils.create_from_dict(k8sclient,
+                                           yamlobjects,
+                                           namespace=settings.NAMESPACE)
         else:
             logger.debug(f"K8 disabled: not creating {name}")
         return name
@@ -223,29 +239,15 @@ async def handle_build_completed(event: AgentBuildCompletedEvent):
     # and create the runner job
     await create_runner_job(testrun, state)
 
-    # best approach now is probably to wait for RO PVC to be created, and then kick off a job to prepare the cache
+    # wait for the RO PVC to be bound
+    await wait_for_pvc_ready(state.ro_build_pvc)
 
-    if not state.node_snapshot_name:
-        # we need to prepare the cache - make another PVC to avoid race conditions
-        #  Either wait for RO PVC to be created
-        context = common_context(testrun,
-                                 snapshot_name=get_build_snapshot_name(testrun),
-                                 pvc_name=state.rw_build_pvc)
-
-
-async def create_ro_pvc_and_runner_job(testrun, state):
-    """
-    Create RO build and node PVCs from the snapshots and the build the runner job
-    """
-    await db.set_specs(testrun, state.specs)
-    # create a RO PVC from the build snapshot
-    context = common_context(testrun)
-    context['snapshot_name'] = get_build_snapshot_name(testrun)
-    context['storage'] = state.build_storage
-    state.ro_build_pvc = context['ro_pvc_name'] = get_new_pvc_name('build-ro')
-    await create_k8_objects('ro-pvc-from-snapshot', context)
-    await state.save()
-
+    # now create the prepare job - this just deletes the src folder and moves node_modules
+    # and cypress_cache to the root folder
+    context = common_context(testrun,
+                             command='prepare_cache',
+                             pvc_name=state.rw_build_pvc)
+    await create_k8_objects('prepare-cache', context)
 
 
 async def create_runner_job(testrun: schemas.NewTestRun, state: TestRunBuildState):

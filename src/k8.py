@@ -1,26 +1,25 @@
 import asyncio
 
-from kubernetes import client
-from kubernetes.client import ApiException, V1JobStatus
+from kubernetes_asyncio.client import ApiException, V1JobStatus
 from loguru import logger
 
 from common.exceptions import BuildFailedException
-from common.k8common import get_core_api, get_custom_api, get_batch_api
 from settings import settings
+from src.common.k8common import get_batch_api, get_custom_api, get_core_api
 
 
-def delete_pvc(name: str):
+async def async_delete_pvc(name: str):
     try:
-        get_core_api().delete_namespaced_persistent_volume_claim(name, settings.NAMESPACE)
+        await get_core_api().delete_namespaced_persistent_volume_claim(name, settings.NAMESPACE)
     except ApiException as ex:
         if ex.status != 404:
             logger.exception('Failed to delete PVC')
 
 
-def get_pvc(pvc_name: str) -> bool:
+async def async_get_pvc(pvc_name: str) -> bool:
     # check if the PVC exists
     try:
-        return get_core_api().read_namespaced_persistent_volume_claim(pvc_name, settings.NAMESPACE)
+        return await get_core_api().read_namespaced_persistent_volume_claim(pvc_name, settings.NAMESPACE)
     except ApiException as ex:
         if ex.status == 404:
             return False
@@ -28,7 +27,7 @@ def get_pvc(pvc_name: str) -> bool:
             raise BuildFailedException('Failed to determine existence of build PVC')
 
 
-def delete_snapshot(name: str):
+def async_delete_snapshot(name: str):
     try:
         logger.debug(f'Delete snapshot {name}')
         get_custom_api().delete_namespaced_custom_object(group="snapshot.storage.k8s.io",
@@ -67,36 +66,16 @@ def get_snapshot(name: str):
             raise BuildFailedException('Failed to determine existence of snapshot')
 
 
-def delete_job(name: str):
-    try:
-        logger.info(f"Deleting existing job {name}")
-        get_batch_api().delete_namespaced_job(name, settings.NAMESPACE,
-                                                  propagation_policy='Background')
-    except ApiException as ex:
-        if ex.status == 404:
-            return
-        else:
-            logger.error(f'Failed to delete job {name}')
-
-
-def get_job_status(name: str) -> V1JobStatus:
+async def async_get_job_status(name: str) -> V1JobStatus:
     api = get_batch_api()
     try:
-        job = api.read_namespaced_job_status(name=name, namespace=settings.NAMESPACE)
+        job = await api.read_namespaced_job_status(name=name, namespace=settings.NAMESPACE)
         return job.status
     except ApiException as ex:
         if ex.status != 404:
             logger.exception('Failed to fetch job status')
         return None
 
-
-def is_pod_running(podname: str):
-    v1 = client.CoreV1Api()
-    try:
-        v1.read_namespaced_pod(podname, settings.NAMESPACE)
-        return True
-    except ApiException:
-        return False
 
 #
 # Async
@@ -107,30 +86,15 @@ async def async_get_snapshot(name: str):
     return await asyncio.to_thread(get_snapshot, name)
 
 
-async def async_delete_pvc(name: str):
-    await asyncio.to_thread(delete_pvc, name)
-
-
-async def async_delete_snapshot(name: str):
-    await asyncio.to_thread(delete_snapshot, name)
-
-
 async def async_delete_job(name: str):
-    await asyncio.to_thread(delete_job, name)
-
-
-async def async_get_job_status(name: str) -> V1JobStatus:
-    if name:
-        return await asyncio.to_thread(get_job_status, name)
-    return None
-
-
-async def async_get_pvc(name: str):
-    return await asyncio.to_thread(get_pvc, name)
-
-
-async def async_is_pod_running(podname: str):
-    return await asyncio.to_thread(is_pod_running, podname)
+    try:
+        await get_batch_api().delete_namespaced_job(name, settings.NAMESPACE,
+                                                    propagation_policy='Background')
+    except ApiException as ex:
+        if ex.status == 404:
+            return
+        else:
+            logger.error(f'Failed to delete job {name}')
 
 
 async def async_create_snapshot(yamlobjects):

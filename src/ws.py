@@ -14,7 +14,7 @@ import state
 from app import app
 from common.enums import AgentEventType
 from common.redisutils import async_redis, ping_redis, get_specfile_log_key
-from common.schemas import NewTestRun, AgentEvent, AgentCloneCompletedEvent, AgentTestRunErrorEvent, \
+from common.schemas import NewTestRun, AgentEvent, AgentTestRunErrorEvent, \
     AgentBuildCompletedEvent
 from settings import settings
 
@@ -88,25 +88,29 @@ async def consumer_handler(websocket):
         except ConnectionClosed:
             return
         try:
+            # FIXME move this to a task
             await handle_websocket_message(json.loads(message))
         except Exception:
             logger.exception(f'Failed to handle msg {message}')
 
 
 async def handle_agent_message(websocket, rawmsg: str):
-    event = AgentEvent.parse_raw(rawmsg)
-    # logger.debug(f'Msg: {event.type} for {event.testrun_id}')
-    if event.type == AgentEventType.build_completed:
-        # build completed - create runner jobs
-        await jobs.handle_build_completed(AgentBuildCompletedEvent.parse_raw(rawmsg))
-    elif event.type == AgentEventType.error:
-        await jobs.handle_testrun_error(AgentTestRunErrorEvent.parse_raw(rawmsg))
-    elif event.type == AgentEventType.run_completed:
-        # run completed - notify and clean up
-        await jobs.handle_run_completed(event.testrun_id)
-    else:
-        # post everything else through the websocket
-        await websocket.send(rawmsg)
+    try:
+        event = AgentEvent.parse_raw(rawmsg)
+        # logger.debug(f'Msg: {event.type} for {event.testrun_id}')
+        if event.type == AgentEventType.build_completed:
+            # build completed - create runner jobs
+            await jobs.handle_build_completed(AgentBuildCompletedEvent.parse_raw(rawmsg))
+        elif event.type == AgentEventType.error:
+            await jobs.handle_testrun_error(AgentTestRunErrorEvent.parse_raw(rawmsg))
+        elif event.type == AgentEventType.run_completed:
+            # run completed - notify and clean up
+            await jobs.handle_run_completed(event.testrun_id)
+        else:
+            # post everything else through the websocket
+            await websocket.send(rawmsg)
+    except Exception:
+        logger.exception(f'Failed to handle agent message {rawmsg}')
 
 
 async def producer_handler(websocket):
@@ -116,10 +120,7 @@ async def producer_handler(websocket):
             msgitem = await redis.blpop('messages', 10)
             if msgitem:
                 rawmsg = msgitem[1]
-                try:
-                    await handle_agent_message(websocket, rawmsg)
-                except Exception:
-                    logger.exception(f'Failed to handle agent message {rawmsg}')
+                asyncio.create_task(handle_agent_message(websocket, rawmsg))
         except RedisError as ex:
             if not app.is_running():
                 return

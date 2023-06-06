@@ -31,6 +31,10 @@ async def hc_server():
 
 
 async def run():
+
+    if settings.K8 and not settings.TEST:
+        await k8common.init()
+
     tasks = [asyncio.create_task(hc_server()),
              asyncio.create_task(ws.connect())]
     if app.hostname == 'agent-0':
@@ -60,8 +64,6 @@ if __name__ == "__main__":
 
     logger.info("Connected to Redis")
 
-    if settings.K8 and not settings.TEST:
-        k8common.init()
     try:
         asyncio.run(run())
     except KeyboardInterrupt:

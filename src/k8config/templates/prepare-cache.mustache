@@ -43,7 +43,7 @@ spec:
               name: cykubed-agent-configmap
           - secretRef:
               name: cykubed-agent-secrets
-        args: [ "{{command}}", "{{testrun_id}}"]
+        args: [ "prepare_cache", "{{testrun_id}}"]
         resources:
           limits:
             cpu: 200m
