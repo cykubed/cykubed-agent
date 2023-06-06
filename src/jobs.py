@@ -45,6 +45,7 @@ def common_context(testrun: schemas.NewTestRun, **kwargs):
     return dict(sha=testrun.sha,
                 namespace=settings.NAMESPACE,
                 storage_class=settings.STORAGE_CLASS,
+                storage=testrun.project.build_storage,
                 local_id=testrun.local_id,
                 testrun_id=testrun.id,
                 testrun=testrun,
@@ -153,7 +154,7 @@ async def handle_new_run(testrun: schemas.NewTestRun):
     # stop existing jobs
     await delete_jobs_for_branch(testrun.id, testrun.branch)
     state = TestRunBuildState(trid=testrun.id,
-                              rw_build_pvc=get_new_pvc_name('build-rw'),
+                              rw_build_pvc=get_new_pvc_name('rw'),
                               build_storage=testrun.project.build_storage)
     await state.save()
 
@@ -161,13 +162,16 @@ async def handle_new_run(testrun: schemas.NewTestRun):
     if build_snap_cache_item:
         # this is a rerun of a previous build - just create the RO PVC and runner job
         logger.info(f'Found cached build for sha {testrun.sha}: reuse')
+        state.ro_build_pvc = get_new_pvc_name('ro')
         context = common_context(testrun,
                                  read_only=True, snapshot_name=build_snap_cache_item.name,
-                                 pvc_name=get_new_pvc_name('ro'))
+                                 pvc_name=state.ro_build_pvc)
         await create_k8_objects('pvc', context)
         state.specs = build_snap_cache_item.specs
         state.build_storage = build_snap_cache_item.storage_size
         await state.save()
+        await db.set_specs(testrun, state.specs)
+        await state.notify_build_completed()
         await create_runner_job(testrun, state)
     else:
         # First check to see if there is a node cache for this build
@@ -188,6 +192,7 @@ async def handle_new_run(testrun: schemas.NewTestRun):
         # and create the build job
         state.build_job = await create_k8_objects('build', context)
         await state.save()
+        await app.update_status(testrun.id, 'building')
 
 
 def get_build_snapshot_name(testrun):
@@ -217,9 +222,7 @@ async def handle_build_completed(event: AgentBuildCompletedEvent):
 
     await db.set_specs(testrun, state.specs)
 
-    # tell the main server
-    await state.notify_build_completed()
-
+    # create a snapshot from the build PVC
     context = common_context(testrun,
                              snapshot_name=get_build_snapshot_name(testrun),
                              pvc_name=state.rw_build_pvc)
@@ -231,23 +234,30 @@ async def handle_build_completed(event: AgentBuildCompletedEvent):
                                         testrun.project.build_storage)
 
     # create a RO PVC from this snapshot and a runner that uses it
-    state.ro_build_pvc = get_new_pvc_name('build-ro')
+    state.ro_build_pvc = get_new_pvc_name('ro')
+    await state.save()
     context.update(dict(pvc_name=state.ro_build_pvc,
                         read_only=True))
     await create_k8_objects('pvc', context)
 
+    # tell the main server
+    await state.notify_build_completed()
+
     # and create the runner job
     await create_runner_job(testrun, state)
 
-    # wait for the RO PVC to be bound
-    await wait_for_pvc_ready(state.ro_build_pvc)
+    if not state.node_snapshot_name:
+        # we need to create a snapshot
+        # wait for the RO PVC to be bound
+        await wait_for_pvc_ready(state.ro_build_pvc)
 
-    # now create the prepare job - this just deletes the src folder and moves node_modules
-    # and cypress_cache to the root folder
-    context = common_context(testrun,
-                             command='prepare_cache',
-                             pvc_name=state.rw_build_pvc)
-    await create_k8_objects('prepare-cache', context)
+        # now create the prepare job - this just deletes the src folder and moves node_modules
+        # and cypress_cache to the root folder
+        context = common_context(testrun,
+                                 command='prepare_cache',
+                                 cache_key=state.cache_key,
+                                 pvc_name=state.rw_build_pvc)
+        await create_k8_objects('prepare-cache', context)
 
 
 async def handle_cache_prepared(testrun_id):
@@ -269,7 +279,7 @@ async def create_runner_job(testrun: schemas.NewTestRun, state: TestRunBuildStat
     context = common_context(testrun)
     context.update(dict(name=f'cykubed-runner-{testrun.project.name}-{testrun.id}-{state.run_job_index}',
                         parallelism=min(testrun.project.parallelism, len(state.specs)),
-                        build_pvc_name=state.ro_build_pvc))
+                        pvc_name=state.ro_build_pvc))
     if not state.runner_deadline:
         state.runner_deadline = utcnow() + datetime.timedelta(seconds=testrun.project.runner_deadline)
     state.run_job = await create_k8_objects('runner', context)

@@ -7,12 +7,12 @@ metadata:
         project_id: '10'
         sha: deadbeef0101
         testrun_id: '20'
-    name: build-rw-pvc
+    name: rw-pvc
     namespace: cykubed
 spec:
     accessModes:
     - ReadWriteOnce
     resources:
         requests:
-            storage: 1Gi
+            storage: 10Gi
     storageClassName: cykubed-storageclass

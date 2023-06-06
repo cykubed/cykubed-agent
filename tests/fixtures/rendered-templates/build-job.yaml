@@ -3,20 +3,20 @@ kind: Job
 metadata:
     labels:
         branch: master
-        cykubed-job: checkout
+        cykubed-job: builder
         local_id: '1'
         project_id: '10'
         testrun_id: '20'
-    name: cykubed-clone-20-deadbeef0101
+    name: cykubed-build-project-20
     namespace: cykubed
 spec:
-    activeDeadlineSeconds: 600
-    backoffLimit: 5
+    activeDeadlineSeconds: 3600
+    backoffLimit: 0
     template:
         spec:
             containers:
             -   args:
-                - clone
+                - build
                 - '20'
                 env:
                 -   name: REDIS_PASSWORD
@@ -32,14 +32,16 @@ spec:
                 -   secretRef:
                         name: cykubed-agent-secrets
                 image: cykubed-runner:1234
-                name: cloner
+                name: cykubed-builder
                 resources:
                     limits:
-                        cpu: 200m
-                        memory: 1G
+                        cpu: '4.0'
+                        ephemeral-storage: 4Gi
+                        memory: 6.0G
                     requests:
-                        cpu: 200m
-                        memory: 1G
+                        cpu: '4.0'
+                        ephemeral-storage: 4Gi
+                        memory: 6.0G
                 volumeMounts:
                 -   mountPath: /build
                     name: build-volume
@@ -54,5 +56,5 @@ spec:
             volumes:
             -   name: build-volume
                 persistentVolumeClaim:
-                    claimName: build-rw-pvc
-    ttlSecondsAfterFinished: 600
+                    claimName: rw-pvc
+    ttlSecondsAfterFinished: 3600

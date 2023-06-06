@@ -5,5 +5,5 @@ metadata:
     namespace: cykubed
 spec:
     source:
-        persistentVolumeClaimName: node-rw-pvc
+        persistentVolumeClaimName: rw-pvc
     volumeSnapshotClassName: cykubed-snapshotclass

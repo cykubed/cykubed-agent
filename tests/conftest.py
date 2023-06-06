@@ -1,4 +1,5 @@
 import pytest
+from httpx import Response
 from loguru import logger
 from redis import Redis
 from redis.asyncio import Redis as AsyncRedis
@@ -18,9 +19,9 @@ def redis(mocker, autouse=True):
 
 
 @pytest.fixture()
-def mock_create_from_yaml(mocker):
+def mock_create_from_dict(mocker):
     mocker.patch('jobs.client')
-    return mocker.patch('jobs.k8utils.create_from_yaml')
+    return mocker.patch('jobs.k8utils.create_from_dict')
 
 
 @pytest.fixture()
@@ -34,8 +35,7 @@ async def project() -> Project:
                    platform=PlatformEnum.GITHUB,
                    build_cpu='4.0',
                    build_memory=6.0,
-                   build_storage=1,
-                   node_storage=10,
+                   build_storage=10,
                    build_ephemeral_storage=4,
                    runner_cpu='2',
                    runner_memory=4.0,
@@ -76,3 +76,9 @@ def testrun(project: Project) -> NewTestRun:
                       project=project,
                       status='started',
                       branch='master')
+
+
+@pytest.fixture()
+def post_building_status(respx_mock):
+    return respx_mock.post('https://api.cykubed.com/agent/testrun/20/status/building') \
+            .mock(return_value=Response(200))

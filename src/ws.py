@@ -95,24 +95,21 @@ async def consumer_handler(websocket):
 
 
 async def handle_agent_message(websocket, rawmsg: str):
-    try:
-        event = AgentEvent.parse_raw(rawmsg)
-        # logger.debug(f'Msg: {event.type} for {event.testrun_id}')
-        if event.type == AgentEventType.build_completed:
-            # build completed - create runner jobs
-            await jobs.handle_build_completed(AgentBuildCompletedEvent.parse_raw(rawmsg))
-        elif event.type == AgentEventType.cache_prepared:
-            await jobs.handle_cache_prepared(event.testrun_id)
-        elif event.type == AgentEventType.error:
-            await jobs.handle_testrun_error(AgentTestRunErrorEvent.parse_raw(rawmsg))
-        elif event.type == AgentEventType.run_completed:
-            # run completed - notify and clean up
-            await jobs.handle_run_completed(event.testrun_id)
-        else:
-            # post everything else through the websocket
-            await websocket.send(rawmsg)
-    except Exception:
-        logger.exception(f'Failed to handle agent message {rawmsg}')
+    event = AgentEvent.parse_raw(rawmsg)
+    # logger.debug(f'Msg: {event.type} for {event.testrun_id}')
+    if event.type == AgentEventType.build_completed:
+        # build completed - create runner jobs
+        await jobs.handle_build_completed(AgentBuildCompletedEvent.parse_raw(rawmsg))
+    elif event.type == AgentEventType.cache_prepared:
+        await jobs.handle_cache_prepared(event.testrun_id)
+    elif event.type == AgentEventType.error:
+        await jobs.handle_testrun_error(AgentTestRunErrorEvent.parse_raw(rawmsg))
+    elif event.type == AgentEventType.run_completed:
+        # run completed - notify and clean up
+        await jobs.handle_run_completed(event.testrun_id)
+    else:
+        # post everything else through the websocket
+        await websocket.send(rawmsg)
 
 
 async def producer_handler(websocket):

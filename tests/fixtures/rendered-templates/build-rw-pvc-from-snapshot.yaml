@@ -7,11 +7,15 @@ metadata:
         project_id: '10'
         sha: deadbeef0101
         testrun_id: '20'
-    name: node-rw-pvc
+    name: rw-pvc
     namespace: cykubed
 spec:
     accessModes:
     - ReadWriteOnce
+    dataSource:
+        apiGroup: snapshot.storage.k8s.io
+        kind: VolumeSnapshot
+        name: node-absd234weefw
     resources:
         requests:
             storage: 10Gi

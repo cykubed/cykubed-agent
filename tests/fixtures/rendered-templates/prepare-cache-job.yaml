@@ -3,20 +3,20 @@ kind: Job
 metadata:
     labels:
         branch: master
-        cykubed-job: builder
+        cache_key: absd234weefw
+        cykubed-job: prepare-cache
         local_id: '1'
         project_id: '10'
         testrun_id: '20'
-    name: cykubed-build-project-20
+    name: cykubed-prepare-cache-absd234weefw
     namespace: cykubed
 spec:
-    activeDeadlineSeconds: 3600
     backoffLimit: 0
     template:
         spec:
             containers:
             -   args:
-                - build
+                - prepare_cache
                 - '20'
                 env:
                 -   name: REDIS_PASSWORD
@@ -26,27 +26,18 @@ spec:
                             name: cykubed-agent-redis
                 -   name: BUILD_DIR
                     value: /build
-                -   name: NODE_CACHE_DIR
-                    value: /node
                 envFrom:
                 -   configMapRef:
                         name: cykubed-agent-configmap
                 -   secretRef:
                         name: cykubed-agent-secrets
                 image: cykubed-runner:1234
-                name: cykubed-builder
+                name: prepare_cache
                 resources:
                     limits:
-                        cpu: '4.0'
-                        ephemeral-storage: 4Gi
-                        memory: 6.0G
-                    requests:
-                        cpu: '4.0'
-                        ephemeral-storage: 4Gi
-                        memory: 6.0G
+                        cpu: 200m
+                        memory: 1G
                 volumeMounts:
-                -   mountPath: /node
-                    name: node-volume
                 -   mountPath: /build
                     name: build-volume
             priorityClassName: cykubed-low-priority
@@ -58,10 +49,7 @@ spec:
                 runAsUser: 10000
             serviceAccountName: cykubed
             volumes:
-            -   name: node-volume
-                persistentVolumeClaim:
-                    claimName: node-rw-pvc
             -   name: build-volume
                 persistentVolumeClaim:
-                    claimName: build-rw-pvc
-    ttlSecondsAfterFinished: 3600
+                    claimName: rw-pvc
+    ttlSecondsAfterFinished: 60

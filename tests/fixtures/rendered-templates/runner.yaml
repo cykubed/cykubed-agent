@@ -28,8 +28,6 @@ spec:
                 env:
                 -   name: BUILD_DIR
                     value: /build
-                -   name: NODE_CACHE_DIR
-                    value: /node
                 -   name: CYPRESS_RETRIES
                     value: ''
                 -   name: TZ
@@ -58,8 +56,6 @@ spec:
                 volumeMounts:
                 -   mountPath: /build
                     name: build-volume
-                -   mountPath: /node
-                    name: node-volume
             priorityClassName: cykubed-low-priority
             restartPolicy: OnFailure
             securityContext:
@@ -71,10 +67,6 @@ spec:
             volumes:
             -   name: build-volume
                 persistentVolumeClaim:
-                    claimName: build-ro-pvc
-                    readOnly: true
-            -   name: node-volume
-                persistentVolumeClaim:
-                    claimName: node-ro-pvc
+                    claimName: ro-pvc
                     readOnly: true
     ttlSecondsAfterFinished: 3600
