@@ -101,6 +101,8 @@ async def handle_agent_message(websocket, rawmsg: str):
         if event.type == AgentEventType.build_completed:
             # build completed - create runner jobs
             await jobs.handle_build_completed(AgentBuildCompletedEvent.parse_raw(rawmsg))
+        elif event.type == AgentEventType.cache_prepared:
+            await jobs.handle_cache_prepared(event.testrun_id)
         elif event.type == AgentEventType.error:
             await jobs.handle_testrun_error(AgentTestRunErrorEvent.parse_raw(rawmsg))
         elif event.type == AgentEventType.run_completed:

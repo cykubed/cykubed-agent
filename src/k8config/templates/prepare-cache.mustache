@@ -11,8 +11,7 @@ metadata:
   namespace: "{{namespace}}"
 spec:
   backoffLimit: 5
-  ttlSecondsAfterFinished: 600
-  activeDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 60
   template:
     spec:
       securityContext:
@@ -28,7 +27,7 @@ spec:
       restartPolicy: Never
       priorityClassName: "cykubed-low-priority"
       containers:
-      - name: "cloner"
+      - name: "prepare_cache"
         image: "{{project.runner_image}}"
         env:
         - name: REDIS_PASSWORD
@@ -46,9 +45,6 @@ spec:
         args: [ "prepare_cache", "{{testrun_id}}"]
         resources:
           limits:
-            cpu: 200m
-            memory: 1G
-          requests:
             cpu: 200m
             memory: 1G
         volumeMounts:

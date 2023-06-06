@@ -250,6 +250,20 @@ async def handle_build_completed(event: AgentBuildCompletedEvent):
     await create_k8_objects('prepare-cache', context)
 
 
+async def handle_cache_prepared(testrun_id):
+    """
+    Create a snapshot from the RW PVC
+    """
+    testrun = await get_testrun(testrun_id)
+    state = await get_build_state(testrun_id, True)
+    name=f'node-{state.cache_key}'
+    context = common_context(testrun,
+                             snapshot_name=name,
+                             pvc_name=state.rw_build_pvc)
+    await create_k8_snapshot('pvc-snapshot', context)
+    await db.add_cached_item(name, state.build_storage)
+
+
 async def create_runner_job(testrun: schemas.NewTestRun, state: TestRunBuildState):
     # next create the runner job: limit the parallism as there's no point having more runners than specs
     context = common_context(testrun)
@@ -418,3 +432,5 @@ async def clear_cache():
     async for key in async_redis().scan_iter('cache:*'):
         item = await get_cached_item(key[6:], False)
         await delete_cache_item(item)
+
+
