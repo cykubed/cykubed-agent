@@ -26,7 +26,7 @@ def compare_rendered_template(yamlobjects, jobtype: str):
 def get_kind_and_names(create_from_yaml_mock):
     ret = []
     for args in create_from_yaml_mock.call_args_list:
-        yamlobjs = args[1]['yaml_objects'][0]
+        yamlobjs = args[0][1][0]
         ret.append((yamlobjs['kind'], yamlobjs['metadata']['name']))
     return ret
 
@@ -170,6 +170,8 @@ async def test_full_run(redis, mocker, mock_create_from_dict,
     mocker.patch('jobs.get_new_pvc_name', side_effect=lambda prefix: f'{prefix}-pvc')
     k8_create_custom = k8_custom_api_mock.create_namespaced_custom_object
     k8_delete_job = k8_batch_api_mock.delete_namespaced_job = mocker.AsyncMock()
+    get_cache_key = mocker.patch('jobs.get_cache_key', return_value='absd234weefw')
+    wait_for_pvc = mocker.patch('jobs.wait_for_pvc_ready', return_value=True)
 
     # start the run
     await handle_start_run(testrun)
@@ -187,40 +189,45 @@ async def test_full_run(redis, mocker, mock_create_from_dict,
     websocket = mocker.AsyncMock()
     await handle_agent_message(websocket, msg.json())
 
+    wait_for_pvc.assert_called_once_with('ro-pvc')
+
     assert build_completed.call_count == 1
     assert running_update_status.call_count == 1
 
     assert redis.smembers('testrun:20:specs') == {'test1.ts'}
     assert int(redis.get('testrun:20:to-complete')) == 1
 
+    # the cache is preprared
+    await handle_agent_message(websocket, AgentEvent(type=AgentEventType.cache_prepared,
+                                                     testrun_id=testrun.id).json())
+
     # run completed
-    delete_pvc_mock = k8_core_api_mock.delete_namespaced_persistent_volume_claim
+    delete_pvc_mock = k8_core_api_mock.delete_namespaced_persistent_volume_claim = mocker.AsyncMock()
 
     await handle_run_completed(testrun.id)
 
     assert run_completed.called
 
     # clean up
-    assert delete_pvc_mock.call_count == 4
+    assert delete_pvc_mock.call_count == 2
 
     # this will have created 2 PVCs, 2 snapshots and 2 Jobs
     kinds_and_names = get_kind_and_names(mock_create_from_dict)
-    assert {('PersistentVolumeClaim', 'build-rw-pvc'),
-            ('Job', 'cykubed-clone-20-deadbeef0101'),
-            ('PersistentVolumeClaim', 'node-rw-pvc'),
+    assert {('PersistentVolumeClaim', 'rw-pvc'),
+            ('PersistentVolumeClaim', 'ro-pvc'),
             ('Job', 'cykubed-build-project-20'),
-            ('PersistentVolumeClaim', 'node-ro-pvc'),
-            ('PersistentVolumeClaim', 'build-ro-pvc'),
-            ('Job', 'cykubed-runner-project-20-0')} == set(kinds_and_names)
+            ('Job', 'cykubed-runner-project-20-0'),
+            ('Job', 'cykubed-prepare-cache-absd234weefw')
+            } == set(kinds_and_names)
 
     assert k8_create_custom.call_count == 2
-    compare_rendered_template([k8_create_custom.call_args_list[0].kwargs['body']], 'node-snapshot')
-    compare_rendered_template([k8_create_custom.call_args_list[1].kwargs['body']], 'build-snapshot')
+    compare_rendered_template([k8_create_custom.call_args_list[0].kwargs['body']], 'build-snapshot')
+    compare_rendered_template([k8_create_custom.call_args_list[1].kwargs['body']], 'node-snapshot')
 
     assert k8_delete_job.call_count == 3
-    assert k8_delete_job.call_args_list[0].args == ('cykubed-clone-20-deadbeef0101', 'cykubed')
-    assert k8_delete_job.call_args_list[1].args == ('cykubed-build-project-20', 'cykubed')
-    assert k8_delete_job.call_args_list[2].args == ('cykubed-runner-project-20-0', 'cykubed')
+    assert k8_delete_job.call_args_list[0].args == ('cykubed-build-project-20', 'cykubed')
+    assert k8_delete_job.call_args_list[1].args == ('cykubed-runner-project-20-0', 'cykubed')
+    assert k8_delete_job.call_args_list[2].args == ('cykubed-prepare-cache-absd234weefw', 'cykubed')
 
 
 @freeze_time('2022-04-03 14:10:00Z')
@@ -248,7 +255,7 @@ async def test_build_completed_node_cache_used(redis, mock_create_from_dict,
 
     await new_testrun(testrun)
     state = TestRunBuildState(trid=testrun.id,
-                              rw_build_pvc='build-rw-pvc',
+                              rw_build_pvc='rw-pvc',
                               build_storage=10,
                               node_snapshot_name='node-absd234weefw',
                               cache_key='absd234weefw',

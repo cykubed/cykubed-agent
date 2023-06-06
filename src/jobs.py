@@ -1,7 +1,6 @@
 import asyncio
 import datetime
 import os
-import sys
 import tempfile
 import uuid
 
@@ -9,7 +8,7 @@ import aiofiles
 import chevron
 import yaml
 from chevron import ChevronError
-from kubernetes_asyncio import client, watch, utils as k8utils
+from kubernetes_asyncio import client, utils as k8utils
 from loguru import logger
 from yaml import YAMLError
 
@@ -23,10 +22,8 @@ from common.utils import utcnow, get_lock_hash
 from db import get_testrun, expired_cached_items_iter, get_cached_item, remove_cached_item, \
     add_build_snapshot_cache_item, get_build_snapshot_cache_item
 from k8 import async_get_snapshot, async_delete_pvc, async_delete_snapshot, async_delete_job, async_get_job_status, \
-    async_create_snapshot
+    async_create_snapshot, wait_for_pvc_ready
 from settings import settings
-from src.common import k8common
-from src.common.k8common import get_core_api
 from state import TestRunBuildState, get_build_state
 
 TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), 'k8config', 'templates')
@@ -75,18 +72,6 @@ async def create_k8_snapshot(jobtype, context):
         raise InvalidTemplateException(f'Invalid YAML in {jobtype} template: {ex}')
     except ChevronError as ex:
         raise InvalidTemplateException(f'Invalid {jobtype} template: {ex}')
-
-
-async def wait_for_pvc_ready(pvc_name: str):
-    v1 = get_core_api()
-    async with watch.Watch().stream(v1.list_namespaced_persistent_volume_claim,
-                                    field_selector=f"metadata.name={pvc_name}",
-                                    namespace=settings.NAMESPACE, timeout_seconds=10) as stream:
-        async for event in stream:
-            pvcobj = event['object']
-            if pvcobj.status.phase == 'Bound':
-                logger.debug(f'PVC {pvc_name} is bound')
-                return
 
 
 async def create_k8_objects(jobtype, context) -> str:
@@ -257,7 +242,9 @@ async def handle_build_completed(event: AgentBuildCompletedEvent):
                                  command='prepare_cache',
                                  cache_key=state.cache_key,
                                  pvc_name=state.rw_build_pvc)
-        await create_k8_objects('prepare-cache', context)
+        name = await create_k8_objects('prepare-cache', context)
+        state.prepare_cache_job = name
+        await state.save()
 
 
 async def handle_cache_prepared(testrun_id):
@@ -433,6 +420,9 @@ async def delete_pvcs_and_jobs(state: TestRunBuildState):
             await async_delete_job(state.build_job)
         if state.run_job:
             await async_delete_job(state.run_job)
+        if state.prepare_cache_job:
+            await async_delete_job(state.prepare_cache_job)
+
         await async_delete_pvc(state.rw_build_pvc)
         if state.ro_build_pvc:
             await async_delete_pvc(state.ro_build_pvc)

@@ -1,9 +1,11 @@
 import asyncio
 
+from kubernetes_asyncio import watch
 from kubernetes_asyncio.client import ApiException, V1JobStatus
 from loguru import logger
 
 from common.exceptions import BuildFailedException
+from common.k8common import get_core_api
 from settings import settings
 from src.common.k8common import get_batch_api, get_custom_api, get_core_api
 
@@ -104,3 +106,15 @@ async def async_delete_job(name: str):
 
 async def async_create_snapshot(yamlobjects):
     return await asyncio.to_thread(create_snapshot, yamlobjects)
+
+
+async def wait_for_pvc_ready(pvc_name: str):
+    v1 = get_core_api()
+    async with watch.Watch().stream(v1.list_namespaced_persistent_volume_claim,
+                                    field_selector=f"metadata.name={pvc_name}",
+                                    namespace=settings.NAMESPACE, timeout_seconds=10) as stream:
+        async for event in stream:
+            pvcobj = event['object']
+            if pvcobj.status.phase == 'Bound':
+                logger.debug(f'PVC {pvc_name} is bound')
+                return
