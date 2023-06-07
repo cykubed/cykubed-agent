@@ -7,7 +7,7 @@ from httpx import Response
 
 from common.enums import AgentEventType
 from common.schemas import NewTestRun, AgentEvent, TestRunErrorReport, AgentTestRunErrorEvent, AgentBuildCompletedEvent
-from db import get_cached_item, add_cached_item, new_testrun, add_build_snapshot_cache_item
+from db import add_cached_item, new_testrun, add_build_snapshot_cache_item
 from jobs import handle_run_completed, handle_testrun_error
 from state import TestRunBuildState, get_build_state
 from ws import handle_start_run, handle_agent_message
@@ -221,7 +221,7 @@ async def test_full_run(redis, mocker, mock_create_from_dict,
 async def test_build_completed_node_cache_used(redis, mock_create_from_dict,
                                           respx_mock, mocker,
                                           k8_core_api_mock,
-                                          k8_custom_api_mock,
+                                          create_custom_mock,
                                           testrun: NewTestRun):
     """
     A build is completed using a cached node distribution
@@ -241,7 +241,7 @@ async def test_build_completed_node_cache_used(redis, mock_create_from_dict,
 
     await new_testrun(testrun)
     state = TestRunBuildState(trid=testrun.id,
-                              rw_build_pvc='rw-pvc',
+                              rw_build_pvc='deadbee-rw',
                               build_storage=10,
                               node_snapshot_name='node-absd234weefw',
                               cache_key='absd234weefw',
@@ -256,10 +256,9 @@ async def test_build_completed_node_cache_used(redis, mock_create_from_dict,
     assert redis.get(f'cache:build-{testrun.sha}') is not None
 
     # not cached - so create a snapshot of the node dist
-    k8_create_custom = k8_custom_api_mock.create_namespaced_custom_object = mocker.AsyncMock()
-    assert k8_create_custom.call_count == 1
+    assert create_custom_mock.call_count == 1
 
-    compare_rendered_template([k8_create_custom.call_args_list[0].kwargs['body']], 'build-snapshot')
+    compare_rendered_template([create_custom_mock.call_args_list[0].kwargs['body']], 'build-snapshot')
 
     assert mock_create_from_dict.call_count == 2
     compare_rendered_template_from_mock(mock_create_from_dict, 'build-ro-pvc-from-snapshot', 0)
@@ -273,7 +272,7 @@ async def test_build_completed_node_cache_used(redis, mock_create_from_dict,
 async def test_build_completed_no_node_cache(redis, mock_create_from_dict,
                                          respx_mock, mocker,
                                          k8_core_api_mock,
-                                         k8_custom_api_mock,
+                                         create_custom_mock,
                                          testrun: NewTestRun):
     """
     A build is completed without using a cached node distribution. We will already have a RO node PVC, so we just need
@@ -300,7 +299,7 @@ async def test_build_completed_no_node_cache(redis, mock_create_from_dict,
     await new_testrun(testrun)
     # no node snapshot used
     state = TestRunBuildState(trid=testrun.id,
-                              rw_build_pvc='rw-pvc',
+                              rw_build_pvc='deadbee-rw',
                               build_storage=10,
                               cache_key='absd234weefw',
                               specs=['test1.ts'])
@@ -310,7 +309,7 @@ async def test_build_completed_no_node_cache(redis, mock_create_from_dict,
     await handle_agent_message(websocket, msg.json())
 
     # not cached - wait for PVC to be ready then kick off the prepare job
-    wait_for_pvc.assert_called_once_with('ro-pvc')
+    wait_for_pvc.assert_called_once_with('deadbee-ro')
     assert mock_create_from_dict.call_count == 3
     compare_rendered_template_from_mock(mock_create_from_dict, 'build-ro-pvc-from-snapshot', 0)
     compare_rendered_template_from_mock(mock_create_from_dict, 'runner', 1)

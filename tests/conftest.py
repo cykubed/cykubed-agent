@@ -67,6 +67,12 @@ def k8_custom_api_mock(mocker):
 
 
 @pytest.fixture()
+def create_custom_mock(mocker, k8_custom_api_mock):
+    api_mock = mocker.AsyncMock()
+    k8_custom_api_mock.create_namespaced_custom_object = api_mock
+    return api_mock
+
+@pytest.fixture()
 def testrun(project: Project) -> NewTestRun:
     return NewTestRun(url='git@github.org/dummy.git',
                       id=20,

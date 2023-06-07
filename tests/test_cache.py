@@ -18,7 +18,6 @@ async def test_check_add_cached_item(redis):
 
     assert json.loads(cachestr) == {'name': 'node-snap-absd234weefw',
                                     'ttl': 108000,
-                                    'node_snapshot': None,
                                     'storage_size': 10,
                                     'specs': None,
                                     'expires': '2022-04-04T20:10:00+00:00'
