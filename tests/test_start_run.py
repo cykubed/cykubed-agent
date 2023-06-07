@@ -26,14 +26,14 @@ def compare_rendered_template(yamlobjects, jobtype: str):
 def get_kind_and_names(create_from_yaml_mock):
     ret = []
     for args in create_from_yaml_mock.call_args_list:
-        yamlobjs = args[0][1][0]
+        yamlobjs = args[0][0]
         ret.append((yamlobjs['kind'], yamlobjs['metadata']['name']))
     return ret
 
 
 def compare_rendered_template_from_mock(mock_create_from_dict, jobtype: str, index=0):
-    yamlobjects = mock_create_from_dict.call_args_list[index].args[1]
-    compare_rendered_template(yamlobjects, jobtype)
+    yamlobjects = mock_create_from_dict.call_args_list[index].args[0]
+    compare_rendered_template([yamlobjects], jobtype)
 
 
 async def test_start_run_cache_miss(redis, mocker, testrun: NewTestRun,
@@ -42,10 +42,6 @@ async def test_start_run_cache_miss(redis, mocker, testrun: NewTestRun,
     """
     New run with no node cache
     """
-    def get_new_pvc_name(prefix: str) -> str:
-        return f'{prefix}-pvc'
-
-    mocker.patch('jobs.get_new_pvc_name', side_effect=get_new_pvc_name)
     get_cache_key = mocker.patch('jobs.get_cache_key', return_value='absd234weefw')
 
     delete_jobs = mocker.patch('jobs.delete_jobs_for_branch')
@@ -59,7 +55,7 @@ async def test_start_run_cache_miss(redis, mocker, testrun: NewTestRun,
     assert savedtr == testrun
 
     state = await get_build_state(testrun.id)
-    assert state.rw_build_pvc == 'rw-pvc'
+    assert state.rw_build_pvc == 'deadbee-rw'
     assert state.trid == testrun.id
 
     delete_jobs.assert_called_once_with(testrun.id, 'master')
@@ -79,12 +75,8 @@ async def test_start_run_node_cache_hit(redis, mocker, testrun: NewTestRun, post
     """
     New run with a node cache
     """
-    def get_new_pvc_name(prefix: str) -> str:
-        return f'{prefix}-pvc'
-
     await add_cached_item('node-absd234weefw', 10)
 
-    mocker.patch('jobs.get_new_pvc_name', side_effect=get_new_pvc_name)
     get_cache_key = mocker.patch('jobs.get_cache_key', return_value='absd234weefw')
 
     delete_jobs = mocker.patch('jobs.delete_jobs_for_branch')
@@ -118,10 +110,6 @@ async def test_start_rerun(redis, mocker, testrun: NewTestRun,
     build_completed = \
         respx_mock.post('https://api.cykubed.com/agent/testrun/20/build-completed').mock(return_value=Response(200))
 
-    def get_new_pvc_name(prefix: str) -> str:
-        return f'{prefix}-pvc'
-
-    mocker.patch('jobs.get_new_pvc_name', side_effect=get_new_pvc_name)
     mocker.patch('jobs.get_cache_key', return_value='absd234weefw')
 
     await add_cached_item('node-absd234weefw', 10)
@@ -167,7 +155,6 @@ async def test_full_run(redis, mocker, mock_create_from_dict,
         respx_mock.post('https://api.cykubed.com/agent/testrun/20/run-completed') \
             .mock(return_value=Response(200))
     delete_jobs = mocker.patch('jobs.delete_jobs_for_branch')
-    mocker.patch('jobs.get_new_pvc_name', side_effect=lambda prefix: f'{prefix}-pvc')
     k8_create_custom = k8_custom_api_mock.create_namespaced_custom_object
     k8_delete_job = k8_batch_api_mock.delete_namespaced_job = mocker.AsyncMock()
     get_cache_key = mocker.patch('jobs.get_cache_key', return_value='absd234weefw')
@@ -189,7 +176,7 @@ async def test_full_run(redis, mocker, mock_create_from_dict,
     websocket = mocker.AsyncMock()
     await handle_agent_message(websocket, msg.json())
 
-    wait_for_pvc.assert_called_once_with('ro-pvc')
+    wait_for_pvc.assert_called_once_with('deadbee-ro')
 
     assert build_completed.call_count == 1
     assert running_update_status.call_count == 1
@@ -213,8 +200,8 @@ async def test_full_run(redis, mocker, mock_create_from_dict,
 
     # this will have created 2 PVCs, 2 snapshots and 2 Jobs
     kinds_and_names = get_kind_and_names(mock_create_from_dict)
-    assert {('PersistentVolumeClaim', 'rw-pvc'),
-            ('PersistentVolumeClaim', 'ro-pvc'),
+    assert {('PersistentVolumeClaim', 'deadbee-rw'),
+            ('PersistentVolumeClaim', 'deadbee-ro'),
             ('Job', 'cykubed-build-project-20'),
             ('Job', 'cykubed-runner-project-20-0'),
             ('Job', 'cykubed-prepare-cache-absd234weefw')
@@ -241,7 +228,6 @@ async def test_build_completed_node_cache_used(redis, mock_create_from_dict,
     """
     msg = AgentBuildCompletedEvent(
                      testrun_id=testrun.id, specs=['test1.ts'])
-    mocker.patch('jobs.get_new_pvc_name', side_effect=lambda prefix: f'{prefix}-pvc')
 
     build_completed = \
         respx_mock.post('https://api.cykubed.com/agent/testrun/20/build-completed') \
@@ -265,12 +251,12 @@ async def test_build_completed_node_cache_used(redis, mock_create_from_dict,
     await handle_agent_message(websocket, msg.json())
 
     state = await get_build_state(testrun.id)
-    assert state.ro_build_pvc == 'ro-pvc'
+    assert state.ro_build_pvc == 'deadbee-ro'
 
     assert redis.get(f'cache:build-{testrun.sha}') is not None
 
     # not cached - so create a snapshot of the node dist
-    k8_create_custom = k8_custom_api_mock.create_namespaced_custom_object
+    k8_create_custom = k8_custom_api_mock.create_namespaced_custom_object = mocker.AsyncMock()
     assert k8_create_custom.call_count == 1
 
     compare_rendered_template([k8_create_custom.call_args_list[0].kwargs['body']], 'build-snapshot')
@@ -303,7 +289,6 @@ async def test_build_completed_no_node_cache(redis, mock_create_from_dict,
     """
     msg = AgentBuildCompletedEvent(
                      testrun_id=testrun.id, specs=['test1.ts'])
-    mocker.patch('jobs.get_new_pvc_name', side_effect=lambda prefix: f'{prefix}-pvc')
     websocket = mocker.AsyncMock()
 
     respx_mock.post('https://api.cykubed.com/agent/testrun/20/build-completed') \
@@ -340,8 +325,8 @@ async def test_prepare_cache_completed(mocker, redis, testrun,
     await new_testrun(testrun)
     # no node snapshot used
     state = TestRunBuildState(trid=testrun.id,
-                              ro_build_pvc='ro-pvc',
-                              rw_build_pvc='rw-pvc',
+                              ro_build_pvc='deadbee-ro',
+                              rw_build_pvc='deadbee-rw',
                               build_storage=10,
                               cache_key='absd234weefw',
                               specs=['test1.ts'])
@@ -362,8 +347,8 @@ async def test_run_completed(mocker, redis, k8_core_api_mock, k8_batch_api_mock,
                               build_storage=10,
                               build_job='build-job',
                               run_job='run-job',
-                              rw_build_pvc='build-rw-pvc',
-                              ro_build_pvc='build-ro-pvc',
+                              rw_build_pvc='deadbee-rw',
+                              ro_build_pvc='deadbee-ro',
                               specs=['test1.ts'],
                               node_snapshot_name='node-absd234weefw')
     await state.save()
@@ -389,7 +374,7 @@ async def test_run_completed(mocker, redis, k8_core_api_mock, k8_batch_api_mock,
 
     assert delete_pvc_mock.call_count == 2
     pvcs = {x.args[0] for x in delete_pvc_mock.call_args_list}
-    assert pvcs == {'build-rw-pvc', 'build-ro-pvc'}
+    assert pvcs == {'deadbee-rw', 'deadbee-ro'}
 
     assert delete_job_mock.call_count == 2
     jobs = {x.args[0] for x in delete_job_mock.call_args_list}

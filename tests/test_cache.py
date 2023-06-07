@@ -49,7 +49,7 @@ async def test_prune_cache(redis, mocker, k8_custom_api_mock):
     mocker.patch('db.utcnow', return_value=datetime.datetime(2022, 1, 28, 10, 0, 0, tzinfo=utc))
     await add_cached_item('key1', 10)
     mocker.patch('db.utcnow', return_value=datetime.datetime(2022, 3, 28, 10, 0, 0, tzinfo=utc))
-    delete_snapshot = k8_custom_api_mock.delete_namespaced_custom_object = mocker.Mock()
+    delete_snapshot = k8_custom_api_mock.delete_namespaced_custom_object = mocker.AsyncMock()
 
     await prune_cache()
 
@@ -63,7 +63,7 @@ async def test_prune_cache(redis, mocker, k8_custom_api_mock):
 
 async def test_clear_cache(redis, mocker, k8_custom_api_mock):
     await add_cached_item('key1', 10)
-    delete_snapshot = k8_custom_api_mock.delete_namespaced_custom_object = mocker.Mock()
+    delete_snapshot = k8_custom_api_mock.delete_namespaced_custom_object = mocker.AsyncMock()
     await handle_websocket_message({'command': 'clear_cache', 'payload': ''})
     delete_snapshot.assert_called_once()
     assert delete_snapshot.call_args.kwargs == {'group': 'snapshot.storage.k8s.io',

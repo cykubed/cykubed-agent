@@ -20,8 +20,7 @@ def redis(mocker, autouse=True):
 
 @pytest.fixture()
 def mock_create_from_dict(mocker):
-    mocker.patch('jobs.client')
-    return mocker.patch('jobs.k8utils.create_from_dict')
+    return mocker.patch('k8.create_from_dict')
 
 
 @pytest.fixture()
@@ -48,21 +47,21 @@ async def project() -> Project:
 
 @pytest.fixture()
 def k8_batch_api_mock(mocker):
-    batch_api_mock = mocker.MagicMock()
+    batch_api_mock = mocker.AsyncMock()
     mocker.patch('k8.get_batch_api', return_value=batch_api_mock)
     return batch_api_mock
 
 
 @pytest.fixture()
 def k8_core_api_mock(mocker):
-    core_api_mock = mocker.MagicMock()
+    core_api_mock = mocker.AsyncMock()
     mocker.patch('k8.get_core_api', return_value=core_api_mock)
     return core_api_mock
 
 
 @pytest.fixture()
 def k8_custom_api_mock(mocker):
-    api_mock = mocker.MagicMock()
+    api_mock = mocker.AsyncMock()
     mocker.patch('k8.get_custom_api', return_value=api_mock)
     return api_mock
 

@@ -56,5 +56,5 @@ spec:
             volumes:
             -   name: build-volume
                 persistentVolumeClaim:
-                    claimName: rw-pvc
+                    claimName: deadbee-rw
     ttlSecondsAfterFinished: 3600

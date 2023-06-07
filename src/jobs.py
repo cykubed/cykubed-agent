@@ -1,41 +1,23 @@
 import asyncio
 import datetime
-import os
 import tempfile
-import uuid
 
-import aiofiles
-import chevron
-import yaml
-from chevron import ChevronError
-from kubernetes_asyncio import client, utils as k8utils
 from loguru import logger
-from yaml import YAMLError
 
 import db
 from app import app
 from common import schemas
-from common.exceptions import InvalidTemplateException, BuildFailedException
+from common.exceptions import BuildFailedException
+from common.k8common import get_batch_api
 from common.redisutils import async_redis
 from common.schemas import TestRunErrorReport, AgentBuildCompletedEvent
 from common.utils import utcnow, get_lock_hash
 from db import get_testrun, expired_cached_items_iter, get_cached_item, remove_cached_item, \
     add_build_snapshot_cache_item, get_build_snapshot_cache_item
 from k8 import async_get_snapshot, async_delete_pvc, async_delete_snapshot, async_delete_job, async_get_job_status, \
-    async_create_snapshot, wait_for_pvc_ready
+    wait_for_pvc_ready, create_k8_objects, create_k8_snapshot
 from settings import settings
 from state import TestRunBuildState, get_build_state
-
-TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), 'k8config', 'templates')
-
-
-def get_template_path(name: str) -> str:
-    return os.path.join(TEMPLATES_DIR, f'{name}.mustache')
-
-
-async def get_job_template(name: str) -> str:
-    async with aiofiles.open(get_template_path(name), mode='r') as f:
-        return await f.read()
 
 
 def common_context(testrun: schemas.NewTestRun, **kwargs):
@@ -52,52 +34,6 @@ def common_context(testrun: schemas.NewTestRun, **kwargs):
                 project=testrun.project, **kwargs)
 
 
-async def render_template(jobtype, context):
-    template = await get_job_template(jobtype)
-    jobyaml = chevron.render(template, context)
-    return list(yaml.safe_load_all(jobyaml))
-
-
-async def create_k8_snapshot(jobtype, context):
-    """
-    Annoyingly volume snapsnhots have to use the Custom API
-    :param jobtype:
-    :param context:
-    :return:
-    """
-    try:
-        yamlobjects = await render_template(jobtype, context)
-        await async_create_snapshot(yamlobjects[0])
-    except YAMLError as ex:
-        raise InvalidTemplateException(f'Invalid YAML in {jobtype} template: {ex}')
-    except ChevronError as ex:
-        raise InvalidTemplateException(f'Invalid {jobtype} template: {ex}')
-
-
-async def create_k8_objects(jobtype, context) -> str:
-    try:
-        k8sclient = client.ApiClient()
-        yamlobjects = await render_template(jobtype, context)
-        # should only be one object
-        kind = yamlobjects[0]['kind']
-        name = yamlobjects[0]['metadata']['name']
-        logger.info(f'Creating {kind} {name}', id=context['testrun_id'])
-        if settings.K8:
-            await k8utils.create_from_dict(k8sclient,
-                                           yamlobjects,
-                                           namespace=settings.NAMESPACE)
-        else:
-            logger.debug(f"K8 disabled: not creating {name}")
-        return name
-    except YAMLError as ex:
-        raise InvalidTemplateException(f'Invalid YAML in {jobtype} template: {ex}')
-    except ChevronError as ex:
-        raise InvalidTemplateException(f'Invalid {jobtype} template: {ex}')
-    except Exception as ex:
-        logger.exception(f"Failed to create {jobtype}")
-        raise ex
-
-
 async def get_cached_snapshot(key: str):
     item = await get_cached_item(key, True)
     if item:
@@ -106,26 +42,29 @@ async def get_cached_snapshot(key: str):
         # nope - clean up
         await remove_cached_item(key)
 
-
-def get_new_pvc_name(prefix: str) -> str:
-    return f'{prefix}-{uuid.uuid4()}'
+#
+# def get_new_pvc_name(prefix: str) -> str:
+#     return f'{prefix}-{uuid.uuid4()}'
 
 
 async def get_cache_key(testrun: schemas.NewTestRun) -> str:
     """
     Perform a sparse checkout to get a yarn.lock or package-lock.json file
     """
+    logger.info('Performing sparse clone to determine cache key', trid=testrun.id)
+    logger.debug(testrun.json())
     with tempfile.TemporaryDirectory() as tmpdir:
-        cmd = f'git clone --depth 1 --branch {testrun.branch} --no-checkout {testrun.url} && ' \
-              f' git reset --hard {testrun.sha} && ' \
-              f' git sparse-checkout set yarn.lock package-lock.json'
+        cmd = f'git clone --depth 1 --branch {testrun.branch} --sparse {testrun.url} . && ' \
+              f' git reset --hard {testrun.sha}'
 
         proc = await asyncio.create_subprocess_shell(cmd, cwd=tmpdir)
         await proc.wait()
         if proc.returncode:
             raise BuildFailedException(f'Failed to clone {testrun.project.name}')
 
-        return get_lock_hash(tmpdir)
+        k = get_lock_hash(tmpdir)
+        logger.debug(f'Cache key is {k}')
+        return k
 
 
 async def handle_new_run(testrun: schemas.NewTestRun):
@@ -139,7 +78,6 @@ async def handle_new_run(testrun: schemas.NewTestRun):
     # stop existing jobs
     await delete_jobs_for_branch(testrun.id, testrun.branch)
     state = TestRunBuildState(trid=testrun.id,
-                              rw_build_pvc=get_new_pvc_name('rw'),
                               build_storage=testrun.project.build_storage)
     await state.save()
 
@@ -147,7 +85,7 @@ async def handle_new_run(testrun: schemas.NewTestRun):
     if build_snap_cache_item:
         # this is a rerun of a previous build - just create the RO PVC and runner job
         logger.info(f'Found cached build for sha {testrun.sha}: reuse')
-        state.ro_build_pvc = get_new_pvc_name('ro')
+        state.ro_build_pvc = f'{testrun.sha[:7]}-ro'
         context = common_context(testrun,
                                  read_only=True, snapshot_name=build_snap_cache_item.name,
                                  pvc_name=state.ro_build_pvc)
@@ -166,7 +104,7 @@ async def handle_new_run(testrun: schemas.NewTestRun):
         cached_node_item = await get_cached_snapshot(node_snapshot_name)
 
         # we need a RW PVC for the build
-        state.rw_build_pvc = get_new_pvc_name('rw')
+        state.rw_build_pvc = f'{testrun.sha[:7]}-rw'
         state.cache_key = cache_key
         context = common_context(testrun,
                                  pvc_name=state.rw_build_pvc)
@@ -219,7 +157,7 @@ async def handle_build_completed(event: AgentBuildCompletedEvent):
                                         testrun.project.build_storage)
 
     # create a RO PVC from this snapshot and a runner that uses it
-    state.ro_build_pvc = get_new_pvc_name('ro')
+    state.ro_build_pvc = f'{testrun.sha[:7]}-ro'
     await state.save()
     context.update(dict(pvc_name=state.ro_build_pvc,
                         read_only=True))
@@ -375,8 +313,8 @@ async def delete_testrun_job(job, trid: int = None):
 async def delete_jobs_for_branch(trid: int, branch: str):
     if settings.K8:
         # delete any job already running
-        api = client.BatchV1Api()
-        jobs = api.list_namespaced_job(settings.NAMESPACE, label_selector=f'branch={branch}')
+        api = get_batch_api()
+        jobs = await api.list_namespaced_job(settings.NAMESPACE, label_selector=f'branch={branch}')
         if jobs.items:
             logger.info(f'Found {len(jobs.items)} existing Jobs - deleting them', trid=trid)
             # delete it (there should just be one, but iterate anyway)
@@ -385,8 +323,8 @@ async def delete_jobs_for_branch(trid: int, branch: str):
 
 
 async def delete_jobs_for_project(project_id):
-    api = client.BatchV1Api()
-    jobs = api.list_namespaced_job(settings.NAMESPACE, label_selector=f'project_id={project_id}')
+    api = get_batch_api()
+    jobs = await api.list_namespaced_job(settings.NAMESPACE, label_selector=f'project_id={project_id}')
     if jobs.items:
         logger.info(f'Found {len(jobs.items)} existing Jobs - deleting them')
         for job in jobs.items:
@@ -395,8 +333,8 @@ async def delete_jobs_for_project(project_id):
 
 async def delete_jobs(testrun_id: int):
     logger.info(f"Deleting jobs for testrun {testrun_id}")
-    api = client.BatchV1Api()
-    jobs = api.list_namespaced_job(settings.NAMESPACE, label_selector=f"testrun_id={testrun_id}")
+    api = get_batch_api()
+    jobs = await api.list_namespaced_job(settings.NAMESPACE, label_selector=f"testrun_id={testrun_id}")
     for job in jobs.items:
         await delete_testrun_job(job, testrun_id)
 

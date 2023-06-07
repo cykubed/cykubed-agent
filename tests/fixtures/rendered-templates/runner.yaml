@@ -67,6 +67,6 @@ spec:
             volumes:
             -   name: build-volume
                 persistentVolumeClaim:
-                    claimName: ro-pvc
+                    claimName: deadbee-ro
                     readOnly: true
     ttlSecondsAfterFinished: 3600
