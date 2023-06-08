@@ -38,6 +38,7 @@ def compare_rendered_template_from_mock(mock_create_from_dict, jobtype: str, ind
 
 async def test_start_run_cache_miss(redis, mocker, testrun: NewTestRun,
                                     post_building_status,
+                                    post_started_status,
                                     respx_mock, mock_create_from_dict):
     """
     New run with no node cache
@@ -47,6 +48,7 @@ async def test_start_run_cache_miss(redis, mocker, testrun: NewTestRun,
     delete_jobs = mocker.patch('jobs.delete_jobs_for_branch')
     await handle_start_run(testrun)
 
+    assert post_started_status.called == 1
     get_cache_key.assert_called_once()
 
     # this will add an entry to the testrun collection
@@ -69,7 +71,8 @@ async def test_start_run_cache_miss(redis, mocker, testrun: NewTestRun,
     assert post_building_status.called == 1
 
 
-async def test_start_run_node_cache_hit(redis, mocker, testrun: NewTestRun, post_building_status,
+async def test_start_run_node_cache_hit(redis, mocker, testrun: NewTestRun,
+                                        post_building_status, post_started_status,
                                         k8_custom_api_mock,
                                         respx_mock, mock_create_from_dict):
     """
@@ -84,6 +87,7 @@ async def test_start_run_node_cache_hit(redis, mocker, testrun: NewTestRun, post
 
     await handle_start_run(testrun)
 
+    assert post_started_status.called == 1
     async_get_snapshot.assert_called_once()
     get_cache_key.assert_called_once()
 
@@ -98,15 +102,12 @@ async def test_start_run_node_cache_hit(redis, mocker, testrun: NewTestRun, post
 
 
 async def test_start_rerun(redis, mocker, testrun: NewTestRun,
+                           post_started_status,
                            k8_custom_api_mock,
                            respx_mock, mock_create_from_dict):
     """
     Called when we still have a RO build PVC available (i.e for a rerun)
     """
-    update_status = \
-        respx_mock.post('https://api.cykubed.com/agent/testrun/20/status/running') \
-            .mock(return_value=Response(200))
-
     build_completed = \
         respx_mock.post('https://api.cykubed.com/agent/testrun/20/build-completed').mock(return_value=Response(200))
 
@@ -134,19 +135,17 @@ async def test_start_rerun(redis, mocker, testrun: NewTestRun,
     compare_rendered_template_from_mock(mock_create_from_dict, 'runner', 1)
 
     assert build_completed.call_count == 1
-    assert update_status.call_count == 1
 
 
 async def test_full_run(redis, mocker, mock_create_from_dict,
                         respx_mock,
+                        post_started_status,
+                        post_building_status,
                         k8_core_api_mock,
                         k8_batch_api_mock,
                         delete_pvc_mock,
                         k8_custom_api_mock,
                         testrun: NewTestRun):
-    building_update_status = \
-        respx_mock.post('https://api.cykubed.com/agent/testrun/20/status/building') \
-            .mock(return_value=Response(200))
     running_update_status = \
         respx_mock.post('https://api.cykubed.com/agent/testrun/20/status/running') \
             .mock(return_value=Response(200))
@@ -167,7 +166,8 @@ async def test_full_run(redis, mocker, mock_create_from_dict,
 
     delete_jobs.assert_called_once()
 
-    assert building_update_status.call_count == 1
+    assert post_started_status.call_count == 1
+    assert post_building_status.call_count == 1
 
     # build completed
     msg = AgentBuildCompletedEvent(type=AgentEventType.build_completed,
@@ -181,7 +181,6 @@ async def test_full_run(redis, mocker, mock_create_from_dict,
     wait_for_pvc.assert_called_once_with('project-1-ro')
 
     assert build_completed.call_count == 1
-    assert running_update_status.call_count == 1
 
     assert redis.smembers('testrun:20:specs') == {'test1.ts'}
     assert int(redis.get('testrun:20:to-complete')) == 1
@@ -221,6 +220,7 @@ async def test_full_run(redis, mocker, mock_create_from_dict,
 @freeze_time('2022-04-03 14:10:00Z')
 async def test_build_completed_node_cache_used(redis, mock_create_from_dict,
                                           respx_mock, mocker,
+                                          post_building_status,
                                           k8_core_api_mock,
                                           create_custom_mock,
                                           testrun: NewTestRun):
@@ -232,10 +232,6 @@ async def test_build_completed_node_cache_used(redis, mock_create_from_dict,
 
     build_completed = \
         respx_mock.post('https://api.cykubed.com/agent/testrun/20/build-completed') \
-            .mock(return_value=Response(200))
-
-    update_status = \
-        respx_mock.post('https://api.cykubed.com/agent/testrun/20/status/running') \
             .mock(return_value=Response(200))
 
     websocket = mocker.AsyncMock()
@@ -266,7 +262,6 @@ async def test_build_completed_node_cache_used(redis, mock_create_from_dict,
     compare_rendered_template_from_mock(mock_create_from_dict, 'runner', 1)
 
     assert build_completed.called == 1
-    assert update_status.called == 1
 
 
 @freeze_time('2022-04-03 14:10:00Z')

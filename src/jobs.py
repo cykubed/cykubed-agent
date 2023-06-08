@@ -100,6 +100,8 @@ async def handle_new_run(testrun: schemas.NewTestRun):
     :return:
     """
     # stop existing jobs
+    await app.update_status(testrun.id, 'started')
+
     await delete_jobs_for_branch(testrun.id, testrun.branch)
     state = TestRunBuildState(trid=testrun.id,
                               build_storage=testrun.project.build_storage)
@@ -257,7 +259,6 @@ async def create_runner_job(testrun: schemas.NewTestRun, state: TestRunBuildStat
         state.runner_deadline = utcnow() + datetime.timedelta(seconds=testrun.project.runner_deadline)
     state.run_job = await create_k8_objects('runner', context)
     await state.save()
-    await app.update_status(testrun.id, 'running')
 
 
 async def handle_run_completed(testrun_id):

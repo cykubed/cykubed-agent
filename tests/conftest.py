@@ -91,6 +91,12 @@ def testrun(project: Project) -> NewTestRun:
 
 
 @pytest.fixture()
+def post_started_status(respx_mock):
+    return respx_mock.post('https://api.cykubed.com/agent/testrun/20/status/started') \
+            .mock(return_value=Response(200))
+
+
+@pytest.fixture()
 def post_building_status(respx_mock):
     return respx_mock.post('https://api.cykubed.com/agent/testrun/20/status/building') \
             .mock(return_value=Response(200))

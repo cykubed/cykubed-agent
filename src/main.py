@@ -8,6 +8,7 @@ from loguru import logger
 import ws
 from app import app
 from common import k8common
+from common.k8common import close
 from common.redisutils import sync_redis, ping_redis, async_redis
 from jobs import prune_cache_loop, run_job_tracker
 from logs import configure_logging
@@ -67,4 +68,5 @@ if __name__ == "__main__":
     try:
         asyncio.run(run())
     except KeyboardInterrupt:
+        asyncio.run(close())
         sys.exit(0)
