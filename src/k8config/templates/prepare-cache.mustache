@@ -7,8 +7,7 @@ metadata:
     local_id: "{{local_id}}"
     testrun_id: "{{testrun_id}}"
     branch: "{{branch}}"
-    cache_key: "{{cache_key}}"
-  name: "cykubed-prepare-cache-{{cache_key}}"
+  name: "cache-{{project.name}}-{{local_id}}"
   namespace: "{{namespace}}"
 spec:
   backoffLimit: 0
@@ -28,7 +27,7 @@ spec:
       restartPolicy: Never
       priorityClassName: "cykubed-low-priority"
       containers:
-      - name: "prepare_cache"
+      - name: "prepare"
         image: "{{project.runner_image}}"
         env:
         - name: REDIS_PASSWORD

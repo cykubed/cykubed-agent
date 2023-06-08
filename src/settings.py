@@ -21,9 +21,6 @@ class AgentSettings(BaseSettings):
 
     ENCODING = 'utf8'
 
-    BUILD_TIMEOUT: int = 900
-    NODE_PATH: str = None
-
     TEST = False
 
     MAX_HTTP_RETRIES = 10
@@ -31,8 +28,10 @@ class AgentSettings(BaseSettings):
 
     MESSAGE_POLL_PERIOD = 1
 
-    AGENT_URL: str = 'http://127.0.0.1:5000'
     MAIN_API_URL: str = 'https://api.cykubed.com'
+    # clean up testrun state after this time period (after the runner deadline)
+    TESTRUN_STATE_TTL: int = 2 * 3600
+    JOB_TRACKER_PERIOD: int = 30
 
     SENTRY_DSN: str = None
 

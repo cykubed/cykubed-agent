@@ -1,10 +1,8 @@
-import asyncio
 import os
 
 import aiofiles
 import chevron
 import yaml
-
 from chevron import ChevronError
 from kubernetes_asyncio import watch, utils as k8utils
 from kubernetes_asyncio.client import ApiException, V1JobStatus
@@ -82,7 +80,6 @@ async def async_get_job_status(name: str) -> V1JobStatus:
 #
 
 
-
 async def async_delete_pvc(name: str):
     try:
         await get_core_api().delete_namespaced_persistent_volume_claim(name, settings.NAMESPACE)
@@ -104,6 +101,7 @@ async def async_delete_job(name: str):
 
 async def wait_for_pvc_ready(pvc_name: str):
     v1 = get_core_api()
+    logger.info(f'Wait for PVC {pvc_name} to be bound')
     async with watch.Watch().stream(v1.list_namespaced_persistent_volume_claim,
                                     field_selector=f"metadata.name={pvc_name}",
                                     namespace=settings.NAMESPACE, timeout_seconds=10) as stream:
@@ -112,6 +110,33 @@ async def wait_for_pvc_ready(pvc_name: str):
             if pvcobj.status.phase == 'Bound':
                 logger.debug(f'PVC {pvc_name} is bound')
                 return
+
+
+async def wait_for_snapshot_ready(name: str):
+    v1 = get_custom_api()
+    logger.info(f'Wait for snapshot {name} to be ready to use')
+    async with watch.Watch().stream(v1.list_namespaced_custom_object,
+                                    group="snapshot.storage.k8s.io",
+                                    version="v1beta1",
+                                    plural="volumesnapshots",
+                                    field_selector=f"metadata.name={name}",
+                                    namespace=settings.NAMESPACE, timeout_seconds=10) as stream:
+        async for event in stream:
+            pvcobj = event['object']
+            status = pvcobj.get('status')
+            if status and status.get('readyToUse') is True:
+                logger.debug(f'Snapshot {name} is ready to use')
+                return
+
+#
+# async def test_wait():
+#     await init()
+#     await wait_for_snapshot_ready('xbuild-8e7f8473bddc1f7ae82a0a09542948f3bee1ac18')
+#     await get_client().close()
+#
+#
+# if __name__ == "__main__":
+#     asyncio.run(test_wait())
 
 
 async def create_from_dict(data: dict):

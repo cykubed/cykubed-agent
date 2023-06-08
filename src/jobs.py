@@ -10,12 +10,12 @@ from common import schemas
 from common.exceptions import BuildFailedException
 from common.k8common import get_batch_api
 from common.redisutils import async_redis
-from common.schemas import TestRunErrorReport, AgentBuildCompletedEvent
+from common.schemas import TestRunErrorReport, AgentBuildCompletedEvent, CacheItem
 from common.utils import utcnow, get_lock_hash
 from db import get_testrun, expired_cached_items_iter, get_cached_item, remove_cached_item, \
-    add_build_snapshot_cache_item, get_build_snapshot_cache_item
+    add_build_snapshot_cache_item
 from k8 import async_get_snapshot, async_delete_pvc, async_delete_snapshot, async_delete_job, async_get_job_status, \
-    wait_for_pvc_ready, create_k8_objects, create_k8_snapshot
+    wait_for_pvc_ready, create_k8_objects, create_k8_snapshot, wait_for_snapshot_ready
 from settings import settings
 from state import TestRunBuildState, get_build_state
 
@@ -52,7 +52,6 @@ async def get_cache_key(testrun: schemas.NewTestRun) -> str:
     Perform a sparse checkout to get a yarn.lock or package-lock.json file
     """
     logger.info('Performing sparse clone to determine cache key', trid=testrun.id)
-    logger.debug(testrun.json())
     with tempfile.TemporaryDirectory() as tmpdir:
         cmd = f'git clone --depth 1 --branch {testrun.branch} --sparse {testrun.url} . && ' \
               f' git reset --hard {testrun.sha}'
@@ -65,6 +64,31 @@ async def get_cache_key(testrun: schemas.NewTestRun) -> str:
         k = get_lock_hash(tmpdir)
         logger.debug(f'Cache key is {k}')
         return k
+
+
+def create_pvc_name(testrun: schemas.NewTestRun, prefix):
+    name = testrun.project.name.lower().replace('_', '-')[:30]
+    return f'{name}-{testrun.local_id}-{prefix}'
+
+
+def create_ro_pvc_name(testrun: schemas.NewTestRun):
+    return create_pvc_name(testrun, 'ro')
+
+
+def create_rw_pvc_name(testrun: schemas.NewTestRun):
+    return create_pvc_name(testrun, 'rw')
+
+
+async def get_build_snapshot_cache_item(sha: str) -> CacheItem:
+    key = f'build-{sha}'
+    item = await get_cached_item(key)
+    if item:
+        # check for volume snapshot
+        if not await async_get_snapshot(item.name):
+            logger.warning(f'Snapshot {item.name} has been deleted - remove cache entry')
+            await remove_cached_item(key)
+            return None
+    return item
 
 
 async def handle_new_run(testrun: schemas.NewTestRun):
@@ -85,7 +109,7 @@ async def handle_new_run(testrun: schemas.NewTestRun):
     if build_snap_cache_item:
         # this is a rerun of a previous build - just create the RO PVC and runner job
         logger.info(f'Found cached build for sha {testrun.sha}: reuse')
-        state.ro_build_pvc = f'{testrun.sha[:7]}-ro'
+        state.ro_build_pvc = create_ro_pvc_name(testrun)
         context = common_context(testrun,
                                  read_only=True, snapshot_name=build_snap_cache_item.name,
                                  pvc_name=state.ro_build_pvc)
@@ -104,13 +128,14 @@ async def handle_new_run(testrun: schemas.NewTestRun):
         cached_node_item = await get_cached_snapshot(node_snapshot_name)
 
         # we need a RW PVC for the build
-        state.rw_build_pvc = f'{testrun.sha[:7]}-rw'
+        state.rw_build_pvc = create_rw_pvc_name(testrun)
         state.cache_key = cache_key
         context = common_context(testrun,
                                  pvc_name=state.rw_build_pvc)
         # base it on the node cache if we have one
         if cached_node_item:
             state.node_snapshot_name = context['snapshot_name'] = cached_node_item.name
+
         await create_k8_objects('pvc', context)
         # and create the build job
         state.build_job = await create_k8_objects('build', context)
@@ -157,7 +182,7 @@ async def handle_build_completed(event: AgentBuildCompletedEvent):
                                         testrun.project.build_storage)
 
     # create a RO PVC from this snapshot and a runner that uses it
-    state.ro_build_pvc = f'{testrun.sha[:7]}-ro'
+    state.ro_build_pvc = create_ro_pvc_name(testrun)
     await state.save()
     context.update(dict(pvc_name=state.ro_build_pvc,
                         read_only=True))
@@ -170,39 +195,62 @@ async def handle_build_completed(event: AgentBuildCompletedEvent):
     await create_runner_job(testrun, state)
 
     if not state.node_snapshot_name:
-        # we need to create a snapshot
-        # wait for the RO PVC to be bound
-        await wait_for_pvc_ready(state.ro_build_pvc)
+        await prepare_cache_wait(state, testrun)
 
-        # now create the prepare job - this just deletes the src folder and moves node_modules
-        # and cypress_cache to the root folder
-        context = common_context(testrun,
-                                 command='prepare_cache',
-                                 cache_key=state.cache_key,
-                                 pvc_name=state.rw_build_pvc)
-        name = await create_k8_objects('prepare-cache', context)
-        state.prepare_cache_job = name
-        await state.save()
+
+async def prepare_cache_wait(state, testrun):
+    """
+    Prepare the cache volume with the prepare job (which simply moved the cacheable folders into root and
+    deletes the cloned src)
+    :param state:
+    :param testrun:
+    :return:
+    """
+    logger.info('Wait for RO PVC', trid=testrun.id)
+
+    # we need to create a snapshot
+
+    # wait for the RO PVC to be bound
+    await wait_for_pvc_ready(state.ro_build_pvc)
+
+    logger.info('Create prepare cache job', trid=testrun.id)
+
+    # create the prepare job
+    context = common_context(testrun,
+                             command='prepare_cache',
+                             cache_key=state.cache_key,
+                             pvc_name=state.rw_build_pvc)
+    name = await create_k8_objects('prepare-cache', context)
+    state.prepare_cache_job = name
+    await state.save()
 
 
 async def handle_cache_prepared(testrun_id):
     """
     Create a snapshot from the RW PVC
     """
+    logger.info(f"Handle cache_prepared event for {testrun_id}")
     testrun = await get_testrun(testrun_id)
     state = await get_build_state(testrun_id, True)
-    name=f'node-{state.cache_key}'
+    name = f'node-{state.cache_key}'
     context = common_context(testrun,
                              snapshot_name=name,
                              pvc_name=state.rw_build_pvc)
     await create_k8_snapshot('pvc-snapshot', context)
     await db.add_cached_item(name, state.build_storage)
 
+    # wait for the snashot
+    await wait_for_snapshot_ready(name)
+
+    # NOW we can delete the RW PVC
+    logger.info(f'Node cache snapshot created: delete build PVC', trid=testrun_id)
+    await async_delete_pvc(state.rw_build_pvc)
+
 
 async def create_runner_job(testrun: schemas.NewTestRun, state: TestRunBuildState):
     # next create the runner job: limit the parallism as there's no point having more runners than specs
     context = common_context(testrun)
-    context.update(dict(name=f'cykubed-runner-{testrun.project.name}-{testrun.id}-{state.run_job_index}',
+    context.update(dict(name=f'runner-{testrun.project.name}-{testrun.local_id}-{state.run_job_index}',
                         parallelism=min(testrun.project.parallelism, len(state.specs)),
                         pvc_name=state.ro_build_pvc))
     if not state.runner_deadline:
@@ -275,13 +323,20 @@ async def check_jobs():
     async for key in r.scan_iter('testrun:state:*', count=100):
         st = TestRunBuildState.parse_raw(await r.get(key))
         if st:
-            await check_jobs_for_testrun(st)
+            now = utcnow()
+            if st.runner_deadline and now > st.runner_deadline and \
+                    (now - st.runner_deadline).seconds > settings.TESTRUN_STATE_TTL:
+                logger.info(f'State for testrun {st.trid} has expired: cleanup and delete state')
+                await delete_pvcs_and_jobs(st)
+                await st.notify_run_completed()
+            else:
+                await check_jobs_for_testrun(st)
 
 
 async def run_job_tracker():
     logger.info('Running job tracker')
     while app.is_running():
-        await asyncio.sleep(30)
+        await asyncio.sleep(settings.JOB_TRACKER_PERIOD)
         await check_jobs()
 
 
@@ -326,6 +381,7 @@ async def delete_jobs_for_project(project_id):
     api = get_batch_api()
     jobs = await api.list_namespaced_job(settings.NAMESPACE, label_selector=f'project_id={project_id}')
     if jobs.items:
+
         logger.info(f'Found {len(jobs.items)} existing Jobs - deleting them')
         for job in jobs.items:
             await delete_testrun_job(job)
@@ -353,17 +409,16 @@ async def delete_jobs(testrun_id: int):
 #         await st.delete()
 
 async def delete_pvcs_and_jobs(state: TestRunBuildState):
-    if settings.K8:
-        if state.build_job:
-            await async_delete_job(state.build_job)
-        if state.run_job:
-            await async_delete_job(state.run_job)
-        if state.prepare_cache_job:
-            await async_delete_job(state.prepare_cache_job)
+    if state.build_job:
+        await async_delete_job(state.build_job)
+    if state.run_job:
+        await async_delete_job(state.run_job)
 
+    # we'll let the RW PVC be deleted by the prepare_cache
+    if state.rw_build_pvc and state.node_snapshot_name:
         await async_delete_pvc(state.rw_build_pvc)
-        if state.ro_build_pvc:
-            await async_delete_pvc(state.ro_build_pvc)
+    if state.ro_build_pvc:
+        await async_delete_pvc(state.ro_build_pvc)
 
 
 async def clear_cache():

@@ -63,22 +63,25 @@ async def handle_websocket_message(data: dict):
     :param data:
     :return:
     """
-    cmd = data['command']
-    payload = data['payload']
-    logger.debug(f'Received {cmd} command')
-    if cmd == 'start':
-        await handle_start_run(NewTestRun.parse_raw(payload))
-    elif cmd == 'delete_project':
-        await handle_delete_project(payload['project_id'])
-    elif cmd == 'cancel':
-        st = await state.get_build_state(payload['testrun_id'])
-        if st:
-            await jobs.delete_pvcs_and_jobs(st)
-            await st.notify_run_completed()
-    elif cmd == 'clear_cache':
-        await jobs.clear_cache()
-    elif cmd == 'fetch_log':
-        await handle_fetch_log(data['testrun_id'], data['spec'])
+    try:
+        cmd = data['command']
+        payload = data['payload']
+        logger.debug(f'Received {cmd} command')
+        if cmd == 'start':
+            await handle_start_run(NewTestRun.parse_raw(payload))
+        elif cmd == 'delete_project':
+            await handle_delete_project(payload['project_id'])
+        elif cmd == 'cancel':
+            st = await state.get_build_state(payload['testrun_id'])
+            if st:
+                await jobs.delete_pvcs_and_jobs(st)
+                await st.notify_run_completed()
+        elif cmd == 'clear_cache':
+            await jobs.clear_cache()
+        elif cmd == 'fetch_log':
+            await handle_fetch_log(data['testrun_id'], data['spec'])
+    except Exception as ex:
+        logger.exception(f'Failed to handle msg: {ex}')
 
 
 async def consumer_handler(websocket):
@@ -87,11 +90,7 @@ async def consumer_handler(websocket):
             message = await websocket.recv()
         except ConnectionClosed:
             return
-        try:
-            # FIXME move this to a task
-            await handle_websocket_message(json.loads(message))
-        except Exception:
-            logger.exception(f'Failed to handle msg {message}')
+        asyncio.create_task(handle_websocket_message(json.loads(message)))
 
 
 async def handle_agent_message(websocket, rawmsg: str):

@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: dummy
+  namespace: cykubed
+spec:
+  storageClassName: cykubed-storageclass
+  accessModes:
+  - ReadWriteOnce
+  dataSource:
+      apiGroup: snapshot.storage.k8s.io
+      kind: VolumeSnapshot
+      name: "node-a1ba2bbe0a48552272874fd7fa749b9b0676ebf9682ff2a0116a85486e654f6a"
+  resources:
+    requests:
+      storage: "1Gi"
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: shell
+  namespace: cykubed
+spec:
+  containers:
+    - name: shell
+      image: ubuntu
+      command: ["/bin/sleep", "3600"]
+      resources:
+        requests:
+          cpu: "1"
+          memory: "256Mi"
+      volumeMounts:
+        - mountPath: "/build"
+          name: build-volume
+  volumes:
+    - name: build-volume
+      persistentVolumeClaim:
+        claimName: dummy

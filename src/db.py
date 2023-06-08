@@ -63,11 +63,6 @@ async def add_build_snapshot_cache_item(sha: str, node_snapshot_name: str, specs
                                  specs=specs,
                                  storage_size=storage_size)
 
-
-async def get_build_snapshot_cache_item(sha: str) -> CacheItem:
-    return await get_cached_item(f'build-{sha}')
-
-
 def get_pvc_expiry_time() -> str:
     return (utcnow() + datetime.timedelta(seconds=settings.APP_DISTRIBUTION_CACHE_TTL)).isoformat()
 

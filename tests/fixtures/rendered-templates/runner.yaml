@@ -7,7 +7,7 @@ metadata:
         local_id: '1'
         project_id: '10'
         testrun_id: '20'
-    name: cykubed-runner-project-20-0
+    name: runner-project-1-0
     namespace: cykubed
 spec:
     activeDeadlineSeconds: 3600
@@ -67,6 +67,6 @@ spec:
             volumes:
             -   name: build-volume
                 persistentVolumeClaim:
-                    claimName: deadbee-ro
+                    claimName: project-1-ro
                     readOnly: true
     ttlSecondsAfterFinished: 3600

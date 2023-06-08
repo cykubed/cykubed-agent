@@ -3,12 +3,11 @@ kind: Job
 metadata:
     labels:
         branch: master
-        cache_key: absd234weefw
         cykubed-job: prepare-cache
         local_id: '1'
         project_id: '10'
         testrun_id: '20'
-    name: cykubed-prepare-cache-absd234weefw
+    name: cache-project-1
     namespace: cykubed
 spec:
     backoffLimit: 0
@@ -32,7 +31,7 @@ spec:
                 -   secretRef:
                         name: cykubed-agent-secrets
                 image: cykubed-runner:1234
-                name: prepare_cache
+                name: prepare
                 resources:
                     limits:
                         cpu: 200m
@@ -51,5 +50,5 @@ spec:
             volumes:
             -   name: build-volume
                 persistentVolumeClaim:
-                    claimName: deadbee-rw
+                    claimName: project-1-rw
     ttlSecondsAfterFinished: 60
