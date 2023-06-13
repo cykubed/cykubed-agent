@@ -133,6 +133,7 @@ async def connect():
     """
     # fetch token
     headers = {'Authorization': f'Bearer {settings.API_TOKEN}',
+               'Agent-Version': settings.AGENT_VERSION,
                'Agent-Host': app.hostname}
 
     async def handle_sigterm_runner():

@@ -3,6 +3,7 @@ from pydantic import BaseSettings
 
 class AgentSettings(BaseSettings):
     API_TOKEN: str = 'cykubeauth'
+    AGENT_VERSION: str = 'dummy'
 
     K8: bool = True
 
