@@ -31,7 +31,7 @@ class AgentSettings(BaseSettings):
 
     MAIN_API_URL: str = 'https://api.cykubed.com'
     # clean up testrun state after this time period (after the runner deadline)
-    TESTRUN_STATE_TTL: int = 2 * 3600
+    TESTRUN_STATE_TTL: int = 30 * 3600 # reduce this when I go to production!
     JOB_TRACKER_PERIOD: int = 30
 
     SENTRY_DSN: str = None
