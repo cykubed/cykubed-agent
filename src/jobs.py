@@ -317,6 +317,8 @@ async def check_jobs_for_testrun(st: TestRunBuildState):
                 await async_delete_job(st.run_job)
                 # and create a new one
                 await create_runner_job(tr, st)
+            else:
+                logger.warning(f'Run job {st.trid} is not active and has no specs remaining - it should have been cleaned up by now?')
 
 
 async def check_jobs():
