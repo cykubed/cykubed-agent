@@ -315,6 +315,7 @@ async def check_jobs_for_testrun(st: TestRunBuildState):
             specs = await r.smembers(f'testrun:{st.trid}:specs')
             if specs:
                 tr = await get_testrun(st.trid)
+                numspecs = len(specs)
                 logger.info(f'Run job {st.trid} is not active but has {numspecs} specs left - recreate it')
                 st.specs = specs
                 st.run_job_index += 1
