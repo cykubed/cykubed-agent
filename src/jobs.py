@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import re
 import tempfile
 
 from loguru import logger
@@ -117,6 +118,9 @@ async def handle_new_run(testrun: schemas.NewTestRun):
                                  pvc_name=state.ro_build_pvc)
         await create_k8_objects('pvc', context)
         state.specs = build_snap_cache_item.specs
+        if testrun.project.spec_filter:
+            state.specs = [s for s in state.specs if re.search(testrun.project.spec_filter, s)]
+
         state.build_storage = build_snap_cache_item.storage_size
         await state.save()
         await db.set_specs(testrun, state.specs)
@@ -308,10 +312,11 @@ async def check_jobs_for_testrun(st: TestRunBuildState):
         # check if the job is finished and we still have remaining specs
         status = await async_get_job_status(st.run_job)
         if status and status.start_time and status.completion_time and not status.active:
-            numspecs = await r.scard(f'testrun:{st.trid}:specs')
-            if numspecs:
+            specs = await r.smembers(f'testrun:{st.trid}:specs')
+            if specs:
                 tr = await get_testrun(st.trid)
                 logger.info(f'Run job {st.trid} is not active but has {numspecs} specs left - recreate it')
+                st.specs = specs
                 st.run_job_index += 1
                 # delete the existing job
                 await async_delete_job(st.run_job)
