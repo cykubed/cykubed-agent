@@ -20,7 +20,7 @@ def compare_rendered_template(yamlobjects, jobtype: str):
     # print('\n'+asyaml)
     with open(os.path.join(FIXTURES_DIR, 'rendered-templates', f'{jobtype}.yaml'), 'r') as f:
         expected = f.read()
-        assert expected == asyaml
+        assert asyaml == expected
 
 
 def get_kind_and_names(create_from_yaml_mock):

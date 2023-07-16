@@ -5,7 +5,7 @@ from redis import Redis
 from redis.asyncio import Redis as AsyncRedis
 
 from common.enums import PlatformEnum
-from common.schemas import Project, OrganisationSummary, NewTestRun
+from common.schemas import Project, NewTestRun
 
 
 @pytest.fixture()
@@ -25,8 +25,8 @@ def mock_create_from_dict(mocker):
 
 @pytest.fixture()
 async def project() -> Project:
-    org = OrganisationSummary(id=5, name='MyOrg')
     return Project(id=10,
+                   organisation_id=5,
                    name='project',
                    default_branch='master',
                    agent_id=1,
@@ -42,7 +42,7 @@ async def project() -> Project:
                    runner_ephemeral_storage=2,
                    url='git@github.org/dummy.git',
                    build_deadline=3600,
-                   organisation=org)
+                   build_cmd='ng build --output=dist')
 
 
 @pytest.fixture()

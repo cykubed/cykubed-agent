@@ -3,7 +3,7 @@ kind: Job
 metadata:
     labels:
         branch: master
-        cykubed-job: builder
+        cykubed_job: builder
         local_id: '1'
         project_id: '10'
         testrun_id: '20'
@@ -13,6 +13,13 @@ spec:
     activeDeadlineSeconds: 3600
     backoffLimit: 0
     template:
+        metadata:
+            labels:
+                branch: master
+                cykubed_job: builder
+                local_id: '1'
+                project_id: '10'
+                testrun_id: '20'
         spec:
             containers:
             -   args:
