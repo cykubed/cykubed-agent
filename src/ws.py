@@ -95,7 +95,7 @@ async def consumer_handler(websocket):
 
 async def handle_agent_message(websocket, rawmsg: str):
     event = AgentEvent.parse_raw(rawmsg)
-    logger.debug(f'Msg: {event.type} for {event.testrun_id}')
+    # logger.debug(f'Msg: {event.type} for {event.testrun_id}')
     if event.type == AgentEventType.build_completed:
         # build completed - create runner jobs
         await jobs.handle_build_completed(AgentBuildCompletedEvent.parse_raw(rawmsg))

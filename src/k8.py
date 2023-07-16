@@ -1,3 +1,4 @@
+import json
 import os
 
 import aiofiles
@@ -10,8 +11,10 @@ from loguru import logger
 from yaml import YAMLError
 
 from app import app
+from common import schemas
 from common.exceptions import BuildFailedException, InvalidTemplateException
 from common.k8common import get_batch_api, get_custom_api, get_core_api, get_client
+from common.utils import utcnow
 from settings import settings
 
 
@@ -208,6 +211,36 @@ async def watch_job_events():
                                  f'active={status.active}')
 
 
+def check_is_spot(annotations) -> bool:
+    if not annotations:
+        return False
+    autopilot = annotations.get('autopilot.gke.io/selector-toleration')
+    if autopilot:
+        seltol = json.loads(autopilot)
+        for tol in seltol['outputTolerations']:
+            if tol['key'] == 'cloud.google.com/gke-spot' and tol['value'] == 'true':
+                return True
+    return False
+
+
+def parse_pod_status(pod: V1Pod) -> schemas.PodStatus:
+    status: V1PodStatus = pod.status
+    metadata: V1ObjectMeta = pod.metadata
+    project_id = metadata.labels['project_id']
+    testrun_id = metadata.labels['testrun_id']
+    annotations = metadata.annotations
+    st = schemas.PodStatus(pod_name=metadata.name,
+                           project_id=project_id,
+                           testrun_id=testrun_id,
+                           phase=status.phase,
+                           is_spot=check_is_spot(annotations),
+                           start_time=status.start_time)
+    if status.phase in ['Succeeded', 'Failed', 'Unknown']:
+        st.end_time = utcnow()
+        st.duration = int((st.end_time - st.start_time).seconds)
+    return st
+
+
 async def watch_pod_events():
     v1 = get_core_api()
     while app.is_running():
@@ -218,10 +251,8 @@ async def watch_pod_events():
             while app.is_running():
                 async for event in stream:
                     pod: V1Pod = event['object']
-                    status: V1PodStatus = pod.status
-                    metadata: V1ObjectMeta = pod.metadata
-                    annotations = metadata.annotations
-                    logger.debug(f'Pod: {status.start_time}: {status.phase}: {annotations} : {metadata.labels}')
+                    st = parse_pod_status(pod)
+                    logger.debug(f'Pod: {st.json()}')
 
 
 def get_template_path(name: str) -> str:
