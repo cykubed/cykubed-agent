@@ -5,10 +5,11 @@ import chevron
 import yaml
 from chevron import ChevronError
 from kubernetes_asyncio import watch, utils as k8utils
-from kubernetes_asyncio.client import ApiException, V1JobStatus
+from kubernetes_asyncio.client import ApiException, V1JobStatus, V1PodStatus, V1ObjectMeta, V1Pod, V1Job
 from loguru import logger
 from yaml import YAMLError
 
+from app import app
 from common.exceptions import BuildFailedException, InvalidTemplateException
 from common.k8common import get_batch_api, get_custom_api, get_core_api, get_client
 from settings import settings
@@ -188,6 +189,39 @@ async def create_k8_snapshot(jobtype, context):
 async def get_job_template(name: str) -> str:
     async with aiofiles.open(get_template_path(name), mode='r') as f:
         return await f.read()
+
+
+async def watch_job_events():
+    api = get_batch_api()
+    while app.is_running():
+        async with watch.Watch().stream(api.list_namespaced_job,
+                                        namespace=settings.NAMESPACE,
+                                        label_selector=f"cykubed_job in (runner,builder)",
+                                        timeout_seconds=10) as stream:
+            while app.is_running():
+                async for event in stream:
+                    job: V1Job = event['object']
+                    status: V1JobStatus = job.status
+                    metadata: V1ObjectMeta = job.metadata
+                    labels = metadata.labels
+                    logger.debug(f'Job:  project={labels["project_id"]}, testrun_id={labels["testrun_id"]}; '
+                                 f'active={status.active}')
+
+
+async def watch_pod_events():
+    v1 = get_core_api()
+    while app.is_running():
+        async with watch.Watch().stream(v1.list_namespaced_pod,
+                                        namespace=settings.NAMESPACE,
+                                        label_selector=f"cykubed_job in (runner,builder)",
+                                        timeout_seconds=10) as stream:
+            while app.is_running():
+                async for event in stream:
+                    pod: V1Pod = event['object']
+                    status: V1PodStatus = pod.status
+                    metadata: V1ObjectMeta = pod.metadata
+                    annotations = metadata.annotations
+                    logger.debug(f'Pod: {status.start_time}: {status.phase}: {annotations} : {metadata.labels}')
 
 
 def get_template_path(name: str) -> str:

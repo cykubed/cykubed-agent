@@ -431,6 +431,7 @@ async def delete_pvcs_and_jobs(state: TestRunBuildState):
 
 
 async def clear_cache():
+    logger.info('Clearing cache')
     async for key in async_redis().scan_iter('cache:*'):
         item = await get_cached_item(key[6:], False)
         await delete_cache_item(item)

@@ -2,7 +2,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   labels:
-    cykubed-job: "runner"
+    cykubed_job: "runner"
     project_id: "{{project.id}}"
     local_id: "{{local_id}}"
     testrun_id: "{{testrun_id}}"
@@ -17,6 +17,7 @@ spec:
   template:
     metadata:
       labels:
+        cykubed_job: "runner"
         project_id: "{{project.id}}"
         local_id: "{{local_id}}"
         testrun_id: "{{testrun_id}}"

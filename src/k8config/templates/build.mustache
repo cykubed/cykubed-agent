@@ -2,7 +2,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   labels:
-    cykubed-job: "builder"
+    cykubed_job: "builder"
     project_id: "{{project.id}}"
     local_id: "{{local_id}}"
     testrun_id: "{{testrun_id}}"
@@ -14,6 +14,13 @@ spec:
   ttlSecondsAfterFinished: 3600
   activeDeadlineSeconds: {{project.build_deadline}}
   template:
+    metadata:
+      labels:
+        cykubed_job: "builder"
+        project_id: "{{project.id}}"
+        local_id: "{{local_id}}"
+        testrun_id: "{{testrun_id}}"
+        branch: "{{branch}}"
     spec:
       securityContext:
         runAsNonRoot: true
