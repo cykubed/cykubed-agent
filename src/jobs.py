@@ -456,6 +456,29 @@ async def recreate_runner_job(st: TestRunBuildState, specs: list[str]):
     await create_runner_job(tr, st)
 
 
+async def handle_pod_event(pod: V1Pod):
+    """
+    Update the duration for a finished pod
+    :param pod:
+    :return:
+    """
+
+    status: V1PodStatus = pod.status
+    metadata: V1ObjectMeta = pod.metadata
+    if status.phase in ['Succeeded', 'Failed']:
+        # assume finished
+        testrun_id = metadata.labels['testrun_id']
+        annotations = metadata.annotations
+        r = async_redis()
+        if await r.sadd(f'testrun:{testrun_id}:completed_pods', metadata.name) == 1:
+            # send the duration if we haven't already
+            st = schemas.PodDuration(job_type=metadata.labels['cykubed_job'],
+                                     is_spot=check_is_spot(annotations),
+                                     duration=int((utcnow() - status.start_time).seconds))
+            await app.httpclient.post(f'/agent/testrun/{testrun_id}/pod-duration',
+                                      content=st.json())
+
+
 async def watch_pod_events():
     v1 = get_core_api()
     while app.is_running():
@@ -465,23 +488,7 @@ async def watch_pod_events():
                                         timeout_seconds=10) as stream:
             while app.is_running():
                 async for event in stream:
-                    pod: V1Pod = event['object']
-                    status: V1PodStatus = pod.status
-                    metadata: V1ObjectMeta = pod.metadata
-                    if status.phase in ['Succeeded', 'Failed']:
-                        # assume finished
-                        project_id = metadata.labels['project_id']
-                        testrun_id = metadata.labels['testrun_id']
-                        annotations = metadata.annotations
-                        r = async_redis()
-                        if not await r.sismember(f'testrun:{testrun_id}:completed_pods',metadata.name):
-                            await r.sadd(f'testrun:{testrun_id}:completed_pods', metadata.name)
-                            # send the duration if we haven't already
-                            st = schemas.PodDuration(job_type=metadata.labels['cykubed_job'],
-                                                     is_spot=check_is_spot(annotations),
-                                                     duration=int((utcnow() - status.start_time).seconds))
-                            await app.httpclient.post(f'/agent/testrun/{testrun_id}/pod-duration',
-                                                      content=st.json())
+                    await handle_pod_event(event['object'])
 
 
 async def watch_job_events():
