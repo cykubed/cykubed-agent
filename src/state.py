@@ -2,16 +2,13 @@ import datetime
 import json
 from typing import Optional
 
-from kubernetes_asyncio.client import V1PodStatus, V1ObjectMeta, V1Pod
 from loguru import logger
 from pydantic import BaseModel
 
 from app import app
-from common import schemas
 from common.exceptions import BuildFailedException
 from common.redisutils import async_redis
 from common.schemas import AgentBuildCompleted
-from common.utils import utcnow
 
 
 class TestRunBuildState(BaseModel):
@@ -70,22 +67,4 @@ def check_is_spot(annotations) -> bool:
                 return True
     return False
 
-
-def parse_pod_status(pod: V1Pod) -> schemas.PodStatus:
-    status: V1PodStatus = pod.status
-    metadata: V1ObjectMeta = pod.metadata
-    project_id = metadata.labels['project_id']
-    testrun_id = metadata.labels['testrun_id']
-    annotations = metadata.annotations
-    st = schemas.PodStatus(pod_name=metadata.name,
-                           project_id=project_id,
-                           testrun_id=testrun_id,
-                           job_type=metadata.labels['cykubed_job'],
-                           phase=status.phase,
-                           is_spot=check_is_spot(annotations),
-                           start_time=status.start_time)
-    if status.phase in ['Succeeded', 'Failed', 'Unknown']:
-        st.end_time = utcnow()
-        st.duration = int((st.end_time - st.start_time).seconds)
-    return st
 

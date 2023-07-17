@@ -4,7 +4,7 @@ import re
 import tempfile
 
 from kubernetes_asyncio import watch
-from kubernetes_asyncio.client import V1Pod, V1Job, V1JobStatus, V1ObjectMeta
+from kubernetes_asyncio.client import V1Pod, V1Job, V1JobStatus, V1ObjectMeta, V1PodStatus
 from loguru import logger
 
 import db
@@ -20,7 +20,7 @@ from db import get_testrun, expired_cached_items_iter, get_cached_item, remove_c
 from k8 import async_get_snapshot, async_delete_pvc, async_delete_snapshot, async_delete_job, wait_for_pvc_ready, \
     create_k8_objects, create_k8_snapshot, wait_for_snapshot_ready
 from settings import settings
-from state import TestRunBuildState, get_build_state, parse_pod_status
+from state import TestRunBuildState, get_build_state, check_is_spot
 
 
 def common_context(testrun: schemas.NewTestRun, **kwargs):
@@ -451,9 +451,23 @@ async def recreate_runner_job(st: TestRunBuildState, specs: list[str]):
     await create_runner_job(tr, st)
 
 
+async def store_pod_status(st: schemas.PodStatus):
+    """
+    Store the pod and upload if this is the last pod
+    :param st:
+    :return:
+    """
+
+    r = async_redis()
+    # pod has finished - update stats
+    await r.lpush(f'testrun:{st.testrun_id}:pod_results', st.json())
+    remaining_specs = await r.get(f'testrun:{st.testrun_id}:to-complete')
+    if not remaining_specs:
+        await upload_testrun_durations(st.testrun_id)
+
+
 async def watch_pod_events():
     v1 = get_core_api()
-    r = async_redis()
     while app.is_running():
         async with watch.Watch().stream(v1.list_namespaced_pod,
                                         namespace=settings.NAMESPACE,
@@ -464,14 +478,8 @@ async def watch_pod_events():
                     pod: V1Pod = event['object']
                     st = parse_pod_status(pod)
                     if st.duration:
-                        # pod has finished. While there should be only 1 pod watcher in an agent statefulset,
-                        # let's be paranoid and gate it:
-                        if not await r.sismember(f'testrun:{st.testrun_id}:completed_pods', st.pod_name):
-                            await r.sadd(f'testrun:{st.testrun_id}:completed_pods', st.pod_name)
-                            await r.lpush(f'testrun:{st.testrun_id}:pod_results', st.json())
-                            remaining_specs = await r.get(f'testrun:{st.testrun_id}:to-complete')
-                            if not remaining_specs:
-                                await upload_testrun_durations(st.testrun_id)
+                        # pod has finished - update stats
+                        await store_pod_status(st)
 
 
 async def watch_job_events():
@@ -497,3 +505,22 @@ async def watch_job_events():
                             if specs:
                                 # yup - recreate the job
                                 await recreate_runner_job(st, specs)
+
+
+def parse_pod_status(pod: V1Pod) -> schemas.PodStatus:
+    status: V1PodStatus = pod.status
+    metadata: V1ObjectMeta = pod.metadata
+    project_id = metadata.labels['project_id']
+    testrun_id = metadata.labels['testrun_id']
+    annotations = metadata.annotations
+    st = schemas.PodStatus(pod_name=metadata.name,
+                           project_id=project_id,
+                           testrun_id=testrun_id,
+                           job_type=metadata.labels['cykubed_job'],
+                           phase=status.phase,
+                           is_spot=check_is_spot(annotations),
+                           start_time=status.start_time)
+    if status.phase in ['Succeeded', 'Failed', 'Unknown']:
+        st.end_time = utcnow()
+        st.duration = int((st.end_time - st.start_time).seconds)
+    return st
