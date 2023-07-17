@@ -477,10 +477,7 @@ async def watch_pod_events():
                         if not await r.sismember(f'testrun:{testrun_id}:completed_pods',metadata.name):
                             await r.sadd(f'testrun:{testrun_id}:completed_pods', metadata.name)
                             # send the duration if we haven't already
-                            st = schemas.PodDuration(pod_name=metadata.name,
-                                                     project_id=project_id,
-                                                     job_type=metadata.labels['cykubed_job'],
-                                                     succeeded=(status.phase == 'Succeeded'),
+                            st = schemas.PodDuration(job_type=metadata.labels['cykubed_job'],
                                                      is_spot=check_is_spot(annotations),
                                                      duration=int((utcnow() - status.start_time).seconds))
                             await app.httpclient.post(f'/agent/testrun/{testrun_id}/pod-duration',
