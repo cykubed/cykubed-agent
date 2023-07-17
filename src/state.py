@@ -23,6 +23,7 @@ class TestRunBuildState(BaseModel):
     run_job: str = None
     runner_deadline: datetime.datetime = None
     run_job_index = 0
+    completed: bool = False
     rw_build_pvc: Optional[str]
     ro_build_pvc: Optional[str]
 

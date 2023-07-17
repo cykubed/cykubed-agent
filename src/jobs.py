@@ -110,6 +110,11 @@ async def handle_new_run(testrun: schemas.NewTestRun):
                               build_storage=testrun.project.build_storage)
     await state.save()
 
+    r = async_redis()
+    # initialise the completed pods set with an expiry
+    await r.sadd(f'testrun:{testrun.id}:completed_pods', 'dummy')
+    await r.expire(f'testrun:{testrun.id}:completed_pods', 6 * 3600)
+
     build_snap_cache_item = await get_build_snapshot_cache_item(testrun.sha)
     if build_snap_cache_item:
         # this is a rerun of a previous build - just create the RO PVC and runner job
@@ -451,21 +456,6 @@ async def recreate_runner_job(st: TestRunBuildState, specs: list[str]):
     await create_runner_job(tr, st)
 
 
-async def store_pod_status(st: schemas.PodStatus):
-    """
-    Store the pod and upload if this is the last pod
-    :param st:
-    :return:
-    """
-
-    r = async_redis()
-    # pod has finished - update stats
-    await r.lpush(f'testrun:{st.testrun_id}:pod_results', st.json())
-    remaining_specs = await r.get(f'testrun:{st.testrun_id}:to-complete')
-    if not remaining_specs:
-        await upload_testrun_durations(st.testrun_id)
-
-
 async def watch_pod_events():
     v1 = get_core_api()
     while app.is_running():
@@ -476,10 +466,26 @@ async def watch_pod_events():
             while app.is_running():
                 async for event in stream:
                     pod: V1Pod = event['object']
-                    st = parse_pod_status(pod)
-                    if st.duration:
-                        # pod has finished - update stats
-                        await store_pod_status(st)
+                    status: V1PodStatus = pod.status
+                    metadata: V1ObjectMeta = pod.metadata
+                    if status.phase in ['Succeeded', 'Failed']:
+                        # assume finished
+                        project_id = metadata.labels['project_id']
+                        testrun_id = metadata.labels['testrun_id']
+                        annotations = metadata.annotations
+                        r = async_redis()
+                        if not await r.sismember(f'testrun:{testrun_id}:completed_pods',metadata.name):
+                            await r.sadd(f'testrun:{testrun_id}:completed_pods', metadata.name)
+                            # send the duration if we haven't already
+                            st = schemas.PodDuration(pod_name=metadata.name,
+                                                     project_id=project_id,
+                                                     testrun_id=testrun_id,
+                                                     job_type=metadata.labels['cykubed_job'],
+                                                     succeeded=(status.phase == 'Succeeded'),
+                                                     is_spot=check_is_spot(annotations),
+                                                     duration=int((utcnow() - status.start_time).seconds))
+                            await app.httpclient.post(f'/agent/testrun/{testrun_id}/pod-duration',
+                                                      content=st.json())
 
 
 async def watch_job_events():
@@ -499,28 +505,12 @@ async def watch_job_events():
                     trid = labels["testrun_id"]
                     if not status.active:
                         st = await get_build_state(trid)
-                        if st.run_job and utcnow() < st.runner_deadline and status.completion_time:
-                            # runner job completed under the deadline: check for specs remaining
-                            specs = await r.smembers(f'testrun:{st.trid}:specs')
-                            if specs:
-                                # yup - recreate the job
-                                await recreate_runner_job(st, specs)
+                        recreating = False
+                        if st.run_job and status.completion_time:
+                            if utcnow() < st.runner_deadline:
+                                # runner job completed under the deadline: check for specs remaining
+                                specs = await r.smembers(f'testrun:{st.trid}:specs')
+                                if specs:
+                                    # yup - recreate the job
+                                    await recreate_runner_job(st, specs)
 
-
-def parse_pod_status(pod: V1Pod) -> schemas.PodStatus:
-    status: V1PodStatus = pod.status
-    metadata: V1ObjectMeta = pod.metadata
-    project_id = metadata.labels['project_id']
-    testrun_id = metadata.labels['testrun_id']
-    annotations = metadata.annotations
-    st = schemas.PodStatus(pod_name=metadata.name,
-                           project_id=project_id,
-                           testrun_id=testrun_id,
-                           job_type=metadata.labels['cykubed_job'],
-                           phase=status.phase,
-                           is_spot=check_is_spot(annotations),
-                           start_time=status.start_time)
-    if status.phase in ['Succeeded', 'Failed', 'Unknown']:
-        st.end_time = utcnow()
-        st.duration = int((st.end_time - st.start_time).seconds)
-    return st
