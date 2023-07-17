@@ -10,11 +10,22 @@ class App(object):
         self.running = True
         self.ws = None
         self.ws_connected = False
+        self.region = None
         if settings.HOSTNAME:
             self.hostname = settings.HOSTNAME
         else:
             with open('/etc/hostname', 'r') as f:
                 self.hostname = f.read().strip()
+
+        try:
+            resp = httpx.get('http://metadata.google.internal/computeMetadata/v1/instance/zone',
+                             headers={'Metadata-Flavor': 'Google'})
+            if resp.status_code == 200:
+                # we're on google
+                self.region = resp.text.split('/')[-1]
+        except:
+            pass
+
         transport = httpx.AsyncHTTPTransport(retries=settings.MAX_HTTP_RETRIES)
         self.httpclient = httpx.AsyncClient(transport=transport,
                                    base_url=settings.MAIN_API_URL,

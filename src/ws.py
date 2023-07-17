@@ -135,6 +135,8 @@ async def connect():
     headers = {'Authorization': f'Bearer {settings.API_TOKEN}',
                'Agent-Version': settings.AGENT_VERSION,
                'Agent-Host': app.hostname}
+    if app.region:
+        headers['Agent-Region'] = app.region
 
     async def handle_sigterm_runner():
         logger.warning(f"SIGTERM/SIGINT caught: close socket and exist")
