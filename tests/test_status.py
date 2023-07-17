@@ -1,4 +1,4 @@
-from k8 import check_is_spot
+from state import check_is_spot
 
 
 def test_check_spot():

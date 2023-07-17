@@ -1,4 +1,3 @@
-import json
 import os
 
 import aiofiles
@@ -6,15 +5,12 @@ import chevron
 import yaml
 from chevron import ChevronError
 from kubernetes_asyncio import watch, utils as k8utils
-from kubernetes_asyncio.client import ApiException, V1JobStatus, V1PodStatus, V1ObjectMeta, V1Pod, V1Job
+from kubernetes_asyncio.client import ApiException, V1JobStatus
 from loguru import logger
 from yaml import YAMLError
 
-from app import app
-from common import schemas
 from common.exceptions import BuildFailedException, InvalidTemplateException
 from common.k8common import get_batch_api, get_custom_api, get_core_api, get_client
-from common.utils import utcnow
 from settings import settings
 
 
@@ -192,67 +188,6 @@ async def create_k8_snapshot(jobtype, context):
 async def get_job_template(name: str) -> str:
     async with aiofiles.open(get_template_path(name), mode='r') as f:
         return await f.read()
-
-
-async def watch_job_events():
-    api = get_batch_api()
-    while app.is_running():
-        async with watch.Watch().stream(api.list_namespaced_job,
-                                        namespace=settings.NAMESPACE,
-                                        label_selector=f"cykubed_job in (runner,builder)",
-                                        timeout_seconds=10) as stream:
-            while app.is_running():
-                async for event in stream:
-                    job: V1Job = event['object']
-                    status: V1JobStatus = job.status
-                    metadata: V1ObjectMeta = job.metadata
-                    labels = metadata.labels
-                    logger.debug(f'Job:  project={labels["project_id"]}, testrun_id={labels["testrun_id"]}; '
-                                 f'active={status.active}')
-
-
-def check_is_spot(annotations) -> bool:
-    if not annotations:
-        return False
-    autopilot = annotations.get('autopilot.gke.io/selector-toleration')
-    if autopilot:
-        seltol = json.loads(autopilot)
-        for tol in seltol['outputTolerations']:
-            if tol['key'] == 'cloud.google.com/gke-spot' and tol['value'] == 'true':
-                return True
-    return False
-
-
-def parse_pod_status(pod: V1Pod) -> schemas.PodStatus:
-    status: V1PodStatus = pod.status
-    metadata: V1ObjectMeta = pod.metadata
-    project_id = metadata.labels['project_id']
-    testrun_id = metadata.labels['testrun_id']
-    annotations = metadata.annotations
-    st = schemas.PodStatus(pod_name=metadata.name,
-                           project_id=project_id,
-                           testrun_id=testrun_id,
-                           phase=status.phase,
-                           is_spot=check_is_spot(annotations),
-                           start_time=status.start_time)
-    if status.phase in ['Succeeded', 'Failed', 'Unknown']:
-        st.end_time = utcnow()
-        st.duration = int((st.end_time - st.start_time).seconds)
-    return st
-
-
-async def watch_pod_events():
-    v1 = get_core_api()
-    while app.is_running():
-        async with watch.Watch().stream(v1.list_namespaced_pod,
-                                        namespace=settings.NAMESPACE,
-                                        label_selector=f"cykubed_job in (runner,builder)",
-                                        timeout_seconds=10) as stream:
-            while app.is_running():
-                async for event in stream:
-                    pod: V1Pod = event['object']
-                    st = parse_pod_status(pod)
-                    logger.debug(f'Pod: {st.json()}')
 
 
 def get_template_path(name: str) -> str:

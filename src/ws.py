@@ -74,7 +74,7 @@ async def handle_websocket_message(data: dict):
         elif cmd == 'cancel':
             st = await state.get_build_state(payload['testrun_id'])
             if st:
-                await jobs.delete_pvcs_and_jobs(st)
+                await jobs.delete_pvcs(st)
                 await st.notify_run_completed()
         elif cmd == 'clear_cache':
             await jobs.clear_cache()

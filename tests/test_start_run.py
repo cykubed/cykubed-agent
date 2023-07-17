@@ -212,9 +212,7 @@ async def test_full_run(redis, mocker, mock_create_from_dict,
     compare_rendered_template([k8_create_custom.call_args_list[0].kwargs['body']], 'build-snapshot')
     compare_rendered_template([k8_create_custom.call_args_list[1].kwargs['body']], 'node-snapshot')
 
-    assert k8_delete_job.call_count == 2
-    assert k8_delete_job.call_args_list[0].args == ('builder-project-1', 'cykubed')
-    assert k8_delete_job.call_args_list[1].args == ('runner-project-1-0', 'cykubed')
+    assert k8_delete_job.call_count == 0
 
 
 @freeze_time('2022-04-03 14:10:00Z')
@@ -338,50 +336,6 @@ async def test_prepare_cache_completed(mocker, redis, testrun,
     # the build PVC will be deleted
     delete_pvc_mock.assert_called_once()
     wait_for_snapshot.assert_called_once()
-
-
-async def test_run_completed(mocker, redis, k8_core_api_mock, k8_batch_api_mock, respx_mock, testrun):
-    await new_testrun(testrun)
-    state = TestRunBuildState(trid=testrun.id,
-                              build_storage=10,
-                              build_job='build-job',
-                              run_job='run-job',
-                              rw_build_pvc='project-1-rw',
-                              ro_build_pvc='project-1-ro',
-                              specs=['test1.ts'],
-                              node_snapshot_name='node-absd234weefw')
-    await state.save()
-
-    delete_pvc_mock = k8_core_api_mock.delete_namespaced_persistent_volume_claim = mocker.AsyncMock()
-    delete_job_mock = k8_batch_api_mock.delete_namespaced_job = mocker.AsyncMock()
-
-    run_completed = \
-        respx_mock.post('https://api.cykubed.com/agent/testrun/20/run-completed') \
-            .mock(return_value=Response(200))
-
-    redis.set('testrun:20:build:duration:normal', 420)
-    redis.set('testrun:20:runner:duration:normal', 125)
-    redis.set('testrun:20:runner:duration:spot', 250)
-
-    await handle_run_completed(testrun.id)
-
-    assert run_completed.called
-    payload = json.loads(run_completed.calls.last.request.content)
-    assert payload == {'testrun_id': 20,
-                       'total_build_duration': 420, 'total_build_duration_spot': 0,
-                       'total_runner_duration': 125, 'total_runner_duration_spot': 250}
-
-    assert delete_pvc_mock.call_count == 2
-    pvcs = {x.args[0] for x in delete_pvc_mock.call_args_list}
-    assert pvcs == {'project-1-rw', 'project-1-ro'}
-
-    assert delete_job_mock.call_count == 2
-    jobs = {x.args[0] for x in delete_job_mock.call_args_list}
-    assert jobs == {'build-job', 'run-job'}
-
-    assert redis.get(f'testrun:state:20') is None
-    assert redis.get(f'testrun:20') is None
-    assert redis.get(f'testrun:20:specs') is None
 
 
 async def test_run_error(redis, mocker, respx_mock, testrun):

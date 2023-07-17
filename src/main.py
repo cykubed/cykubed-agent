@@ -10,8 +10,7 @@ from app import app
 from common import k8common
 from common.k8common import close
 from common.redisutils import sync_redis, ping_redis, async_redis
-from jobs import prune_cache_loop, run_job_tracker
-from k8 import watch_pod_events, watch_job_events
+from jobs import prune_cache_loop, watch_pod_events, watch_job_events
 from logs import configure_logging
 from settings import settings
 
@@ -41,7 +40,7 @@ async def run():
              asyncio.create_task(ws.connect())]
     if app.hostname == 'agent-0':
         tasks += [asyncio.create_task(prune_cache_loop()),
-                  asyncio.create_task(run_job_tracker()),
+                  # asyncio.create_task(run_job_tracker()),
                   asyncio.create_task(watch_pod_events()),
                   asyncio.create_task(watch_job_events()),
                   ]
