@@ -479,7 +479,6 @@ async def watch_pod_events():
                             # send the duration if we haven't already
                             st = schemas.PodDuration(pod_name=metadata.name,
                                                      project_id=project_id,
-                                                     testrun_id=testrun_id,
                                                      job_type=metadata.labels['cykubed_job'],
                                                      succeeded=(status.phase == 'Succeeded'),
                                                      is_spot=check_is_spot(annotations),
