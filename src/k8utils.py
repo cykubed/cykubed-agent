@@ -4,7 +4,7 @@ import aiofiles
 import chevron
 import yaml
 from chevron import ChevronError
-from kubernetes_asyncio import watch, utils as k8utils
+from kubernetes_asyncio import utils as k8utils, watch
 from kubernetes_asyncio.client import ApiException, V1JobStatus
 from loguru import logger
 from yaml import YAMLError
@@ -99,35 +99,6 @@ async def async_delete_job(name: str):
             logger.error(f'Failed to delete job {name}')
 
 
-async def wait_for_pvc_ready(pvc_name: str):
-    v1 = get_core_api()
-    logger.info(f'Wait for PVC {pvc_name} to be bound')
-    async with watch.Watch().stream(v1.list_namespaced_persistent_volume_claim,
-                                    field_selector=f"metadata.name={pvc_name}",
-                                    namespace=settings.NAMESPACE, timeout_seconds=10) as stream:
-        async for event in stream:
-            pvcobj = event['object']
-            if pvcobj.status.phase == 'Bound':
-                logger.debug(f'PVC {pvc_name} is bound')
-                return
-
-
-async def wait_for_snapshot_ready(name: str):
-    v1 = get_custom_api()
-    logger.info(f'Wait for snapshot {name} to be ready to use')
-    async with watch.Watch().stream(v1.list_namespaced_custom_object,
-                                    group="snapshot.storage.k8s.io",
-                                    version="v1beta1",
-                                    plural="volumesnapshots",
-                                    field_selector=f"metadata.name={name}",
-                                    namespace=settings.NAMESPACE, timeout_seconds=10) as stream:
-        async for event in stream:
-            pvcobj = event['object']
-            status = pvcobj.get('status')
-            if status and status.get('readyToUse') is True:
-                logger.debug(f'Snapshot {name} is ready to use')
-                return
-
 #
 # async def test_wait():
 #     await init()
@@ -195,3 +166,33 @@ def get_template_path(name: str) -> str:
 
 
 TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), 'k8config', 'templates')
+
+
+async def wait_for_pvc_ready(pvc_name: str):
+    v1 = get_core_api()
+    logger.info(f'Wait for PVC {pvc_name} to be bound')
+    async with watch.Watch().stream(v1.list_namespaced_persistent_volume_claim,
+                                    field_selector=f"metadata.name={pvc_name}",
+                                    namespace=settings.NAMESPACE, timeout_seconds=10) as stream:
+        async for event in stream:
+            pvcobj = event['object']
+            if pvcobj.status.phase == 'Bound':
+                logger.debug(f'PVC {pvc_name} is bound')
+                return
+
+
+async def wait_for_snapshot_ready(name: str):
+    v1 = get_custom_api()
+    logger.info(f'Wait for snapshot {name} to be ready to use')
+    async with watch.Watch().stream(v1.list_namespaced_custom_object,
+                                    group="snapshot.storage.k8s.io",
+                                    version="v1beta1",
+                                    plural="volumesnapshots",
+                                    field_selector=f"metadata.name={name}",
+                                    namespace=settings.NAMESPACE, timeout_seconds=10) as stream:
+        async for event in stream:
+            pvcobj = event['object']
+            status = pvcobj.get('status')
+            if status and status.get('readyToUse') is True:
+                logger.debug(f'Snapshot {name} is ready to use')
+                return

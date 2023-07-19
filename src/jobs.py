@@ -3,24 +3,23 @@ import datetime
 import re
 import tempfile
 
-from kubernetes_asyncio import watch
-from kubernetes_asyncio.client import V1Pod, V1Job, V1JobStatus, V1ObjectMeta, V1PodStatus
 from loguru import logger
 
+import cache
 import db
 from app import app
+from cache import get_cached_item, add_build_snapshot_cache_item, remove_cached_item
 from common import schemas
 from common.exceptions import BuildFailedException
-from common.k8common import get_batch_api, get_core_api
+from common.k8common import get_batch_api
 from common.redisutils import async_redis
 from common.schemas import AgentBuildCompletedEvent, CacheItem
 from common.utils import utcnow, get_lock_hash
-from db import get_testrun, expired_cached_items_iter, get_cached_item, remove_cached_item, \
-    add_build_snapshot_cache_item
-from k8 import async_get_snapshot, async_delete_pvc, async_delete_snapshot, async_delete_job, wait_for_pvc_ready, \
-    create_k8_objects, create_k8_snapshot, wait_for_snapshot_ready
+from db import get_testrun
+from k8utils import async_get_snapshot, async_delete_pvc, async_delete_job, create_k8_objects, create_k8_snapshot, \
+    wait_for_pvc_ready, wait_for_snapshot_ready
 from settings import settings
-from state import TestRunBuildState, get_build_state, check_is_spot
+from state import TestRunBuildState, get_build_state
 
 
 def common_context(testrun: schemas.NewTestRun, **kwargs):
@@ -250,7 +249,7 @@ async def handle_cache_prepared(testrun_id):
                              snapshot_name=name,
                              pvc_name=state.rw_build_pvc)
     await create_k8_snapshot('pvc-snapshot', context)
-    await db.add_cached_item(name, state.build_storage)
+    await cache.add_cached_item(name, state.build_storage)
 
     # wait for the snashot
     await wait_for_snapshot_ready(name)
@@ -288,88 +287,6 @@ async def handle_testrun_error(event: schemas.AgentTestRunErrorEvent):
     logger.info(f'Run {event.testrun_id} failed at stage {event.report.stage}')
     await app.httpclient.post(f'/agent/testrun/{event.testrun_id}/error', json=event.report.dict())
     await handle_run_completed(event.testrun_id)
-
-
-async def prune_cache_loop():
-    """
-    Pune expired snapshots and PVCs
-    :return:
-    """
-    while app.is_running():
-        await prune_cache()
-        await asyncio.sleep(300)
-
-
-# async def check_jobs_for_testrun(st: TestRunBuildState):
-#     logger.debug(f'Check jobs for testrun {st.trid}')
-#     r = async_redis()
-#     if st.build_job and not st.run_job:
-#         status = await async_get_job_status(st.build_job)
-#         if status and status.failed:
-#             tr = await get_testrun(st.trid)
-#             # report it as failed
-#             if tr and tr.status != 'failed':
-#                 logger.info(f'Build for {st.trid} failed')
-#                 errmsg = TestRunErrorReport(stage='build', msg='Build failed')
-#                 await handle_testrun_error(schemas.AgentTestRunErrorEvent(testrun_id=st.trid,
-#                                                                           report=errmsg))
-#                 return
-#
-#     if st.run_job and utcnow() < st.runner_deadline:
-#         # check if the job is finished and we still have remaining specs
-#         status = await async_get_job_status(st.run_job)
-#         if status and status.start_time and status.completion_time and not status.active:
-#             specs = await r.smembers(f'testrun:{st.trid}:specs')
-#             if specs:
-#                 tr = await get_testrun(st.trid)
-#                 numspecs = len(specs)
-#                 logger.info(f'Run job {st.trid} is not active but has {numspecs} specs left - recreate it')
-#                 st.specs = specs
-#                 st.run_job_index += 1
-#                 # delete the existing job
-#                 await async_delete_job(st.run_job)
-#                 # and create a new one
-#                 await create_runner_job(tr, st)
-#             else:
-#                 logger.warning(f'Run job {st.trid} is not active and has no specs remaining - it should have been cleaned up by now?')
-#
-#
-# async def check_jobs():
-#     r = async_redis()
-#     async for key in r.scan_iter('testrun:state:*', count=100):
-#         st = TestRunBuildState.parse_raw(await r.get(key))
-#         if st:
-#             now = utcnow()
-#             if st.runner_deadline and now > st.runner_deadline and \
-#                     (now - st.runner_deadline).seconds > settings.TESTRUN_STATE_TTL:
-#                 logger.info(f'State for testrun {st.trid} has expired: cleanup and delete state')
-#                 await delete_pvcs(st)
-#                 await st.notify_run_completed()
-#             else:
-#                 await check_jobs_for_testrun(st)
-#
-#
-# async def run_job_tracker():
-#     logger.info('Running job tracker')
-#     while app.is_running():
-#         await asyncio.sleep(settings.JOB_TRACKER_PERIOD)
-#         await check_jobs()
-
-
-async def delete_cache_item(item):
-    # delete volume
-    await async_delete_snapshot(item.name)
-    await async_redis().delete(f'cache:{item.name}')
-
-
-async def prune_cache():
-    async for item in expired_cached_items_iter():
-        await delete_cache_item(item)
-
-
-async def delete_cached_pvc(name: str):
-    await async_delete_pvc(name)
-    await remove_cached_item(name)
 
 
 async def delete_testrun_job(job, trid: int = None):
@@ -417,33 +334,6 @@ async def delete_pvcs(state: TestRunBuildState):
 #
 
 
-async def clear_cache():
-    logger.info('Clearing cache')
-    async for key in async_redis().scan_iter('cache:*'):
-        item = await get_cached_item(key[6:], False)
-        await delete_cache_item(item)
-
-
-async def upload_testrun_durations(trid):
-    r = async_redis()
-    podresults = [schemas.PodStatus.parse_raw(x) for x in await r.lrange(f'testrun:{trid}:pod_results', 0, -1)]
-    # dedup just in case
-    by_pod = list({p.pod_name: p for p in podresults}.values())
-
-    payload = schemas.TestRunDurations(testrun_id=trid)
-    for result in by_pod:
-        if result.job_type == 'builder':
-            payload.total_build_duration += result.duration
-        elif result.job_type == 'runner':
-            if result.is_spot:
-                payload.total_runner_duration_spot += result.duration
-            else:
-                payload.total_runner_duration += result.duration
-
-    await app.httpclient.post(f'/agent/testrun/{trid}/durations',
-                              content=payload.json())
-
-
 async def recreate_runner_job(st: TestRunBuildState, specs: list[str]):
     tr = await get_testrun(st.trid)
     numspecs = len(specs)
@@ -455,65 +345,4 @@ async def recreate_runner_job(st: TestRunBuildState, specs: list[str]):
     # and create a new one
     await create_runner_job(tr, st)
 
-
-async def handle_pod_event(pod: V1Pod):
-    """
-    Update the duration for a finished pod
-    :param pod:
-    :return:
-    """
-
-    status: V1PodStatus = pod.status
-    metadata: V1ObjectMeta = pod.metadata
-    if status.phase in ['Succeeded', 'Failed']:
-        # assume finished
-        testrun_id = metadata.labels['testrun_id']
-        annotations = metadata.annotations
-        r = async_redis()
-        if await r.sadd(f'testrun:{testrun_id}:completed_pods', metadata.name) == 1:
-            # send the duration if we haven't already
-            st = schemas.PodDuration(job_type=metadata.labels['cykubed_job'],
-                                     is_spot=check_is_spot(annotations),
-                                     duration=int((utcnow() - status.start_time).seconds))
-            await app.httpclient.post(f'/agent/testrun/{testrun_id}/pod-duration',
-                                      content=st.json())
-
-
-async def watch_pod_events():
-    v1 = get_core_api()
-    while app.is_running():
-        async with watch.Watch().stream(v1.list_namespaced_pod,
-                                        namespace=settings.NAMESPACE,
-                                        label_selector=f"cykubed_job in (runner,builder)",
-                                        timeout_seconds=10) as stream:
-            while app.is_running():
-                async for event in stream:
-                    await handle_pod_event(event['object'])
-
-
-async def watch_job_events():
-    api = get_batch_api()
-    r = async_redis()
-    while app.is_running():
-        async with watch.Watch().stream(api.list_namespaced_job,
-                                        namespace=settings.NAMESPACE,
-                                        label_selector=f"cykubed_job in (runner,builder)",
-                                        timeout_seconds=10) as stream:
-            while app.is_running():
-                async for event in stream:
-                    job: V1Job = event['object']
-                    status: V1JobStatus = job.status
-                    metadata: V1ObjectMeta = job.metadata
-                    labels = metadata.labels
-                    trid = labels["testrun_id"]
-                    if not status.active:
-                        st = await get_build_state(trid)
-                        recreating = False
-                        if st.run_job and status.completion_time:
-                            if utcnow() < st.runner_deadline:
-                                # runner job completed under the deadline: check for specs remaining
-                                specs = await r.smembers(f'testrun:{st.trid}:specs')
-                                if specs:
-                                    # yup - recreate the job
-                                    await recreate_runner_job(st, specs)
 

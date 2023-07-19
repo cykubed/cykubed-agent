@@ -8,6 +8,7 @@ from loguru import logger
 from redis.exceptions import RedisError
 from websockets.exceptions import ConnectionClosedError, InvalidStatusCode, ConnectionClosed
 
+import cache
 import db
 import jobs
 import state
@@ -77,7 +78,7 @@ async def handle_websocket_message(data: dict):
                 await jobs.delete_pvcs(st)
                 await st.notify_run_completed()
         elif cmd == 'clear_cache':
-            await jobs.clear_cache()
+            await cache.clear_cache()
         elif cmd == 'fetch_log':
             await handle_fetch_log(data['testrun_id'], data['spec'])
     except Exception as ex:

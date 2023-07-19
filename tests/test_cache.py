@@ -4,9 +4,8 @@ import json
 from freezegun import freeze_time
 from pytz import utc
 
+from cache import prune_cache, get_cached_item, add_cached_item, expired_cached_items_iter
 from common.schemas import NewTestRun
-from db import add_cached_item, expired_cached_items_iter, get_cached_item
-from jobs import prune_cache
 from settings import settings
 from ws import handle_websocket_message
 
@@ -24,40 +23,41 @@ async def test_check_add_cached_item(redis):
                                     }
 
 
-async def test_expired_cache_iterator(redis, mocker, testrun: NewTestRun):
-    mocker.patch('db.utcnow', return_value=datetime.datetime(2022, 1, 28, 10, 0, 0, tzinfo=utc))
-    await add_cached_item('key1', 10)
+async def test_expired_cache_iterator(redis, testrun: NewTestRun):
+    with freeze_time("2022-01-28 10:00:00Z"):
+        await add_cached_item('key1', 10)
     items = []
-    mocker.patch('db.utcnow', return_value=datetime.datetime(2022, 4, 28, 10, 0, 0, tzinfo=utc))
-    async for item in expired_cached_items_iter():
-        items.append(item)
+    with freeze_time("2022-04-28 10:00:00Z"):
+        async for item in expired_cached_items_iter():
+            items.append(item)
     assert len(items) == 1
 
 
-async def test_node_cache_expiry_update(redis, mocker):
-    mocker.patch('db.utcnow', return_value=datetime.datetime(2022, 1, 28, 10, 0, 0, tzinfo=utc))
-    await add_cached_item('key1', 10)
+async def test_node_cache_expiry_update(redis):
+    with freeze_time("2022-01-28 10:00:00Z"):
+        await add_cached_item('key1', 10)
+
     now = datetime.datetime(2022, 4, 28, 10, 0, 0, tzinfo=utc)
-    mocker.patch('db.utcnow', return_value=now)
-    # fetch it
-    item = await get_cached_item('key1')
-    assert item.expires == now + datetime.timedelta(seconds=settings.NODE_DISTRIBUTION_CACHE_TTL)
+    with freeze_time(now):
+        # fetch it
+        item = await get_cached_item('key1')
+        assert item.expires == now + datetime.timedelta(seconds=settings.NODE_DISTRIBUTION_CACHE_TTL)
 
 
 async def test_prune_cache(redis, mocker, k8_custom_api_mock):
-    mocker.patch('db.utcnow', return_value=datetime.datetime(2022, 1, 28, 10, 0, 0, tzinfo=utc))
-    await add_cached_item('key1', 10)
-    mocker.patch('db.utcnow', return_value=datetime.datetime(2022, 3, 28, 10, 0, 0, tzinfo=utc))
-    delete_snapshot = k8_custom_api_mock.delete_namespaced_custom_object = mocker.AsyncMock()
+    with freeze_time("2022-01-28 10:00:00Z"):
+        await add_cached_item('key1', 10)
+    with freeze_time("2022-03-28 10:00:00Z"):
+        delete_snapshot = k8_custom_api_mock.delete_namespaced_custom_object = mocker.AsyncMock()
 
-    await prune_cache()
+        await prune_cache()
 
-    delete_snapshot.assert_called_once()
-    assert delete_snapshot.call_args.kwargs == {'group': 'snapshot.storage.k8s.io',
-                                                'version': 'v1beta1',
-                                                'namespace': 'cykubed',
-                                                'plural': 'volumesnapshots',
-                                                'name': 'key1'}
+        delete_snapshot.assert_called_once()
+        assert delete_snapshot.call_args.kwargs == {'group': 'snapshot.storage.k8s.io',
+                                                    'version': 'v1beta1',
+                                                    'namespace': 'cykubed',
+                                                    'plural': 'volumesnapshots',
+                                                    'name': 'key1'}
 
 
 async def test_clear_cache(redis, mocker, k8_custom_api_mock):

@@ -7,12 +7,13 @@ from loguru import logger
 
 import ws
 from app import app
+from cache import prune_cache_loop
 from common import k8common
 from common.k8common import close
 from common.redisutils import sync_redis, ping_redis, async_redis
-from jobs import prune_cache_loop, watch_pod_events
 from logs import configure_logging
 from settings import settings
+from watchers import watch_pod_events
 
 
 async def handler(request):

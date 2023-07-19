@@ -1,9 +1,10 @@
 import datetime
 
+from freezegun import freeze_time
 from httpx import Response
 
 from common import schemas
-from jobs import handle_pod_event
+from watchers import handle_pod_event
 
 
 async def test_handle_post_event(respx_mock, mocker, redis):
@@ -19,17 +20,17 @@ async def test_handle_post_event(respx_mock, mocker, redis):
     pod.metadata.annotations = {}
     pod.metadata.labels = {'testrun_id': 20,
                            'cykubed_job': 'runner'}
-    mocker.patch('jobs.utcnow', return_value=datetime.datetime(2023, 6, 10, 10, 2, 30, tzinfo=datetime.timezone.utc))
 
-    await handle_pod_event(pod)
+    with freeze_time("2023-06-10 10:02:30Z"):
+        await handle_pod_event(pod)
 
-    assert store_duration.called
+        assert store_duration.called
 
-    st = schemas.PodDuration.parse_raw(store_duration.calls[0].request.content.decode())
-    assert st.duration == 150
-    assert not st.is_spot
-    assert st.job_type == 'runner'
+        st = schemas.PodDuration.parse_raw(store_duration.calls[0].request.content.decode())
+        assert st.duration == 150
+        assert not st.is_spot
+        assert st.job_type == 'runner'
 
-    # call it again - this shouldn't be posted as we've already done it
-    await handle_pod_event(pod)
-    assert store_duration.call_count == 1
+        # call it again - this shouldn't be posted as we've already done it
+        await handle_pod_event(pod)
+        assert store_duration.call_count == 1

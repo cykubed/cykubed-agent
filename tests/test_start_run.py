@@ -5,9 +5,10 @@ import yaml
 from freezegun import freeze_time
 from httpx import Response
 
+from cache import add_cached_item, add_build_snapshot_cache_item
 from common.enums import AgentEventType
 from common.schemas import NewTestRun, AgentEvent, TestRunErrorReport, AgentTestRunErrorEvent, AgentBuildCompletedEvent
-from db import add_cached_item, new_testrun, add_build_snapshot_cache_item
+from db import new_testrun
 from jobs import handle_run_completed, handle_testrun_error
 from state import TestRunBuildState, get_build_state
 from ws import handle_start_run, handle_agent_message
