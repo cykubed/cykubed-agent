@@ -40,6 +40,6 @@ def rest_logsink(msg: loguru.Message):
 def configure_logging():
     # disable logging for health check
     logging.getLogger("aiohttp.access").disabled = True
-    configure_stackdriver_logging('cykube-agent')
+    configure_stackdriver_logging('cykubed-agent')
     logger.add(rest_logsink,
                format="{message}", level="INFO")
