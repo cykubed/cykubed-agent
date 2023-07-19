@@ -1,7 +1,5 @@
 from pydantic import BaseSettings
 
-from common.enums import KubernetesPlatform
-
 
 class AgentSettings(BaseSettings):
     API_TOKEN: str = 'cykubeauth'
@@ -10,7 +8,7 @@ class AgentSettings(BaseSettings):
     K8: bool = True
 
     NAMESPACE = 'cykubed'
-    PLATFORM: KubernetesPlatform = 'minikube'
+    PLATFORM: str = 'generic'
 
     SERVER_START_TIMEOUT: int = 60
     CYPRESS_RUN_TIMEOUT: int = 10*60

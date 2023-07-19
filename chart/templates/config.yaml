@@ -19,7 +19,7 @@ data:
   AGENT_VERSION: "{{ .Values.tag }}"
   MAIN_API_URL: {{ .Values.apiUrl }}
   NAMESPACE: {{ .Values.namespace }}
-  PLATFORM: {{ required "Please specify the target platform" .Values.platform }}
+  PLATFORM: {{ required "Please specify the target platform" .Values.platform | lower }}
   STORAGE_CLASS: cykubed-storageclass
   CYPRESS_RUN_TIMEOUT: "3600"
   REDIS_SECRET_NAME: "{{ .Release.Name }}-redis"

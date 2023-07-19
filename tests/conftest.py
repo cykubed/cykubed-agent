@@ -4,7 +4,7 @@ from loguru import logger
 from redis import Redis
 from redis.asyncio import Redis as AsyncRedis
 
-from common.enums import PlatformEnum, KubernetesPlatform
+from common.enums import PlatformEnum
 from common.schemas import Project, NewTestRun
 from settings import settings
 
@@ -27,7 +27,7 @@ def mock_create_from_dict(mocker):
 @pytest.fixture()
 async def project() -> Project:
     # enable spot
-    settings.PLATFORM = KubernetesPlatform.gke
+    settings.PLATFORM = "gke"
     return Project(id=10,
                    organisation_id=5,
                    name='project',
