@@ -3,6 +3,10 @@ kind: VolumeSnapshot
 metadata:
   name: "{{snapshot_name}}"
   namespace: "{{namespace}}"
+  labels:
+{{#testrun_id}}
+    testrun_id: "{{testrun_id}}"
+{{/testrun_id}}
 spec:
   volumeSnapshotClassName: cykubed-snapshotclass
   source:

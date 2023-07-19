@@ -4,8 +4,9 @@ from loguru import logger
 from redis import Redis
 from redis.asyncio import Redis as AsyncRedis
 
-from common.enums import PlatformEnum
+from common.enums import PlatformEnum, KubernetesPlatform
 from common.schemas import Project, NewTestRun
+from settings import settings
 
 
 @pytest.fixture()
@@ -25,6 +26,8 @@ def mock_create_from_dict(mocker):
 
 @pytest.fixture()
 async def project() -> Project:
+    # enable spot
+    settings.PLATFORM = KubernetesPlatform.gke
     return Project(id=10,
                    organisation_id=5,
                    name='project',
@@ -78,6 +81,7 @@ def create_custom_mock(mocker, k8_custom_api_mock):
     api_mock = mocker.AsyncMock()
     k8_custom_api_mock.create_namespaced_custom_object = api_mock
     return api_mock
+
 
 @pytest.fixture()
 def testrun(project: Project) -> NewTestRun:

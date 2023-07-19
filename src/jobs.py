@@ -10,6 +10,7 @@ import db
 from app import app
 from cache import get_cached_item, add_build_snapshot_cache_item, remove_cached_item
 from common import schemas
+from common.enums import PLATFORMS_SUPPORTING_SPOT
 from common.exceptions import BuildFailedException
 from common.k8common import get_batch_api
 from common.redisutils import async_redis
@@ -119,16 +120,16 @@ async def handle_new_run(testrun: schemas.NewTestRun):
         # this is a rerun of a previous build - just create the RO PVC and runner job
         logger.info(f'Found cached build for sha {testrun.sha}: reuse')
         state.ro_build_pvc = create_ro_pvc_name(testrun)
+        state.specs = build_snap_cache_item.specs
+        if testrun.project.spec_filter:
+            state.specs = [s for s in state.specs if re.search(testrun.project.spec_filter, s)]
+        state.build_storage = build_snap_cache_item.storage_size
+        await state.save()
         context = common_context(testrun,
                                  read_only=True, snapshot_name=build_snap_cache_item.name,
                                  pvc_name=state.ro_build_pvc)
         await create_k8_objects('pvc', context)
-        state.specs = build_snap_cache_item.specs
-        if testrun.project.spec_filter:
-            state.specs = [s for s in state.specs if re.search(testrun.project.spec_filter, s)]
 
-        state.build_storage = build_snap_cache_item.storage_size
-        await state.save()
         await db.set_specs(testrun, state.specs)
         await state.notify_build_completed()
         await create_runner_job(testrun, state)
@@ -142,6 +143,7 @@ async def handle_new_run(testrun: schemas.NewTestRun):
         # we need a RW PVC for the build
         state.rw_build_pvc = create_rw_pvc_name(testrun)
         state.cache_key = cache_key
+        await state.save()
         context = common_context(testrun,
                                  pvc_name=state.rw_build_pvc)
         # base it on the node cache if we have one
@@ -189,7 +191,7 @@ async def handle_build_completed(event: AgentBuildCompletedEvent):
 
     # snapshot the build pvc and record it in the cache
     await create_k8_snapshot('pvc-snapshot', context)
-    await add_build_snapshot_cache_item(testrun.sha, state.node_snapshot_name,
+    await add_build_snapshot_cache_item(testrun.sha,
                                         state.specs,
                                         testrun.project.build_storage)
 
@@ -247,6 +249,7 @@ async def handle_cache_prepared(testrun_id):
     name = f'node-{state.cache_key}'
     context = common_context(testrun,
                              snapshot_name=name,
+                             cache_key=state.cache_key,
                              pvc_name=state.rw_build_pvc)
     await create_k8_snapshot('pvc-snapshot', context)
     await cache.add_cached_item(name, state.build_storage)
@@ -265,6 +268,9 @@ async def create_runner_job(testrun: schemas.NewTestRun, state: TestRunBuildStat
     context.update(dict(name=f'runner-{testrun.project.name}-{testrun.local_id}-{state.run_job_index}',
                         parallelism=min(testrun.project.parallelism, len(state.specs)),
                         pvc_name=state.ro_build_pvc))
+    if not settings.PLATFORM in PLATFORMS_SUPPORTING_SPOT and testrun.project.spot_enabled:
+        # no spot on this platform
+        testrun.project.spot_enabled = False
     if not state.runner_deadline:
         state.runner_deadline = utcnow() + datetime.timedelta(seconds=testrun.project.runner_deadline)
     state.run_job = await create_k8_objects('runner', context)

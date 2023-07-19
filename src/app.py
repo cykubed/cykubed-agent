@@ -2,6 +2,7 @@ import httpx
 from loguru import logger
 
 from common.enums import TestRunStatus
+from common.k8common import close
 from settings import settings
 
 
@@ -36,6 +37,7 @@ class App(object):
 
     async def shutdown(self):
         self.running = False
+        await close()
         await self.httpclient.aclose()
 
     async def update_status(self, testrun_id, status: TestRunStatus):

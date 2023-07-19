@@ -1,6 +1,8 @@
 apiVersion: snapshot.storage.k8s.io/v1
 kind: VolumeSnapshot
 metadata:
+    labels:
+        testrun_id: '20'
     name: node-absd234weefw
     namespace: cykubed
 spec:

@@ -22,6 +22,16 @@ spec:
                 project_id: '10'
                 testrun_id: '20'
         spec:
+            affinity:
+                nodeAffinity:
+                    preferredDuringSchedulingIgnoredDuringExecution:
+                    -   preference:
+                            matchExpressions:
+                            -   key: cloud.google.com/gke-spot
+                                operator: In
+                                values:
+                                - 'true'
+                        weight: 80
             containers:
             -   args:
                 - run
@@ -57,6 +67,8 @@ spec:
                 volumeMounts:
                 -   mountPath: /build
                     name: build-volume
+                -   mountPath: /etc/podinfo
+                    name: podinfo
             priorityClassName: cykubed-low-priority
             restartPolicy: OnFailure
             securityContext:
@@ -70,4 +82,10 @@ spec:
                 persistentVolumeClaim:
                     claimName: project-1-ro
                     readOnly: true
+            -   downwardAPI:
+                    items:
+                    -   fieldRef:
+                            fieldPath: metadata.annotations
+                        path: annotations
+                name: podinfo
     ttlSecondsAfterFinished: 3600

@@ -33,7 +33,7 @@ class TestRunBuildState(BaseModel):
         return int(val) if val is not None else 0
 
     async def save(self):
-        await async_redis().set(f'testrun:state:{self.trid}', self.json())
+        await async_redis().set(f'testrun:state:{self.trid}', self.json(), ex=24*3600)
 
     async def notify_build_completed(self):
         resp = await app.httpclient.post(f'/agent/testrun/{self.trid}/build-completed',

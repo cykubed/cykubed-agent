@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import sys
 from time import sleep
@@ -7,7 +8,8 @@ from loguru import logger
 
 import ws
 from app import app
-from cache import prune_cache_loop
+from cache import prune_cache_loop, garage_collect_loop, delete_all_jobs, \
+    delete_all_pvcs, delete_all_volume_snapshots
 from common import k8common
 from common.k8common import close
 from common.redisutils import sync_redis, ping_redis, async_redis
@@ -33,14 +35,24 @@ async def hc_server():
 
 
 async def run():
+    sync_redis()
+    # block until we can access Redis
+    while True:
+        if ping_redis():
+            break
+        logger.debug("Cannot ping_redis Redis - waiting")
+        sleep(5)
 
-    if settings.K8 and not settings.TEST:
+    logger.info("Connected to Redis")
+
+    if not settings.TEST:
         await k8common.init()
 
     tasks = [asyncio.create_task(hc_server()),
              asyncio.create_task(ws.connect())]
     if app.hostname == 'agent-0':
         tasks += [asyncio.create_task(prune_cache_loop()),
+                  asyncio.create_task(garage_collect_loop()),
                   asyncio.create_task(watch_pod_events()),
                   # asyncio.create_task(watch_job_events()), # This is broken!
                   ]
@@ -50,26 +62,33 @@ async def run():
         task.cancel()
 
 
+async def cleanup_pending_delete():
+    await k8common.init()
+    await delete_all_jobs()
+    await delete_all_pvcs()
+    await delete_all_volume_snapshots()
+    await app.shutdown()
+
+
 if __name__ == "__main__":
-    # if settings.SENTRY_DSN:
-    #     sentry_sdk.init(
-    #         dsn=settings.SENTRY_DSN,
-    #         integrations=[RedisIntegration(), AsyncioIntegration(),], )
+
+    parser = argparse.ArgumentParser('Cykubed Agent')
+    parser.add_argument('--clear', action='store_true', help='Clear the cache and then exist')
+    args = parser.parse_args()
+
     configure_logging()
-    logger.info("Cykubed agent starting")
-
-    # block until we can access Redis
-    redis = sync_redis()
-    while True:
-        if ping_redis():
-            break
-        logger.debug("Cannot ping_redis Redis - waiting")
-        sleep(5)
-
-    logger.info("Connected to Redis")
-
-    try:
-        asyncio.run(run())
-    except KeyboardInterrupt:
-        asyncio.run(close())
+    if args.clear:
+        logger.info("Cykubed pre-delete cleanup")
+        asyncio.run(cleanup_pending_delete())
         sys.exit(0)
+    else:
+        logger.info("Cykubed agent starting")
+        # if settings.SENTRY_DSN:
+        #     sentry_sdk.init(
+        #         dsn=settings.SENTRY_DSN,
+        #         integrations=[RedisIntegration(), AsyncioIntegration(),], )
+        try:
+            asyncio.run(run())
+        except KeyboardInterrupt:
+            asyncio.run(close())
+            sys.exit(0)

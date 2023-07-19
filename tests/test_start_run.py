@@ -115,7 +115,7 @@ async def test_start_rerun(redis, mocker, testrun: NewTestRun,
     mocker.patch('jobs.get_cache_key', return_value='absd234weefw')
 
     await add_cached_item('node-absd234weefw', 10)
-    await add_build_snapshot_cache_item('deadbeef0101', 'node-absd234weefw', ['spec1.ts'], 1)
+    await add_build_snapshot_cache_item('deadbeef0101',  ['spec1.ts'], 1)
 
     delete_jobs = mocker.patch('jobs.delete_jobs_for_branch')
 
