@@ -270,6 +270,7 @@ async def create_runner_job(testrun: schemas.NewTestRun, state: TestRunBuildStat
                         pvc_name=state.ro_build_pvc))
     if not settings.PLATFORM in PLATFORMS_SUPPORTING_SPOT and testrun.project.spot_enabled:
         # no spot on this platform
+        # TODO we could force non-spot here?
         testrun.project.spot_enabled = False
     if not state.runner_deadline:
         state.runner_deadline = utcnow() + datetime.timedelta(seconds=testrun.project.runner_deadline)

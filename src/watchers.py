@@ -29,7 +29,7 @@ async def watch_job_events():
     while app.is_running():
         async with watch.Watch().stream(api.list_namespaced_job,
                                         namespace=settings.NAMESPACE,
-                                        label_selector=f"cykubed_job in (runner,builder)",
+                                        label_selector=f"cykubed_job=runner",
                                         timeout_seconds=10) as stream:
             while app.is_running():
                 async for event in stream:
@@ -40,8 +40,7 @@ async def watch_job_events():
                     trid = labels["testrun_id"]
                     if not status.active:
                         st = await get_build_state(trid)
-                        recreating = False
-                        if st.run_job and status.completion_time:
+                        if st.run_job and st.run_job == metadata.name and status.completion_time:
                             if utcnow() < st.runner_deadline:
                                 # runner job completed under the deadline: check for specs remaining
                                 specs = await r.smembers(f'testrun:{st.trid}:specs')
