@@ -33,7 +33,6 @@ async def project() -> Project:
                    name='project',
                    default_branch='master',
                    agent_id=1,
-                   start_runners_first=False,
                    platform=PlatformEnum.GITHUB,
                    build_cpu='4.0',
                    build_memory=6.0,

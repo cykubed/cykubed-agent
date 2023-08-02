@@ -78,7 +78,7 @@ async def handle_websocket_message(data: dict):
                 await jobs.delete_pvcs(st)
                 await st.notify_run_completed()
         elif cmd == 'clear_cache':
-            await cache.clear_cache()
+            await cache.clear_cache(payload.get('organisation_id'))
         elif cmd == 'fetch_log':
             await handle_fetch_log(data['testrun_id'], data['spec'])
     except Exception as ex:

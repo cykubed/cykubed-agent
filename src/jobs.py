@@ -191,7 +191,8 @@ async def handle_build_completed(event: AgentBuildCompletedEvent):
 
     # snapshot the build pvc and record it in the cache
     await create_k8_snapshot('pvc-snapshot', context)
-    await add_build_snapshot_cache_item(testrun.sha,
+    await add_build_snapshot_cache_item(testrun.project.organisation_id,
+                                        testrun.sha,
                                         state.specs,
                                         testrun.project.build_storage)
 
@@ -252,7 +253,7 @@ async def handle_cache_prepared(testrun_id):
                              cache_key=state.cache_key,
                              pvc_name=state.rw_build_pvc)
     await create_k8_snapshot('pvc-snapshot', context)
-    await cache.add_cached_item(name, state.build_storage)
+    await cache.add_cached_item(testrun.project.organisation_id, name, state.build_storage)
 
     # wait for the snashot
     await wait_for_snapshot_ready(name)

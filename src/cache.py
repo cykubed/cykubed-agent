@@ -72,11 +72,16 @@ async def stuff():
     await garbage_collect_cache()
 
 
-async def clear_cache():
-    logger.info('Clearing cache')
+async def clear_cache(organisation_id: int = None):
+    if organisation_id:
+        logger.info(f'Clearing cache for org {organisation_id}')
+    else:
+        logger.info('Clearing cache')
+
     async for key in async_redis().scan_iter('cache:*'):
         item = await get_cached_item(key[6:], False)
-        await delete_cache_item(item)
+        if not item.organisation_id or item.organisation_id == organisation_id:
+            await delete_cache_item(item)
 
 
 async def prune_cache():
@@ -126,21 +131,26 @@ async def get_cached_item(key: str, update_expiry=True) -> CacheItem | None:
     return item
 
 
-async def add_cached_item(key: str,
+async def add_cached_item(organisation_id: int,
+                          key: str,
                           storage_size: int,
                           ttl=settings.NODE_DISTRIBUTION_CACHE_TTL,
                           **kwargs) -> CacheItem:
     item = CacheItem(name=key,
                      ttl=ttl,
+                     organisation_id=organisation_id,
                      storage_size=storage_size,
                      expires=utcnow() + datetime.timedelta(seconds=ttl), **kwargs)
     await async_redis().set(f'cache:{key}', item.json())
     return item
 
 
-async def add_build_snapshot_cache_item(sha: str, specs: list[str],
+async def add_build_snapshot_cache_item(organisation_id: int,
+                                        sha: str, specs: list[str],
                                         storage_size: int) -> CacheItem:
-    return await add_cached_item(f'build-{sha}', ttl=settings.APP_DISTRIBUTION_CACHE_TTL,
+    return await add_cached_item(organisation_id,
+                                 f'build-{sha}',
+                                 ttl=settings.APP_DISTRIBUTION_CACHE_TTL,
                                  specs=specs,
                                  storage_size=storage_size)
 

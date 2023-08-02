@@ -79,7 +79,7 @@ async def test_start_run_node_cache_hit(redis, mocker, testrun: NewTestRun,
     """
     New run with a node cache
     """
-    await add_cached_item('node-absd234weefw', 10)
+    await add_cached_item(testrun.project.organisation_id, 'node-absd234weefw', 10)
 
     get_cache_key = mocker.patch('jobs.get_cache_key', return_value='absd234weefw')
 
@@ -114,8 +114,9 @@ async def test_start_rerun(redis, mocker, testrun: NewTestRun,
 
     mocker.patch('jobs.get_cache_key', return_value='absd234weefw')
 
-    await add_cached_item('node-absd234weefw', 10)
-    await add_build_snapshot_cache_item('deadbeef0101',  ['spec1.ts'], 1)
+    await add_cached_item(testrun.project.organisation_id, 'node-absd234weefw', 10)
+    await add_build_snapshot_cache_item(testrun.project.organisation_id,
+                                        'deadbeef0101',  ['spec1.ts'], 1)
 
     delete_jobs = mocker.patch('jobs.delete_jobs_for_branch')
 
