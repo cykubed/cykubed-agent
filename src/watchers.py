@@ -66,7 +66,6 @@ async def handle_pod_event(pod: V1Pod):
         if await r.sadd(f'testrun:{testrun_id}:completed_pods', metadata.name) == 1:
             # send the duration if we haven't already
             st = schemas.PodDuration(job_type=metadata.labels['cykubed_job'],
-                                     pod_name=metadata.name,
                                      is_spot=check_is_spot(annotations),
                                      duration=int((utcnow() - status.start_time).seconds))
             await app.httpclient.post(f'/agent/testrun/{testrun_id}/pod-duration',
