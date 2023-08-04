@@ -70,3 +70,4 @@ async def handle_pod_event(pod: V1Pod):
                                      duration=int((utcnow() - status.start_time).seconds))
             await app.httpclient.post(f'/agent/testrun/{testrun_id}/pod-duration',
                                       content=st.json())
+
