@@ -1,5 +1,5 @@
 TAG="${1:-1.0.0}"
-TOKEN=$(mysql cykubemain -e "select token from agent where name='minikube'" --skip-column-names --silent --raw)
+TOKEN=$(mysql cykubemain -e "select token from agent where platform='minikube'" --skip-column-names --silent --raw)
 echo $TOKEN
 docker build  . -t europe-docker.pkg.dev/cykubeapp/cykubed/agent:"$TAG"
 minikube image load europe-docker.pkg.dev/cykubeapp/cykubed/agent:"$TAG"
