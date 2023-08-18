@@ -335,11 +335,12 @@ async def delete_pvcs(state: TestRunBuildState):
     if state.ro_build_pvc:
         await async_delete_pvc(state.ro_build_pvc)
 
-# if state.build_job:
-#     await async_delete_job(state.build_job)
-# if state.run_job:
-#     await async_delete_job(state.run_job)
-#
+
+async def delete_jobs(state: TestRunBuildState):
+    if state.build_job:
+        await async_delete_job(state.build_job)
+    if state.run_job:
+        await async_delete_job(state.run_job)
 
 
 async def recreate_runner_job(st: TestRunBuildState, specs: list[str]):
