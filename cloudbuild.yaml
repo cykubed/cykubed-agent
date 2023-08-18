@@ -75,7 +75,7 @@ steps:
 
 availableSecrets:
   secretManager:
-    - versionName: projects/489847359241/secrets/cykube-api-token/versions/8
+    - versionName: projects/489847359241/secrets/cykube-api-token/versions/9
       env: 'CYKUBE_API_TOKEN'
     - versionName: projects/489847359241/secrets/cloudflare_api_token/versions/2
       env: 'CLOUDFLARE_API_TOKEN'

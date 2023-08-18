@@ -1,4 +1,4 @@
-name: Cykube-agent tests
+name: Cykubed-agent tests
 
 on: [push]
 
