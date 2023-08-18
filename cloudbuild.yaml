@@ -4,7 +4,7 @@ steps:
    args:
    - '-c'
    - |
-     git config -f .gitmodules submodule.src/common.url https://source.developers.google.com/p/cykubeapp/r/github_cykube_cykube-common
+     git config -f .gitmodules submodule.src/common.url https://source.developers.google.com/p/cykubeapp/r/github_cykubed_cykube-common
      git submodule init
      git submodule update
 
