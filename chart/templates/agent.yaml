@@ -24,6 +24,35 @@ volumeBindingMode: WaitForFirstConsumer
 ---
 {{- end }}
 
+{{- if eq .Values.platform "AKS" }}
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotClass
+metadata:
+  name: cykubed-snapshotclass
+  namespace: {{ .Release.Namespace }}
+driver: disk.csi.azure.com
+deletionPolicy: Delete
+parameters:
+  incremental: "true"
+---
+allowVolumeExpansion: false
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  labels:
+    addonmanager.kubernetes.io/mode: EnsureExists
+    kubernetes.io/cluster-service: "true"
+  name: cykubed-storageclass
+  namespace: {{ .Release.Namespace }}
+parameters:
+  skuname: StandardSSD_LRS
+provisioner: disk.csi.azure.com
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+
+---
+{{- end }}
+
 {{- if eq .Values.platform "minikube" }}
 apiVersion: snapshot.storage.k8s.io/v1
 deletionPolicy: Delete
