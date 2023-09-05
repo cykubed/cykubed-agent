@@ -34,6 +34,8 @@ def common_context(testrun: schemas.NewTestRun, **kwargs):
                 branch=testrun.branch,
                 redis_secret_name=settings.REDIS_SECRET_NAME,
                 token=settings.API_TOKEN,
+                spot_enabled=testrun.spot_enabled,
+                spot_percentage=testrun.spot_percentage,
                 project=testrun.project, **kwargs)
 
 
@@ -269,10 +271,9 @@ async def create_runner_job(testrun: schemas.NewTestRun, state: TestRunBuildStat
     context.update(dict(name=f'runner-{testrun.project.name}-{testrun.local_id}-{state.run_job_index}',
                         parallelism=min(testrun.project.parallelism, len(state.specs)),
                         pvc_name=state.ro_build_pvc))
-    if not settings.PLATFORM in PLATFORMS_SUPPORTING_SPOT and testrun.project.spot_enabled:
+    if settings.PLATFORM not in PLATFORMS_SUPPORTING_SPOT and testrun.spot_enabled:
         # no spot on this platform
-        # TODO we could force non-spot here?
-        testrun.project.spot_enabled = False
+        testrun.spot_enabled = False
     if not state.runner_deadline:
         state.runner_deadline = utcnow() + datetime.timedelta(seconds=testrun.project.runner_deadline)
     state.run_job = await create_k8_objects('runner', context)
