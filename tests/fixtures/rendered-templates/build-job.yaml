@@ -43,11 +43,9 @@ spec:
                 resources:
                     limits:
                         cpu: '4.0'
-                        ephemeral-storage: 4Gi
                         memory: 6.0G
                     requests:
                         cpu: '4.0'
-                        ephemeral-storage: 4Gi
                         memory: 6.0G
                 volumeMounts:
                 -   mountPath: /build
