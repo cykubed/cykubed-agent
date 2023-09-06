@@ -9,7 +9,7 @@ from cache import add_cached_item, add_build_snapshot_cache_item
 from common.enums import AgentEventType
 from common.schemas import NewTestRun, AgentEvent, TestRunErrorReport, AgentTestRunErrorEvent, AgentBuildCompletedEvent
 from db import new_testrun
-from jobs import handle_run_completed, handle_testrun_error
+from jobs import handle_run_completed, handle_testrun_error, create_runner_job
 from state import TestRunBuildState, get_build_state
 from ws import handle_start_run, handle_agent_message
 
@@ -137,6 +137,18 @@ async def test_start_rerun(redis, mocker, testrun: NewTestRun,
     compare_rendered_template_from_mock(mock_create_from_dict, 'runner', 1)
 
     assert build_completed.call_count == 1
+
+
+async def test_create_full_spot_runner(redis, testrun: NewTestRun,
+                                       mock_create_from_dict):
+    testrun.spot_percentage = 100
+    state = TestRunBuildState(trid=testrun.id,
+                              run_job_index=1,
+                              build_storage=10,
+                              ro_build_pvc='project-1-ro',
+                              specs=['spec1.ts'])
+    await create_runner_job(testrun, state)
+    compare_rendered_template_from_mock(mock_create_from_dict, 'runner-full-spot', 0)
 
 
 async def test_full_run(redis, mocker, mock_create_from_dict,

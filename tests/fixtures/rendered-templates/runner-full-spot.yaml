@@ -7,7 +7,7 @@ metadata:
         local_id: '1'
         project_id: '10'
         testrun_id: '20'
-    name: runner-project-1-0
+    name: runner-project-1-1
     namespace: cykubed
 spec:
     activeDeadlineSeconds: 3600
@@ -22,16 +22,6 @@ spec:
                 project_id: '10'
                 testrun_id: '20'
         spec:
-            affinity:
-                nodeAffinity:
-                    preferredDuringSchedulingIgnoredDuringExecution:
-                    -   preference:
-                            matchExpressions:
-                            -   key: cloud.google.com/gke-spot
-                                operator: In
-                                values:
-                                - 'true'
-                        weight: 80
             containers:
             -   args:
                 - run
@@ -67,6 +57,8 @@ spec:
                     name: build-volume
                 -   mountPath: /etc/podinfo
                     name: podinfo
+            nodeSelector:
+                cloud.google.com/gke-spot: 'true'
             priorityClassName: cykubed-low-priority
             restartPolicy: OnFailure
             securityContext:

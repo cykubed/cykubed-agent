@@ -36,6 +36,7 @@ def common_context(testrun: schemas.NewTestRun, **kwargs):
                 token=settings.API_TOKEN,
                 spot_enabled=testrun.spot_enabled,
                 spot_percentage=testrun.spot_percentage,
+                use_spot_affinity=testrun.spot_enabled and testrun.spot_percentage < 100,
                 project=testrun.project, **kwargs)
 
 

@@ -90,7 +90,9 @@ def testrun(project: Project) -> NewTestRun:
                       local_id=1,
                       project=project,
                       status='started',
-                      branch='master')
+                      branch='master',
+                      spot_enabled=True,
+                      spot_percentage=80)
 
 
 @pytest.fixture()
