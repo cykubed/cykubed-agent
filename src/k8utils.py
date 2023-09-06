@@ -121,8 +121,9 @@ async def create_k8_objects(jobtype, context) -> str:
         yamlobjects = await render_template(jobtype, context)
         # should only be one object
         kind = yamlobjects[0]['kind']
-        name = yamlobjects[0]['metadata']['name']
-        logger.info(f'Creating {kind} {name}', id=context['testrun_id'])
+        name = yamlobjects[0]['metadata'].get('name')
+        if name:
+            logger.info(f'Creating {kind} {name}', id=context['testrun_id'])
         await create_from_dict(yamlobjects[0])
         return name
     except YAMLError as ex:
@@ -173,7 +174,7 @@ async def wait_for_pvc_ready(pvc_name: str):
     logger.info(f'Wait for PVC {pvc_name} to be bound')
     async with watch.Watch().stream(v1.list_namespaced_persistent_volume_claim,
                                     field_selector=f"metadata.name={pvc_name}",
-                                    namespace=settings.NAMESPACE, timeout_seconds=10) as stream:
+                                    namespace=settings.NAMESPACE, timeout_seconds=300) as stream:
         async for event in stream:
             pvcobj = event['object']
             if pvcobj.status.phase == 'Bound':
@@ -189,10 +190,12 @@ async def wait_for_snapshot_ready(name: str):
                                     version="v1beta1",
                                     plural="volumesnapshots",
                                     field_selector=f"metadata.name={name}",
-                                    namespace=settings.NAMESPACE, timeout_seconds=10) as stream:
+                                    namespace=settings.NAMESPACE, timeout_seconds=300) as stream:
         async for event in stream:
             pvcobj = event['object']
             status = pvcobj.get('status')
+            logger.debug(f'  snapshot status: {status}')
             if status and status.get('readyToUse') is True:
                 logger.debug(f'Snapshot {name} is ready to use')
                 return
+    logger.debug('Return from wait')

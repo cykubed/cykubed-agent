@@ -1,0 +1,27 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: capacity-pre-provision
+  namespace: "{{namespace}}"
+spec:
+  parallelism: {{parallelism}}
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 0
+  template:
+    spec:
+      {{#spot_enabled}}
+      nodeSelector:
+        cloud.google.com/gke-spot: "true"
+      {{/spot_enabled}}
+      priorityClassName: cykubed-lowest-priority
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: ubuntu-container
+        image: ubuntu
+        command: ["sleep"]
+        args: ["300"]
+        resources:
+          requests:
+            cpu: "{{project.runner_cpu}}"
+            memory: "{{project.runner_memory}}G"
+      restartPolicy: Never

@@ -67,7 +67,7 @@ spec:
                     name: build-volume
                 -   mountPath: /etc/podinfo
                     name: podinfo
-            priorityClassName: cykubed-low-priority
+            priorityClassName: cykubed-default-priority
             restartPolicy: OnFailure
             securityContext:
                 fsGroup: 10000

@@ -203,7 +203,7 @@ async def test_full_run(redis, mocker, mock_create_from_dict,
     await handle_agent_message(websocket, AgentEvent(type=AgentEventType.cache_prepared,
                                                      testrun_id=testrun.id).json())
 
-    wait_for_snapshot.assert_called_once()
+    assert wait_for_snapshot.called
 
     # run completed
     await handle_run_completed(testrun.id)
@@ -239,6 +239,8 @@ async def test_build_completed_node_cache_used(redis, mock_create_from_dict,
     """
     A build is completed using a cached node distribution
     """
+    mocker.patch('jobs.wait_for_snapshot_ready', return_value=True)
+
     msg = AgentBuildCompletedEvent(
                      testrun_id=testrun.id, specs=['test1.ts'])
 
@@ -294,6 +296,7 @@ async def test_build_completed_no_node_cache(redis, mock_create_from_dict,
     :param testrun:
     :return:
     """
+    mocker.patch('jobs.wait_for_snapshot_ready', return_value=True)
     msg = AgentBuildCompletedEvent(
                      testrun_id=testrun.id, specs=['test1.ts'])
     websocket = mocker.AsyncMock()

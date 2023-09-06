@@ -59,7 +59,7 @@ spec:
                     name: podinfo
             nodeSelector:
                 cloud.google.com/gke-spot: 'true'
-            priorityClassName: cykubed-low-priority
+            priorityClassName: cykubed-default-priority
             restartPolicy: OnFailure
             securityContext:
                 fsGroup: 10000

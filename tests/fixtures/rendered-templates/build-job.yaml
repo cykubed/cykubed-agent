@@ -50,7 +50,7 @@ spec:
                 volumeMounts:
                 -   mountPath: /build
                     name: build-volume
-            priorityClassName: cykubed-low-priority
+            priorityClassName: cykubed-default-priority
             restartPolicy: Never
             securityContext:
                 fsGroup: 10000

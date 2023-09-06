@@ -36,6 +36,8 @@ def common_context(testrun: schemas.NewTestRun, **kwargs):
                 token=settings.API_TOKEN,
                 spot_enabled=testrun.spot_enabled,
                 spot_percentage=testrun.spot_percentage,
+                preprovision=testrun.preprovision,
+                parallelism=testrun.project.parallelism,
                 use_spot_affinity=testrun.spot_enabled and testrun.spot_percentage < 100,
                 project=testrun.project, **kwargs)
 
@@ -137,27 +139,37 @@ async def handle_new_run(testrun: schemas.NewTestRun):
         await state.notify_build_completed()
         await create_runner_job(testrun, state)
     else:
-        # First check to see if there is a node cache for this build
-        # Perform a sparse checkout to check for the lock file
-        cache_key = await get_cache_key(testrun)
-        node_snapshot_name = f'node-{cache_key}'
-        cached_node_item = await get_cached_snapshot(node_snapshot_name)
+        await create_build_job(testrun, state)
 
-        # we need a RW PVC for the build
-        state.rw_build_pvc = create_rw_pvc_name(testrun)
-        state.cache_key = cache_key
-        await state.save()
-        context = common_context(testrun,
-                                 pvc_name=state.rw_build_pvc)
-        # base it on the node cache if we have one
-        if cached_node_item:
-            state.node_snapshot_name = context['snapshot_name'] = cached_node_item.name
 
-        await create_k8_objects('pvc', context)
-        # and create the build job
-        state.build_job = await create_k8_objects('build', context)
-        await state.save()
-        await app.update_status(testrun.id, 'building')
+async def create_build_job(testrun, state):
+    logger.debug(f'Create build job for testrun {testrun.local_id}')
+    # First check to see if there is a node cache for this build
+    # Perform a sparse checkout to check for the lock file
+    cache_key = await get_cache_key(testrun)
+    node_snapshot_name = f'node-{cache_key}'
+    cached_node_item = await get_cached_snapshot(node_snapshot_name)
+
+    # we need a RW PVC for the build
+    state.rw_build_pvc = create_rw_pvc_name(testrun)
+    state.cache_key = cache_key
+    await state.save()
+
+    context = common_context(testrun,
+                             pvc_name=state.rw_build_pvc)
+    if context['preprovision']:
+        logger.debug('Create pre-provision job')
+        await create_k8_objects('pre-provision', context)
+
+    # base it on the node cache if we have one
+    if cached_node_item:
+        state.node_snapshot_name = context['snapshot_name'] = cached_node_item.name
+
+    await create_k8_objects('pvc', context)
+    # and create the build job
+    state.build_job = await create_k8_objects('build', context)
+    await state.save()
+    await app.update_status(testrun.id, 'building')
 
 
 def get_build_snapshot_name(testrun):
@@ -191,13 +203,13 @@ async def handle_build_completed(event: AgentBuildCompletedEvent):
     context = common_context(testrun,
                              snapshot_name=get_build_snapshot_name(testrun),
                              pvc_name=state.rw_build_pvc)
-
-    # snapshot the build pvc and record it in the cache
     await create_k8_snapshot('pvc-snapshot', context)
     await add_build_snapshot_cache_item(testrun.project.organisation_id,
                                         testrun.sha,
                                         state.specs,
                                         testrun.project.build_storage)
+
+    await wait_for_snapshot_ready(f'build-{testrun.sha}')
 
     # create a RO PVC from this snapshot and a runner that uses it
     state.ro_build_pvc = create_ro_pvc_name(testrun)
@@ -330,9 +342,9 @@ async def delete_jobs_for_project(project_id):
             await delete_testrun_job(job)
 
 
-async def delete_pvcs(state: TestRunBuildState):
+async def delete_pvcs(state: TestRunBuildState, cancelling=False):
     # we'll let the RW PVC be deleted by the prepare_cache
-    if state.rw_build_pvc and state.node_snapshot_name:
+    if state.rw_build_pvc and (cancelling or state.node_snapshot_name):
         await async_delete_pvc(state.rw_build_pvc)
     if state.ro_build_pvc:
         await async_delete_pvc(state.ro_build_pvc)
