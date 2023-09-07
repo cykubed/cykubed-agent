@@ -10,7 +10,7 @@ metadata:
   name: "builder-{{project.name}}-{{local_id}}"
   namespace: "{{namespace}}"
 spec:
-  backoffLimit: 0
+  backoffLimit: 3
   ttlSecondsAfterFinished: 3600
   activeDeadlineSeconds: {{project.build_deadline}}
   template:
