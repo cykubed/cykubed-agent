@@ -55,8 +55,6 @@ spec:
                 volumeMounts:
                 -   mountPath: /build
                     name: build-volume
-                -   mountPath: /etc/podinfo
-                    name: podinfo
             nodeSelector:
                 cloud.google.com/gke-spot: 'true'
             priorityClassName: cykubed-default-priority
@@ -72,10 +70,4 @@ spec:
                 persistentVolumeClaim:
                     claimName: project-1-ro
                     readOnly: true
-            -   downwardAPI:
-                    items:
-                    -   fieldRef:
-                            fieldPath: metadata.annotations
-                        path: annotations
-                name: podinfo
     ttlSecondsAfterFinished: 3600
