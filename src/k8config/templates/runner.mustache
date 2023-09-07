@@ -30,12 +30,6 @@ spec:
             readOnly: true
             claimName: "{{pvc_name}}"
       {{#spot_enabled}}
-        - name: podinfo
-          downwardAPI:
-            items:
-              - path: "annotations"
-                fieldRef:
-                  fieldPath: metadata.annotations
       {{#use_spot_affinity}}
       affinity:
         nodeAffinity:
@@ -91,7 +85,3 @@ spec:
         volumeMounts:
         - mountPath: "/build"
           name: build-volume
-        {{#spot_enabled}}
-        - name: podinfo
-          mountPath: /etc/podinfo
-        {{/spot_enabled}}
