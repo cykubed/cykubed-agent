@@ -36,11 +36,6 @@ spec:
               - path: "annotations"
                 fieldRef:
                   fieldPath: metadata.annotations
-      tolerations:
-        - key: cloud.google.com/gke-spot
-          operator: Equal
-          value: "true"
-          effect: NoSchedule
       {{#use_spot_affinity}}
       affinity:
         nodeAffinity:
