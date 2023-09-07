@@ -67,11 +67,6 @@ spec:
                 runAsNonRoot: true
                 runAsUser: 10000
             serviceAccountName: cykubed
-            tolerations:
-            -   effect: NoSchedule
-                key: cloud.google.com/gke-spot
-                operator: Equal
-                value: 'true'
             volumes:
             -   name: build-volume
                 persistentVolumeClaim:
