@@ -91,7 +91,6 @@ def testrun(project: Project) -> NewTestRun:
                       project=project,
                       status='started',
                       branch='master',
-                      spot_enabled=True,
                       spot_percentage=80)
 
 
