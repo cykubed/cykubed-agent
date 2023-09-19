@@ -1,9 +1,6 @@
 steps:
  - name: 'gcr.io/cloud-builders/git'
-   entrypoint: 'bash'
-   args:
-   - '-c'
-   - |
+   script: |
      git config -f .gitmodules submodule.src/common.url https://source.developers.google.com/p/cykubed/r/github_cykubed_cykubed-common
      git submodule init
      git submodule update
@@ -14,7 +11,6 @@ steps:
            "--cache=true"]
 
  - name: 'gcr.io/cykubed/helm:3.7.0'
-   entrypoint: 'bash'
    id: 'Build chart'
    script: |
       helm package ./chart -d ./dist --app-version "$VERSION" --version "$VERSION"
