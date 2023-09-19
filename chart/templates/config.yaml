@@ -16,7 +16,7 @@ metadata:
   namespace: {{ .Release.Namespace }}
   name: cykubed-agent-configmap
 data:
-  AGENT_VERSION: "{{ .Values.tag }}"
+  AGENT_VERSION: "{{ .Chart.Version }}"
   MAIN_API_URL: {{ .Values.apiUrl }}
   NAMESPACE: {{ .Values.namespace }}
   PLATFORM: {{ required "Please specify the target platform" .Values.platform | lower }}
