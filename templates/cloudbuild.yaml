@@ -31,10 +31,7 @@ steps:
 
  - name: alpine/httpie
    id: Set current version number
-   entrypoint: sh
-   args:
-     - '-c'
-     - |-
+   script: |
        http POST "https://api.cykubed.com/admin/image/agent/current-version/$VERSION" -A bearer -a $$CYKUBED_API_TOKEN
    secretEnv: ['CYKUBED_API_TOKEN']
 
