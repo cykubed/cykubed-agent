@@ -1,8 +1,8 @@
 [tool.poetry]
-name = "cykube-agent"
-version = "1.0.0"
+name = "cykubed-agent"
+version = "1.11.0"
 description = ""
-authors = ["nick <nick@cykube.net>"]
+authors = ["Support <support@cykubed.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
@@ -33,6 +33,9 @@ pydantic-factories = "^1.17.2"
 freezegun = "^1.2.2"
 respx = "^0.20.1"
 pytest-github-report = "^0.0.1"
+click = "^8.1.7"
+semvar = "^1.2.0"
+semver = "^3.0.1"
 
 [build-system]
 requires = ["poetry-core"]

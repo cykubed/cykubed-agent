@@ -377,6 +377,21 @@ files = [
 ]
 
 [[package]]
+name = "click"
+version = "8.1.7"
+description = "Composable command line interface toolkit"
+category = "dev"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "click-8.1.7-py3-none-any.whl", hash = "sha256:ae74fb96c20a0277a1d615f1e4d73c8414f5a98db8b799a7931d1582f3390c28"},
+    {file = "click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de"},
+]
+
+[package.dependencies]
+colorama = {version = "*", markers = "platform_system == \"Windows\""}
+
+[[package]]
 name = "colorama"
 version = "0.4.6"
 description = "Cross-platform colored terminal text."
@@ -1807,6 +1822,33 @@ files = [
 pyasn1 = ">=0.1.3"
 
 [[package]]
+name = "semvar"
+version = "1.2.0"
+description = "semvar"
+category = "dev"
+optional = false
+python-versions = "*"
+files = [
+    {file = "semvar-1.2.0-py3-none-any.whl", hash = "sha256:6dc7253a9f8bd887a3e997668fe3b7d15437e5d885ea4ae82df345e11a3e28d9"},
+    {file = "semvar-1.2.0.tar.gz", hash = "sha256:a2b22be9376c602ec46972927992b13a2fb1ec36d24115af828075b55f2436f2"},
+]
+
+[package.dependencies]
+pyyaml = "*"
+
+[[package]]
+name = "semver"
+version = "3.0.1"
+description = "Python helper for Semantic Versioning (https://semver.org)"
+category = "dev"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "semver-3.0.1-py3-none-any.whl", hash = "sha256:2a23844ba1647362c7490fe3995a86e097bb590d16f0f32dfc383008f19e4cdf"},
+    {file = "semver-3.0.1.tar.gz", hash = "sha256:9ec78c5447883c67b97f98c3b6212796708191d22e4ad30f4570f840171cbce1"},
+]
+
+[[package]]
 name = "sentry-sdk"
 version = "1.28.1"
 description = "Python client for Sentry (https://sentry.io)"
@@ -2223,4 +2265,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "9a2c2eb56c659aa956f73a09757137cf2582c31cf4418cfe4337c930dd6047e9"
+content-hash = "1ed39b69a5c7fe13d1e10850094203673a9975fe7e36fd6354f1ee029e2fa8ce"
