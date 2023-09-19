@@ -30,6 +30,7 @@ def generate(bump: str, generate_only: bool):
 
     # run the tests first as a sanity check
     if not generate_only:
+        cmd('py.test', True)
         # bump and get the tag
         tag = cmd(f"poetry version {bump} -s")
     else:
