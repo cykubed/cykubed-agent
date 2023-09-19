@@ -17,7 +17,6 @@ steps:
       helm repo index ./dist --url https://charts.cykubed.com
 
  - name: 'gcr.io/cloud-builders/npm'
-   entrypoint: 'bash'
    id: 'Publish chart'
    script: |
        npm i -g wrangler
