@@ -4,7 +4,7 @@ from string import Template
 
 import click
 
-MAIN_BRANCH = 'build'
+MAIN_BRANCH = 'master'
 
 ROOT_DIR = os.path.dirname(__file__)
 TEMPLATE_DIR = os.path.join(ROOT_DIR, 'templates')
