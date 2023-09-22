@@ -31,6 +31,7 @@ async def project() -> Project:
     return Project(id=10,
                    organisation_id=5,
                    name='project',
+                   repos='project',
                    default_branch='master',
                    agent_id=1,
                    platform=PlatformEnum.GITHUB,
