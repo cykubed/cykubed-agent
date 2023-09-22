@@ -159,7 +159,7 @@ async def create_build_job(testrun, state):
                              pvc_name=state.rw_build_pvc)
     if context['preprovision']:
         logger.debug('Create pre-provision job')
-        await create_k8_objects('pre-provision', context)
+        state.preprovision_job = await create_k8_objects('pre-provision', context)
 
     # base it on the node cache if we have one
     if cached_node_item:
@@ -203,6 +203,11 @@ async def handle_build_completed(event: AgentBuildCompletedEvent):
     context = common_context(testrun,
                              snapshot_name=get_build_snapshot_name(testrun),
                              pvc_name=state.rw_build_pvc)
+
+    if state.preprovision_job:
+        logger.debug('Delete pre-provision job')
+        await async_delete_job(state.preprovision_job)
+
     await create_k8_snapshot('pvc-snapshot', context)
     await add_build_snapshot_cache_item(testrun.project.organisation_id,
                                         testrun.sha,
@@ -351,6 +356,8 @@ async def delete_pvcs(state: TestRunBuildState, cancelling=False):
 
 
 async def delete_jobs(state: TestRunBuildState):
+    if state.preprovision_job:
+        await async_delete_job(state.preprovision_job)
     if state.build_job:
         await async_delete_job(state.build_job)
     if state.run_job:

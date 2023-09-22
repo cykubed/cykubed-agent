@@ -20,6 +20,7 @@ class TestRunBuildState(BaseModel):
     node_snapshot_name: str = None
     build_job: str = None
     prepare_cache_job: str = None
+    preprovision_job: str = None
     run_job: str = None
     runner_deadline: datetime.datetime = None
     run_job_index = 0
