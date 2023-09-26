@@ -43,15 +43,16 @@ async def garbage_collect_cache():
     v1 = get_core_api()
     result: V1PersistentVolumeClaimList = await v1.list_namespaced_persistent_volume_claim(settings.NAMESPACE)
     for item in result.items:
-        testrun_id = item.metadata.labels.get('testrun_id')
-        if testrun_id:
-            # does it exist in the cache?
-            st = await get_build_state(int(testrun_id))
-            if not st:
-                # orphan - delete it
-                name = item.metadata.name
-                logger.info(f'Found orphaned PVC {name} - deleting it')
-                await v1.delete_namespaced_persistent_volume_claim(name, settings.NAMESPACE)
+        if item.metadata.labels:
+            testrun_id = item.metadata.labels.get('testrun_id')
+            if testrun_id:
+                # does it exist in the cache?
+                st = await get_build_state(int(testrun_id))
+                if not st:
+                    # orphan - delete it
+                    name = item.metadata.name
+                    logger.info(f'Found orphaned PVC {name} - deleting it')
+                    await v1.delete_namespaced_persistent_volume_claim(name, settings.NAMESPACE)
 
     # check for orphan snapshots
     snapshot_resp = await get_custom_api().list_namespaced_custom_object(group="snapshot.storage.k8s.io",
