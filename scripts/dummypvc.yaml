@@ -4,7 +4,7 @@ metadata:
   name: dummy
   namespace: cykubed
 spec:
-  storageClassName: cykubed-storageclass
+  storageClassName: cykubed
   accessModes:
   - ReadWriteOnce
   dataSource:

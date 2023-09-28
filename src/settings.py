@@ -8,7 +8,9 @@ class AgentSettings(BaseSettings):
     K8: bool = True
 
     NAMESPACE = 'cykubed'
+    PRIORITY_CLASS = 'cykubed-default-priority'
     PLATFORM: str = 'generic'
+    VOLUME_SNAPSHOT_CLASS: str = None
 
     SERVER_START_TIMEOUT: int = 60
     CYPRESS_RUN_TIMEOUT: int = 10*60
@@ -39,7 +41,7 @@ class AgentSettings(BaseSettings):
     HOSTNAME: str = None  # for testin
 
     REDIS_SECRET_NAME = 'cykubed-agent-redis'
-    STORAGE_CLASS = 'cykubed-storageclass'
+    STORAGE_CLASS = 'cykubed'
 
 
 settings = AgentSettings()

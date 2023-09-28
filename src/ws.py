@@ -97,7 +97,7 @@ async def consumer_handler(websocket):
 
 async def handle_agent_message(websocket, rawmsg: str):
     event = AgentEvent.parse_raw(rawmsg)
-    # logger.debug(f'Msg: {event.type} for {event.testrun_id}')
+    logger.debug(f'Msg: {event.type} for {event.testrun_id}')
     if event.type == AgentEventType.build_completed:
         # build completed - create runner jobs
         await jobs.handle_build_completed(AgentBuildCompletedEvent.parse_raw(rawmsg))
@@ -141,7 +141,7 @@ async def connect():
         headers['Agent-Region'] = app.region
 
     async def handle_sigterm_runner():
-        logger.warning(f"SIGTERM/SIGINT caught: close socket and exist")
+        logger.warning(f"SIGTERM/SIGINT caught: close socket and exit")
         wsock = app.ws
         if wsock:
             app.shutdown()
@@ -151,6 +151,7 @@ async def connect():
 
     loop = asyncio.get_event_loop()
     loop.add_signal_handler(signal.SIGTERM, lambda: asyncio.create_task(handle_sigterm_runner()))
+    wait_period = 2
 
     while app.is_running():
         try:
@@ -173,7 +174,8 @@ async def connect():
                 logger.error("Cannot contact redis: wait until we can")
             else:
                 logger.info("Socket disconnected: try again shortly")
-            await asyncio.sleep(10)
+            await asyncio.sleep(wait_period)
+            wait_period = max(60, 2 * wait_period)
 
         except KeyboardInterrupt:
             await app.shutdown()

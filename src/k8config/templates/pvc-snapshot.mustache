@@ -8,6 +8,8 @@ metadata:
     testrun_id: "{{testrun_id}}"
 {{/testrun_id}}
 spec:
-  volumeSnapshotClassName: cykubed-snapshotclass
+{{#snapshot_class_name}}
+  volumeSnapshotClassName: {{snapshot_class_name}}
+{{/snapshot_class_name}}
   source:
     persistentVolumeClaimName: "{{pvc_name}}"

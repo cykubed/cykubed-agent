@@ -25,6 +25,8 @@ from state import TestRunBuildState, get_build_state
 
 def common_context(testrun: schemas.NewTestRun, **kwargs):
     return dict(sha=testrun.sha,
+                priority_class=settings.PRIORITY_CLASS,
+                snapshot_class_name=settings.VOLUME_SNAPSHOT_CLASS,
                 namespace=settings.NAMESPACE,
                 storage_class=settings.STORAGE_CLASS,
                 storage=testrun.project.build_storage,
@@ -298,9 +300,10 @@ async def create_runner_job(testrun: schemas.NewTestRun, state: TestRunBuildStat
     await state.save()
 
 
-async def handle_run_completed(testrun_id):
+async def handle_run_completed(testrun_id, delete_pvcs_only=True):
     """
-    Just delete the PVCs
+    Either delete the PVCs or jobs and notify cymain
+    :param delete_pvcs_only: if False then also delete jobs
     :param testrun_id:
     """
     logger.info(f'Run {testrun_id} completed')
@@ -308,12 +311,14 @@ async def handle_run_completed(testrun_id):
     if state:
         await state.notify_run_completed()
         await delete_pvcs(state)
+        if not delete_pvcs_only:
+            await delete_jobs(state)
 
 
 async def handle_testrun_error(event: schemas.AgentTestRunErrorEvent):
     logger.info(f'Run {event.testrun_id} failed at stage {event.report.stage}')
     await app.httpclient.post(f'/agent/testrun/{event.testrun_id}/error', json=event.report.dict())
-    await handle_run_completed(event.testrun_id)
+    await handle_run_completed(event.testrun_id, delete_pvcs_only=False)
 
 
 async def delete_testrun_job(job, trid: int = None):

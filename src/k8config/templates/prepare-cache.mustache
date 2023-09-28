@@ -32,7 +32,7 @@ spec:
           persistentVolumeClaim:
             claimName: "{{pvc_name}}"
       restartPolicy: Never
-      priorityClassName: "cykubed-default-priority"
+      priorityClassName: "{{ priority_class }}"
       containers:
       - name: "prepare"
         image: "{{project.runner_image}}"

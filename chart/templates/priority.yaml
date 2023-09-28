@@ -1,8 +1,7 @@
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
-  name: cykubed-high-priority
-  namespace: {{ .Release.Namespace }}
+  name: "{{ .Release.Namespace }}-high-priority"
 value: 1000
 globalDefault: false
 description: "Ensure that the cykubed agent is not preempted by runner pods"
@@ -10,8 +9,7 @@ description: "Ensure that the cykubed agent is not preempted by runner pods"
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
-  name: cykubed-default-priority
-  namespace: {{ .Release.Namespace }}
+  name: "{{ .Release.Namespace }}-default-priority"
 value: 0
 globalDefault: false
 description: "Ensure that the cykubed runners are lower priority than the agent"
@@ -19,8 +17,7 @@ description: "Ensure that the cykubed runners are lower priority than the agent"
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
-  name: cykubed-lowest-priority
-  namespace: {{ .Release.Namespace }}
+  name: "{{ .Release.Namespace }}-lowest-priority"
 value: -10
 globalDefault: false
 description: "Use to preprovision"

@@ -1,82 +1,3 @@
-{{- if eq .Values.platform "GKE" }}
-apiVersion: snapshot.storage.k8s.io/v1
-kind: VolumeSnapshotClass
-metadata:
-  name: "cykubed-snapshotclass"
-  namespace: {{ .Release.Namespace }}
-driver: pd.csi.storage.gke.io
-deletionPolicy: Delete
----
-allowVolumeExpansion: false
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  labels:
-    addonmanager.kubernetes.io/mode: EnsureExists
-    k8s-app: gcp-compute-persistent-disk-csi-driver
-  name: cykubed-storageclass
-  namespace: {{ .Release.Namespace }}
-parameters:
-  type: pd-balanced
-provisioner: pd.csi.storage.gke.io
-reclaimPolicy: Delete
-volumeBindingMode: WaitForFirstConsumer
----
-{{- end }}
-
-{{- if eq .Values.platform "AKS" }}
-apiVersion: snapshot.storage.k8s.io/v1
-kind: VolumeSnapshotClass
-metadata:
-  name: cykubed-snapshotclass
-  namespace: {{ .Release.Namespace }}
-driver: disk.csi.azure.com
-deletionPolicy: Delete
-parameters:
-  incremental: "true"
----
-allowVolumeExpansion: false
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  labels:
-    addonmanager.kubernetes.io/mode: EnsureExists
-    kubernetes.io/cluster-service: "true"
-  name: cykubed-storageclass
-  namespace: {{ .Release.Namespace }}
-parameters:
-  skuname: StandardSSD_LRS
-provisioner: disk.csi.azure.com
-reclaimPolicy: Delete
-volumeBindingMode: WaitForFirstConsumer
-
----
-{{- end }}
-
-{{- if eq .Values.platform "minikube" }}
-apiVersion: snapshot.storage.k8s.io/v1
-deletionPolicy: Delete
-driver: hostpath.csi.k8s.io
-kind: VolumeSnapshotClass
-metadata:
-  labels:
-    addonmanager.kubernetes.io/mode: EnsureExists
-  name: cykubed-snapshotclass
-  namespace: {{ .Release.Namespace }}
----
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  labels:
-    addonmanager.kubernetes.io/mode: Reconcile
-  name: cykubed-storageclass
-  namespace: {{ .Release.Namespace }}
-provisioner: hostpath.csi.k8s.io
-reclaimPolicy: Delete
-volumeBindingMode: Immediate
----
-{{- end }}
-
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -101,7 +22,7 @@ spec:
       labels:
         app: agent
     spec:
-      priorityClassName: cykubed-high-priority
+      priorityClassName: "{{ .Release.Namespace }}-high-priority"
       serviceAccountName: cykubed
       securityContext:
         runAsUser: 10000

@@ -28,6 +28,7 @@ def mock_create_from_dict(mocker):
 async def project() -> Project:
     # enable spot
     settings.PLATFORM = "gke"
+    settings.VOLUME_SNAPSHOT_CLASS = 'cykubed-snapshotclass'
     return Project(id=10,
                    organisation_id=5,
                    name='project',

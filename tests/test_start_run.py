@@ -365,7 +365,7 @@ async def test_run_error(redis, mocker, respx_mock, testrun):
             .mock(return_value=Response(200))
     await handle_testrun_error(AgentTestRunErrorEvent(testrun_id=testrun.id,
                                                       report=report))
-    handle_run_completed_mock.assert_called_once_with(testrun.id)
+    handle_run_completed_mock.assert_called_once_with(testrun.id, delete_pvcs_only=False)
 
     assert run_error.called
 

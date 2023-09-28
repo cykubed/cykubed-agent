@@ -18,13 +18,17 @@ metadata:
 data:
   AGENT_VERSION: "{{ .Chart.Version }}"
   MAIN_API_URL: {{ .Values.apiUrl }}
-  NAMESPACE: {{ .Values.namespace }}
+  NAMESPACE: {{ .Release.Namespace }}
   PLATFORM: {{ required "Please specify the target platform" .Values.platform | lower }}
-  STORAGE_CLASS: cykubed-storageclass
+  STORAGE_CLASS: "{{ default .Release.Name .Values.storageClass }}"
+  PRIORITY_CLASS: "{{ .Release.Namespace }}-high-priority"
+{{ if has .Values.platform .Values.volumeSnapshotClassPlatforms }}
+  VOLUME_SNAPSHOT_CLASS: "{{ .Release.Name }}"
+{{ end }}
   CYPRESS_RUN_TIMEOUT: "3600"
   REDIS_SECRET_NAME: "{{ .Release.Name }}-redis"
 {{ if or (eq .Values.redis.architecture "standalone") (eq .Values.architecture "standalone") }}
-  REDIS_HOST: "{{ .Release.Name }}-redis-master.cykubed.svc.cluster.local"
+  REDIS_HOST: "{{ .Release.Name }}-redis-master.{{ .Release.Namespace }}.svc.cluster.local"
   REDIS_NODES: "1"
 {{ else }}
   REDIS_NODES: "{{ .Values.redis.replica.replicaCount }}"
