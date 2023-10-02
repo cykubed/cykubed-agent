@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cykubed-agent"
-version = "1.24.2"
+version = "1.24.3"
 description = ""
 authors = ["Support <support@cykubed.com>"]
 readme = "README.md"
