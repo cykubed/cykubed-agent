@@ -39,7 +39,7 @@ steps:
 
 availableSecrets:
   secretManager:
-    - versionName: projects/1029845047729/secrets/CYKUBED_API_TOKEN/versions/1
+    - versionName: projects/1029845047729/secrets/CYKUBED_API_TOKEN/versions/3
       env: 'CYKUBED_API_TOKEN'
     - versionName: projects/1029845047729/secrets/cloudflare_api_token/versions/1
       env: 'CLOUDFLARE_API_TOKEN'
