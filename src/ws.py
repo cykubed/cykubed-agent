@@ -173,9 +173,9 @@ async def connect():
             if not ping_redis():
                 logger.error("Cannot contact redis: wait until we can")
             else:
-                logger.info("Socket disconnected: try again shortly")
+                logger.info(f"Socket disconnected: try again in {wait_period}s")
             await asyncio.sleep(wait_period)
-            wait_period = max(60, 2 * wait_period)
+            wait_period = min(60, 2 * wait_period)
 
         except KeyboardInterrupt:
             await app.shutdown()
