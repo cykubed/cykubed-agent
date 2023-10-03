@@ -46,7 +46,7 @@ def generate(bump: str, generate_only: bool):
         # all done: commit and tag
         cmd(f'git add cloudbuild.yaml')
         cmd(f'git add pyproject.toml')
-        cmd(f'git commit -m f"New release {tag}"')
+        cmd(f'git commit -m "New release {tag}"')
         cmd(f'git tag -a {tag} -m "New release:\n{tag}"')
         cmd(f'git push origin {tag}')
 
