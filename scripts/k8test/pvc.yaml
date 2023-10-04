@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: test-ropvc
+  namespace: cykubed
+spec:
+  storageClassName: "premium-rwo"
+  accessModes:
+    - ReadOnlyMany
+  dataSource:
+    apiGroup: snapshot.storage.k8s.io
+    kind: VolumeSnapshot
+    name: "build-6d7582de38a90df0cc3ba09cba7e716da89d0f1d"
+  resources:
+    requests:
+      storage: "10Gi"

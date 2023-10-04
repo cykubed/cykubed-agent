@@ -1,0 +1,42 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: pvctest-
+  namespace: cykubed
+spec:
+  backoffLimit: 0
+  parallelism: 11
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      nodeSelector:
+        cloud.google.com/gke-spot: "true"
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 10000
+        runAsUser: 10000
+        runAsGroup: 10000
+      serviceAccountName: "cykubed"
+      volumes:
+        - name: build-volume
+          persistentVolumeClaim:
+            readOnly: true
+            claimName: "test-ropvc"
+      containers:
+        - name: test
+          imagePullPolicy: IfNotPresent
+          image: us-docker.pkg.dev/cykubed/public/node-16:3.19.5
+          command: [ "/bin/bash", "-c", "--" ]
+          args:
+             - "sleep 300"
+          env:
+          - name: BUILD_DIR
+            value: "/build"
+          envFrom:
+            - configMapRef:
+                name: cykubed-agent-configmap
+          volumeMounts:
+          - mountPath: "/build"
+            name: build-volume
+

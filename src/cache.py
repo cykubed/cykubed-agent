@@ -40,6 +40,7 @@ async def delete_all_volume_snapshots():
 
 async def garbage_collect_cache():
     # check for orphan pvcs
+    logger.info('Running gargbage collector')
     v1 = get_core_api()
     result: V1PersistentVolumeClaimList = await v1.list_namespaced_persistent_volume_claim(settings.NAMESPACE)
     for item in result.items:
