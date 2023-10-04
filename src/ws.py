@@ -151,7 +151,7 @@ async def connect():
 
     loop = asyncio.get_event_loop()
     loop.add_signal_handler(signal.SIGTERM, lambda: asyncio.create_task(handle_sigterm_runner()))
-    wait_period = 2
+    app.wait_period = 2
 
     while app.is_running():
         try:
@@ -162,6 +162,7 @@ async def connect():
 
             async with websockets.connect(url, extra_headers=headers) as ws:
                 logger.info("Connected")
+                app.wait_period = 2
                 app.ws_connected = True
                 done, pending = await asyncio.wait([create_task(consumer_handler(ws)),
                                                     create_task(producer_handler(ws))],
@@ -173,9 +174,9 @@ async def connect():
             if not ping_redis():
                 logger.error("Cannot contact redis: wait until we can")
             else:
-                logger.info(f"Socket disconnected: try again in {wait_period}s")
-            await asyncio.sleep(wait_period)
-            wait_period = min(60, 2 * wait_period)
+                logger.info(f"Socket disconnected: try again in {app.wait_period}s")
+            await asyncio.sleep(app.wait_period)
+            app.wait_period = min(60, 2 * app.wait_period)
 
         except KeyboardInterrupt:
             await app.shutdown()
