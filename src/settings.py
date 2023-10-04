@@ -17,10 +17,10 @@ class AgentSettings(BaseSettings):
 
     PORT = 9001
 
-    # keep app distributions for 24 hr in case of reruns
-    APP_DISTRIBUTION_CACHE_TTL: int = 24 * 3600
-    # keep the node distributions for 30 days
-    NODE_DISTRIBUTION_CACHE_TTL: int = 30*3600
+    # keep app distributions for 1 hr in case of reruns
+    APP_DISTRIBUTION_CACHE_TTL: int = 1 * 3600
+    # keep the node distributions for 7 days (TTL is reset on each use)
+    NODE_DISTRIBUTION_CACHE_TTL: int = 7 * 3600
 
     ENCODING = 'utf8'
 

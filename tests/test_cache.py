@@ -16,11 +16,11 @@ async def test_check_add_cached_item(testrun: NewTestRun, redis):
     cachestr = redis.get(f'cache:node-snap-absd234weefw')
 
     assert json.loads(cachestr) == {'name': 'node-snap-absd234weefw',
-                                    'ttl': 108000,
+                                    'ttl': 25200,
                                     'storage_size': 10,
                                     'organisation_id': 5,
                                     'specs': None,
-                                    'expires': '2022-04-04T20:10:00+00:00'
+                                    'expires': '2022-04-03T21:10:00+00:00'
                                     }
 
 

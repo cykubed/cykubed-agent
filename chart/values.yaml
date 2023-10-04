@@ -4,7 +4,8 @@ token: ""
 sentryDsn: "https://58704c4839d449d587d9f236564ca579@o4505122332803072.ingest.sentry.io/4505122348466176"
 imagePullPolicy: Always
 cache:
-  size: "10Gi"
+  appTTL: 3600
+  nodeTTL: 25200
 gcpServiceAccount: ""
 storageClass: ""
 platform: "minikube"
