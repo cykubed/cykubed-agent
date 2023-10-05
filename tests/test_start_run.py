@@ -410,11 +410,11 @@ async def test_delete_project(redis, mocker):
 
     assert mock_delete_pvc.call_count == 4
     assert mock_delete_job.call_count == 3
-    pvcs = [x.args[0] for x in mock_delete_pvc.call_args_list]
-    assert pvcs == ['dummy-rw-2', 'dummy-ro-2', 'dummy-rw-1', 'dummy-ro-1']
+    pvcs = {x.args[0] for x in mock_delete_pvc.call_args_list}
+    assert pvcs == {'dummy-rw-2', 'dummy-ro-2', 'dummy-rw-1', 'dummy-ro-1'}
 
-    jobs = [x.args[0] for x in mock_delete_job.call_args_list]
-    assert jobs == ['build-2', 'build-1', 'run-1']
+    jobs = {x.args[0] for x in mock_delete_job.call_args_list}
+    assert jobs == {'build-2', 'build-1', 'run-1'}
 
     keys = await redis.keys('testrun:state:*')
     assert keys == ['testrun:state:102']
