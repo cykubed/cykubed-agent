@@ -7,7 +7,7 @@ metadata:
         local_id: '1'
         project_id: '10'
         testrun_id: '20'
-    name: cache-project-1
+    name: 5-cache-project-1
     namespace: cykubed
 spec:
     backoffLimit: 0
@@ -57,5 +57,5 @@ spec:
             volumes:
             -   name: build-volume
                 persistentVolumeClaim:
-                    claimName: project-1-rw
+                    claimName: 5-project-1-rw
     ttlSecondsAfterFinished: 60

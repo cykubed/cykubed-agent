@@ -58,7 +58,7 @@ async def test_start_run_cache_miss(redis, mocker, testrun: NewTestRun,
     assert savedtr == testrun
 
     state = await get_build_state(testrun.id)
-    assert state.rw_build_pvc == 'project-1-rw'
+    assert state.rw_build_pvc == '5-project-1-rw'
     assert state.trid == testrun.id
 
     delete_jobs.assert_called_once_with(testrun.id, 'master')
@@ -145,7 +145,7 @@ async def test_create_full_spot_runner(redis, testrun: NewTestRun,
     state = TestRunBuildState(trid=testrun.id,
                               run_job_index=1,
                               build_storage=10,
-                              ro_build_pvc='project-1-ro',
+                              ro_build_pvc='5-project-1-ro',
                               specs=['spec1.ts'])
     await create_runner_job(testrun, state)
     compare_rendered_template_from_mock(mock_create_from_dict, 'runner-full-spot', 0)
@@ -192,7 +192,7 @@ async def test_full_run(redis, mocker, mock_create_from_dict,
     websocket = mocker.AsyncMock()
     await handle_agent_message(websocket, msg.json())
 
-    wait_for_pvc.assert_called_once_with('project-1-ro')
+    wait_for_pvc.assert_called_once_with('5-project-1-ro')
 
     assert build_completed.call_count == 1
 
@@ -215,11 +215,11 @@ async def test_full_run(redis, mocker, mock_create_from_dict,
 
     # this will have created 2 PVCs, 2 snapshots and 2 Jobs
     kinds_and_names = get_kind_and_names(mock_create_from_dict)
-    assert {('PersistentVolumeClaim', 'project-1-rw'),
-            ('PersistentVolumeClaim', 'project-1-ro'),
-            ('Job', 'builder-project-1'),
-            ('Job', 'runner-project-1-0'),
-            ('Job', 'cache-project-1')
+    assert {('PersistentVolumeClaim', '5-project-1-rw'),
+            ('PersistentVolumeClaim', '5-project-1-ro'),
+            ('Job', '5-builder-project-1'),
+            ('Job', '5-runner-project-1-0'),
+            ('Job', '5-cache-project-1')
             } == set(kinds_and_names)
 
     assert k8_create_custom.call_count == 2
@@ -252,7 +252,7 @@ async def test_build_completed_node_cache_used(redis, mock_create_from_dict,
 
     await new_testrun(testrun)
     state = TestRunBuildState(trid=testrun.id,
-                              rw_build_pvc='project-1-rw',
+                              rw_build_pvc='5-project-1-rw',
                               build_storage=10,
                               node_snapshot_name='node-absd234weefw',
                               cache_key='absd234weefw',
@@ -262,7 +262,7 @@ async def test_build_completed_node_cache_used(redis, mock_create_from_dict,
     await handle_agent_message(websocket, msg.json())
 
     state = await get_build_state(testrun.id)
-    assert state.ro_build_pvc == 'project-1-ro'
+    assert state.ro_build_pvc == '5-project-1-ro'
 
     assert redis.get(f'cache:build-{testrun.sha}') is not None
 
@@ -310,7 +310,7 @@ async def test_build_completed_no_node_cache(redis, mock_create_from_dict,
     await new_testrun(testrun)
     # no node snapshot used
     state = TestRunBuildState(trid=testrun.id,
-                              rw_build_pvc='project-1-rw',
+                              rw_build_pvc='5-project-1-rw',
                               build_storage=10,
                               cache_key='absd234weefw',
                               specs=['test1.ts'])
@@ -321,7 +321,7 @@ async def test_build_completed_no_node_cache(redis, mock_create_from_dict,
 
     # not cached - wait for PVC to be ready then kick off the prepare job
     wait_for_pvc.assert_called_once()
-    wait_for_pvc.assert_called_once_with('project-1-ro')
+    wait_for_pvc.assert_called_once_with('5-project-1-ro')
     assert mock_create_from_dict.call_count == 3
     compare_rendered_template_from_mock(mock_create_from_dict, 'build-ro-pvc-from-snapshot', 0)
     compare_rendered_template_from_mock(mock_create_from_dict, 'runner', 1)
@@ -337,8 +337,8 @@ async def test_prepare_cache_completed(mocker, redis, testrun,
     await new_testrun(testrun)
     # no node snapshot used
     state = TestRunBuildState(trid=testrun.id,
-                              ro_build_pvc='project-1-ro',
-                              rw_build_pvc='project-1-rw',
+                              ro_build_pvc='5-project-1-ro',
+                              rw_build_pvc='5-project-1-rw',
                               build_storage=10,
                               cache_key='absd234weefw',
                               specs=['test1.ts'])

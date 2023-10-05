@@ -78,7 +78,7 @@ async def get_cache_key(testrun: schemas.NewTestRun) -> str:
 
 def create_pvc_name(testrun: schemas.NewTestRun, prefix):
     name = testrun.project.name.lower().replace('_', '-')[:30]
-    return f'{name}-{testrun.local_id}-{prefix}'
+    return f'{testrun.project.organisation_id}-{name}-{testrun.local_id}-{prefix}'
 
 
 def create_ro_pvc_name(testrun: schemas.NewTestRun):
@@ -144,7 +144,7 @@ async def handle_new_run(testrun: schemas.NewTestRun):
         await create_build_job(testrun, state)
 
 
-async def create_build_job(testrun, state):
+async def create_build_job(testrun: schemas.NewTestRun, state: TestRunBuildState):
     logger.debug(f'Create build job for testrun {testrun.local_id}')
     # First check to see if there is a node cache for this build
     # Perform a sparse checkout to check for the lock file
@@ -169,6 +169,7 @@ async def create_build_job(testrun, state):
 
     await create_k8_objects('pvc', context)
     # and create the build job
+    context['job_name'] = f'{testrun.project.organisation_id}-builder-{testrun.project.name}-{testrun.local_id}'
     state.build_job = await create_k8_objects('build', context)
     await state.save()
     await app.update_status(testrun.id, 'building')
@@ -288,9 +289,10 @@ async def handle_cache_prepared(testrun_id):
 async def create_runner_job(testrun: schemas.NewTestRun, state: TestRunBuildState):
     # next create the runner job: limit the parallism as there's no point having more runners than specs
     context = common_context(testrun)
-    context.update(dict(name=f'runner-{testrun.project.name}-{testrun.local_id}-{state.run_job_index}',
-                        parallelism=min(testrun.project.parallelism, len(state.specs)),
-                        pvc_name=state.ro_build_pvc))
+    context.update(
+        dict(name=f'{testrun.project.organisation_id}-runner-{testrun.project.name}-{testrun.local_id}-{state.run_job_index}',
+             parallelism=min(testrun.project.parallelism, len(state.specs)),
+             pvc_name=state.ro_build_pvc))
     if settings.PLATFORM not in PLATFORMS_SUPPORTING_SPOT and testrun.spot_percentage > 0:
         # no spot on this platform
         testrun.spot_percentage = 0

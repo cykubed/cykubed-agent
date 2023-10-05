@@ -7,5 +7,5 @@ metadata:
     namespace: cykubed
 spec:
     source:
-        persistentVolumeClaimName: project-1-rw
+        persistentVolumeClaimName: 5-project-1-rw
     volumeSnapshotClassName: cykubed-snapshotclass
