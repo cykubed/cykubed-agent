@@ -54,7 +54,7 @@ async def test_start_run_cache_miss(redis, mocker, testrun: NewTestRun,
     get_cache_key.assert_called_once()
 
     # this will add an entry to the testrun collection
-    saved_tr_json = redis.get(f'testrun:{testrun.id}')
+    saved_tr_json = await redis.get(f'testrun:{testrun.id}')
     savedtr = NewTestRun.parse_raw(saved_tr_json)
     assert savedtr == testrun
 
@@ -126,12 +126,12 @@ async def test_start_rerun(redis, mocker, testrun: NewTestRun,
     delete_jobs.assert_called_once_with(testrun.id, 'master')
 
     # this will add an entry to the testrun collection
-    saved_tr_json = redis.get(f'testrun:{testrun.id}')
+    saved_tr_json = await redis.get(f'testrun:{testrun.id}')
     savedtr = NewTestRun.parse_raw(saved_tr_json)
     assert savedtr == testrun
 
-    assert redis.smembers('testrun:20:specs') == {'spec1.ts'}
-    assert int(redis.get('testrun:20:to-complete')) == 1
+    assert await redis.smembers('testrun:20:specs') == {'spec1.ts'}
+    assert int(await redis.get('testrun:20:to-complete')) == 1
 
     assert mock_create_from_dict.call_count == 2
     compare_rendered_template_from_mock(mock_create_from_dict, 'build-ro-pvc-from-snapshot', 0)
@@ -198,8 +198,8 @@ async def test_full_run(redis, mocker, mock_create_from_dict,
 
     assert build_completed.call_count == 1
 
-    assert redis.smembers('testrun:20:specs') == {'test1.ts'}
-    assert int(redis.get('testrun:20:to-complete')) == 1
+    assert await redis.smembers('testrun:20:specs') == {'test1.ts'}
+    assert int(await redis.get('testrun:20:to-complete')) == 1
 
     # the cache is preprared
     await handle_agent_message(websocket, AgentEvent(type=AgentEventType.cache_prepared,
@@ -400,7 +400,7 @@ async def test_delete_project(redis, mocker):
                                   build_storage=5,
                                   rw_build_pvc='dummy-rw-3').save()
 
-    keys = redis.keys('testrun:state:*')
+    keys = await redis.keys('testrun:state:*')
     assert keys == ['testrun:state:102', 'testrun:state:101', 'testrun:state:100']
 
     mock_delete_job = mocker.patch('jobs.async_delete_job')
@@ -416,5 +416,5 @@ async def test_delete_project(redis, mocker):
     jobs = [x.args[0] for x in mock_delete_job.call_args_list]
     assert jobs == ['build-2', 'build-1', 'run-1']
 
-    keys = redis.keys('testrun:state:*')
+    keys = await redis.keys('testrun:state:*')
     assert keys == ['testrun:state:102']

@@ -13,7 +13,7 @@ from ws import handle_websocket_message
 @freeze_time('2022-04-03 14:10:00Z')
 async def test_check_add_cached_item(testrun: NewTestRun, redis):
     await add_cached_item(testrun.project.organisation_id, 'node-snap-absd234weefw', 10)
-    cachestr = redis.get(f'cache:node-snap-absd234weefw')
+    cachestr = await redis.get(f'cache:node-snap-absd234weefw')
 
     assert json.loads(cachestr) == {'name': 'node-snap-absd234weefw',
                                     'ttl': 25200,

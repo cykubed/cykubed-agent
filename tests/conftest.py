@@ -16,7 +16,7 @@ def redis(mocker, autouse=True):
     aredis = AsyncRedis(host='localhost', db=1, decode_responses=True)
     mocker.patch('common.redisutils.get_cached_async_redis', return_value=aredis)
     logger.remove()
-    return r
+    return aredis
 
 
 @pytest.fixture()
