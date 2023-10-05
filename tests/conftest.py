@@ -10,9 +10,13 @@ from settings import settings
 
 
 @pytest.fixture()
-def redis(mocker, autouse=True):
-    r = Redis(host='localhost', db=1, decode_responses=True)
-    r.flushdb()
+def sync_redis():
+    return Redis(host='localhost', db=1, decode_responses=True)
+
+
+@pytest.fixture()
+def redis(mocker, sync_redis, autouse=True):
+    sync_redis.flushdb()
     aredis = AsyncRedis(host='localhost', db=1, decode_responses=True)
     mocker.patch('common.redisutils.get_cached_async_redis', return_value=aredis)
     logger.remove()

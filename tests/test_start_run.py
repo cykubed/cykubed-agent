@@ -400,8 +400,8 @@ async def test_delete_project(redis, mocker):
                                   build_storage=5,
                                   rw_build_pvc='dummy-rw-3').save()
 
-    keys = await redis.keys('testrun:state:*')
-    assert keys == ['testrun:state:102', 'testrun:state:101', 'testrun:state:100']
+    keys = set(await redis.keys('testrun:state:*'))
+    assert keys == {'testrun:state:102', 'testrun:state:101', 'testrun:state:100'}
 
     mock_delete_job = mocker.patch('jobs.async_delete_job')
     mock_delete_pvc = mocker.patch('jobs.async_delete_pvc')
