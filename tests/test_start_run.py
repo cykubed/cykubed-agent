@@ -5,11 +5,12 @@ import yaml
 from freezegun import freeze_time
 from httpx import Response
 
+import state
 from cache import add_cached_item, add_build_snapshot_cache_item
 from common.enums import AgentEventType
 from common.schemas import NewTestRun, AgentEvent, TestRunErrorReport, AgentTestRunErrorEvent, AgentBuildCompletedEvent
 from db import new_testrun
-from jobs import handle_run_completed, handle_testrun_error, create_runner_job
+from jobs import handle_run_completed, handle_testrun_error, create_runner_job, handle_delete_project
 from state import TestRunBuildState, get_build_state
 from ws import handle_start_run, handle_agent_message
 
@@ -116,7 +117,7 @@ async def test_start_rerun(redis, mocker, testrun: NewTestRun,
 
     await add_cached_item(testrun.project.organisation_id, 'node-absd234weefw', 10)
     await add_build_snapshot_cache_item(testrun.project.organisation_id,
-                                        'deadbeef0101',  ['spec1.ts'], 1)
+                                        'deadbeef0101', ['spec1.ts'], 1)
 
     delete_jobs = mocker.patch('jobs.delete_jobs_for_branch')
 
@@ -143,6 +144,7 @@ async def test_create_full_spot_runner(redis, testrun: NewTestRun,
                                        mock_create_from_dict):
     testrun.spot_percentage = 100
     state = TestRunBuildState(trid=testrun.id,
+                              project_id=testrun.project.id,
                               run_job_index=1,
                               build_storage=10,
                               ro_build_pvc='5-project-1-ro',
@@ -231,18 +233,18 @@ async def test_full_run(redis, mocker, mock_create_from_dict,
 
 @freeze_time('2022-04-03 14:10:00Z')
 async def test_build_completed_node_cache_used(redis, mock_create_from_dict,
-                                          respx_mock, mocker,
-                                          post_building_status,
-                                          k8_core_api_mock,
-                                          create_custom_mock,
-                                          testrun: NewTestRun):
+                                               respx_mock, mocker,
+                                               post_building_status,
+                                               k8_core_api_mock,
+                                               create_custom_mock,
+                                               testrun: NewTestRun):
     """
     A build is completed using a cached node distribution
     """
     mocker.patch('jobs.wait_for_snapshot_ready', return_value=True)
 
     msg = AgentBuildCompletedEvent(
-                     testrun_id=testrun.id, specs=['test1.ts'])
+        testrun_id=testrun.id, specs=['test1.ts'])
 
     build_completed = \
         respx_mock.post('https://api.cykubed.com/agent/testrun/20/build-completed') \
@@ -252,6 +254,7 @@ async def test_build_completed_node_cache_used(redis, mock_create_from_dict,
 
     await new_testrun(testrun)
     state = TestRunBuildState(trid=testrun.id,
+                              project_id=testrun.project.id,
                               rw_build_pvc='5-project-1-rw',
                               build_storage=10,
                               node_snapshot_name='node-absd234weefw',
@@ -280,10 +283,10 @@ async def test_build_completed_node_cache_used(redis, mock_create_from_dict,
 
 @freeze_time('2022-04-03 14:10:00Z')
 async def test_build_completed_no_node_cache(redis, mock_create_from_dict,
-                                         respx_mock, mocker,
-                                         k8_core_api_mock,
-                                         create_custom_mock,
-                                         testrun: NewTestRun):
+                                             respx_mock, mocker,
+                                             k8_core_api_mock,
+                                             create_custom_mock,
+                                             testrun: NewTestRun):
     """
     A build is completed without using a cached node distribution. We will already have a RO node PVC, so we just need
     to create a RO PVCs for the build and the create the runner job.
@@ -298,18 +301,19 @@ async def test_build_completed_no_node_cache(redis, mock_create_from_dict,
     """
     mocker.patch('jobs.wait_for_snapshot_ready', return_value=True)
     msg = AgentBuildCompletedEvent(
-                     testrun_id=testrun.id, specs=['test1.ts'])
+        testrun_id=testrun.id, specs=['test1.ts'])
     websocket = mocker.AsyncMock()
 
     respx_mock.post('https://api.cykubed.com/agent/testrun/20/build-completed') \
         .mock(return_value=Response(200))
 
     respx_mock.post('https://api.cykubed.com/agent/testrun/20/status/running') \
-            .mock(return_value=Response(200))
+        .mock(return_value=Response(200))
 
     await new_testrun(testrun)
     # no node snapshot used
     state = TestRunBuildState(trid=testrun.id,
+                              project_id=testrun.project.id,
                               rw_build_pvc='5-project-1-rw',
                               build_storage=10,
                               cache_key='absd234weefw',
@@ -337,6 +341,7 @@ async def test_prepare_cache_completed(mocker, redis, testrun,
     await new_testrun(testrun)
     # no node snapshot used
     state = TestRunBuildState(trid=testrun.id,
+                              project_id=testrun.project.id,
                               ro_build_pvc='5-project-1-ro',
                               rw_build_pvc='5-project-1-rw',
                               build_storage=10,
@@ -371,3 +376,45 @@ async def test_run_error(redis, mocker, respx_mock, testrun):
 
     payload = json.loads(run_error.calls.last.request.content)
     assert payload == {'stage': 'runner', 'msg': 'Argh', 'error_code': None}
+
+
+async def test_delete_project(redis, mocker):
+    """
+    Delete that delete_project deletes the relevant PVCs and jobs
+    :param redis:
+    :param mocker:
+    :return:
+    """
+    await state.TestRunBuildState(trid=100, project_id=5,
+                                  ro_build_pvc='dummy-ro-1', build_job='build-1', run_job='run-1',
+                                  build_storage=10,
+                                  rw_build_pvc='dummy-rw-1').save()
+
+    await state.TestRunBuildState(trid=101, project_id=5,
+                                  ro_build_pvc='dummy-ro-2', build_job='build-2',
+                                  build_storage=10,
+                                  rw_build_pvc='dummy-rw-2').save()
+
+    await state.TestRunBuildState(trid=102, project_id=6,
+                                  ro_build_pvc='dummy-ro-3', build_job='build-3', run_job='run-3',
+                                  build_storage=5,
+                                  rw_build_pvc='dummy-rw-3').save()
+
+    keys = redis.keys('testrun:state:*')
+    assert keys == ['testrun:state:102', 'testrun:state:101', 'testrun:state:100']
+
+    mock_delete_job = mocker.patch('jobs.async_delete_job')
+    mock_delete_pvc = mocker.patch('jobs.async_delete_pvc')
+
+    await handle_delete_project(5)
+
+    assert mock_delete_pvc.call_count == 4
+    assert mock_delete_job.call_count == 3
+    pvcs = [x.args[0] for x in mock_delete_pvc.call_args_list]
+    assert pvcs == ['dummy-rw-2', 'dummy-ro-2', 'dummy-rw-1', 'dummy-ro-1']
+
+    jobs = [x.args[0] for x in mock_delete_job.call_args_list]
+    assert jobs == ['build-2', 'build-1', 'run-1']
+
+    keys = redis.keys('testrun:state:*')
+    assert keys == ['testrun:state:102']

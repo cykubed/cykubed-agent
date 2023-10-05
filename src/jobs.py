@@ -7,6 +7,7 @@ from loguru import logger
 
 import cache
 import db
+import state
 from app import app
 from cache import get_cached_item, add_build_snapshot_cache_item, remove_cached_item
 from common import schemas
@@ -114,6 +115,7 @@ async def handle_new_run(testrun: schemas.NewTestRun):
 
     await delete_jobs_for_branch(testrun.id, testrun.branch)
     state = TestRunBuildState(trid=testrun.id,
+                              project_id=testrun.project.id,
                               build_storage=testrun.project.build_storage)
     await state.save()
 
@@ -348,7 +350,6 @@ async def delete_jobs_for_project(project_id):
     api = get_batch_api()
     jobs = await api.list_namespaced_job(settings.NAMESPACE, label_selector=f'project_id={project_id}')
     if jobs.items:
-
         logger.info(f'Found {len(jobs.items)} existing Jobs - deleting them')
         for job in jobs.items:
             await delete_testrun_job(job)
@@ -383,3 +384,15 @@ async def recreate_runner_job(st: TestRunBuildState, specs: list[str]):
     await create_runner_job(tr, st)
 
 
+async def handle_delete_project(project_id: int):
+    logger.info(f'Deleting project {project_id}')
+    if settings.K8:
+        r = async_redis()
+        async for key in r.scan_iter('testrun:state:*'):
+            st = await r.get(key)
+            if st:
+                buildstate: state.TestRunBuildState = state.TestRunBuildState.parse_raw(st)
+                if buildstate.project_id == project_id:
+                    await delete_jobs(buildstate)
+                    await delete_pvcs(buildstate, True)
+                    await r.delete(key)

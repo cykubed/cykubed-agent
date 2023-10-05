@@ -13,6 +13,7 @@ from common.schemas import AgentBuildCompleted
 
 class TestRunBuildState(BaseModel):
     trid: int
+    project_id: int
     specs: list[str] = []
     parallelism: Optional[int]
     build_storage: int

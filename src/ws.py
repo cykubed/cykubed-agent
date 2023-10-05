@@ -17,6 +17,7 @@ from common.enums import AgentEventType
 from common.redisutils import async_redis, ping_redis, get_specfile_log_key
 from common.schemas import NewTestRun, AgentEvent, AgentTestRunErrorEvent, \
     AgentBuildCompletedEvent
+from jobs import handle_delete_project
 from settings import settings
 
 
@@ -35,18 +36,12 @@ async def handle_start_run(tr: NewTestRun):
             await jobs.handle_new_run(tr)
         else:
             # local testing
-            st = state.TestRunBuildState(trid=tr.id, rw_build_pvc='dummy')
+            st = state.TestRunBuildState(trid=tr.id, project_id=tr.project.id, rw_build_pvc='dummy')
             await st.save()
             logger.info(f'Now run the runner with args "clone {tr.id}"', tr=tr)
     except:
         logger.exception(f"Failed to start test run {tr.id}", tr=tr)
         await app.httpclient.post(f'/agent/testrun/{tr.id}/status/failed')
-
-
-async def handle_delete_project(project_id: int):
-    logger.info(f'Deleting project {project_id}')
-    if settings.K8:
-        await jobs.delete_jobs_for_project(project_id)
 
 
 async def handle_fetch_log(trid: int, file: str):
