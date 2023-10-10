@@ -7,7 +7,6 @@ from loguru import logger
 
 import cache
 import db
-import state
 from app import app
 from cache import get_cached_item, add_build_snapshot_cache_item, remove_cached_item
 from common import schemas
@@ -304,7 +303,7 @@ async def create_runner_job(testrun: schemas.NewTestRun, state: TestRunBuildStat
     await state.save()
 
 
-async def handle_run_completed(testrun_id, delete_pvcs_only=True):
+async def handle_run_completed(testrun_id: int, delete_pvcs_only=True):
     """
     Either delete the PVCs or jobs and notify cymain
     :param delete_pvcs_only: if False then also delete jobs
@@ -317,6 +316,8 @@ async def handle_run_completed(testrun_id, delete_pvcs_only=True):
         await delete_pvcs(state)
         if not delete_pvcs_only:
             await delete_jobs(state)
+        # clean up other redis state
+        await db.cleanup(testrun_id)
 
 
 async def handle_testrun_error(event: schemas.AgentTestRunErrorEvent):
@@ -391,7 +392,7 @@ async def handle_delete_project(project_id: int):
         async for key in r.scan_iter('testrun:state:*'):
             st = await r.get(key)
             if st:
-                buildstate: state.TestRunBuildState = state.TestRunBuildState.parse_raw(st)
+                buildstate: TestRunBuildState = TestRunBuildState.parse_raw(st)
                 if buildstate.project_id == project_id:
                     await delete_jobs(buildstate)
                     await delete_pvcs(buildstate, True)

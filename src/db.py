@@ -17,6 +17,11 @@ async def set_specs(tr: NewTestRun, specs: list[str]):
     await async_redis().set(f'testrun:{tr.id}:to-complete', len(specs))
 
 
+async def cleanup(trid: int):
+    await async_redis().delete(f'testrun:{trid}:specs')
+    await async_redis().delete(f'testrun:{trid}:to-complete')
+
+
 async def get_testrun(id: int) -> NewTestRun | None:
     """
     Used by agents and runners to return a deserialised NewTestRun
