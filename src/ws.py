@@ -65,6 +65,8 @@ async def handle_websocket_message(data: dict):
         logger.debug(f'Received {cmd} command')
         if cmd == 'start':
             await handle_start_run(NewTestRun.parse_raw(payload))
+        elif cmd == 'deploy':
+            await jobs.create_deploy_job(NewTestRun.parse_raw(payload))
         elif cmd == 'delete_project':
             await handle_delete_project(payload['project_id'])
         elif cmd == 'cancel':

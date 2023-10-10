@@ -146,6 +146,16 @@ async def handle_new_run(testrun: schemas.NewTestRun):
         await create_build_job(testrun, state)
 
 
+async def create_deploy_job(testrun: schemas.NewTestRun):
+    logger.debug(f'Create deploy job for testrun {testrun.local_id}')
+
+    st = await get_build_state(testrun.id, True)
+    context = common_context(testrun, pvc_name=st.rw_build_pvc, job_type='deploy')
+    context['job_name'] = f'{testrun.project.organisation_id}-deploy-{testrun.project.name}-{testrun.local_id}'
+    st.deploy_job = await create_k8_objects('build', context)
+    await st.save()
+
+
 async def create_build_job(testrun: schemas.NewTestRun, state: TestRunBuildState):
     logger.debug(f'Create build job for testrun {testrun.local_id}')
     # First check to see if there is a node cache for this build
@@ -160,7 +170,9 @@ async def create_build_job(testrun: schemas.NewTestRun, state: TestRunBuildState
     await state.save()
 
     context = common_context(testrun,
+                             job_type='build',
                              pvc_name=state.rw_build_pvc)
+
     if context['preprovision']:
         logger.debug('Create pre-provision job')
         state.preprovision_job = await create_k8_objects('pre-provision', context)

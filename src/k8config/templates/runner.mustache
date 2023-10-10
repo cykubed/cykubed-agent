@@ -69,6 +69,10 @@ spec:
             secretKeyRef:
               name: "{{ redis_secret_name }}"
               key: "redis-password"
+{{#project.environment_variables}}
+        - name: "{{name}}"
+          value: "{{value}}"
+{{/project.environment_variables}}
         envFrom:
           - configMapRef:
               name: cykubed-agent-configmap

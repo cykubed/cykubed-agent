@@ -3,11 +3,11 @@ kind: Job
 metadata:
     labels:
         branch: master
-        cykubed_job: build
+        cykubed_job: deploy
         local_id: '1'
         project_id: '10'
         testrun_id: '20'
-    name: 5-builder-project-1
+    name: 5-deploy-project-1
     namespace: cykubed
 spec:
     activeDeadlineSeconds: 3600
@@ -16,14 +16,14 @@ spec:
         metadata:
             labels:
                 branch: master
-                cykubed_job: build
+                cykubed_job: deploy
                 local_id: '1'
                 project_id: '10'
                 testrun_id: '20'
         spec:
             containers:
             -   args:
-                - build
+                - deploy
                 - '20'
                 env:
                 -   name: REDIS_PASSWORD
@@ -33,6 +33,8 @@ spec:
                             name: cykubed-agent-redis
                 -   name: BUILD_DIR
                     value: /build
+                -   name: DEPLOY_KEY
+                    value: fish
                 envFrom:
                 -   configMapRef:
                         name: cykubed-agent-configmap

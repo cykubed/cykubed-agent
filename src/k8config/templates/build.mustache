@@ -2,7 +2,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   labels:
-    cykubed_job: "builder"
+    cykubed_job: "{{job_type}}"
     project_id: "{{project.id}}"
     local_id: "{{local_id}}"
     testrun_id: "{{testrun_id}}"
@@ -11,12 +11,12 @@ metadata:
   namespace: "{{namespace}}"
 spec:
   backoffLimit: 3
-  ttlSecondsAfterFinished: 3600
+  ttlSecondsAfterFinished: 60
   activeDeadlineSeconds: {{project.build_deadline}}
   template:
     metadata:
       labels:
-        cykubed_job: "builder"
+        cykubed_job: "{{job_type}}"
         project_id: "{{project.id}}"
         local_id: "{{local_id}}"
         testrun_id: "{{testrun_id}}"
@@ -45,12 +45,16 @@ spec:
               key: "redis-password"
         - name: BUILD_DIR
           value: "/build"
+{{#project.environment_variables}}
+        - name: "{{name}}"
+          value: "{{value}}"
+{{/project.environment_variables}}
         envFrom:
           - configMapRef:
               name: cykubed-agent-configmap
           - secretRef:
               name: cykubed-agent-secrets
-        args: [ "build", "{{testrun_id}}"]
+        args: [ "{{job_type}}", "{{testrun_id}}"]
         resources:
           limits:
             cpu: "{{project.build_cpu}}"

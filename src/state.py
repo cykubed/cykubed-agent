@@ -20,6 +20,7 @@ class TestRunBuildState(BaseModel):
     cache_key: str = None
     node_snapshot_name: str = None
     build_job: str = None
+    deploy_job: str = None
     prepare_cache_job: str = None
     preprovision_job: str = None
     run_job: str = None
