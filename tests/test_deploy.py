@@ -3,7 +3,7 @@ import os.path
 from common.schemas import NewTestRun
 from jobs import create_deploy_job
 from state import TestRunBuildState
-from test_start_run import compare_rendered_template_from_mock
+from templatetest import compare_rendered_template_from_mock
 
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), 'fixtures')
 

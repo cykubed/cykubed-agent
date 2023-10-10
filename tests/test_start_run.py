@@ -1,7 +1,5 @@
 import json
-import os.path
 
-import yaml
 from freezegun import freeze_time
 from httpx import Response
 
@@ -12,17 +10,8 @@ from common.schemas import NewTestRun, AgentEvent, TestRunErrorReport, AgentTest
 from db import new_testrun
 from jobs import handle_run_completed, handle_testrun_error, create_runner_job, handle_delete_project
 from state import TestRunBuildState, get_build_state
+from templatetest import compare_rendered_template_from_mock, compare_rendered_template
 from ws import handle_start_run, handle_agent_message
-
-FIXTURES_DIR = os.path.join(os.path.dirname(__file__), 'fixtures')
-
-
-def compare_rendered_template(yamlobjects, jobtype: str):
-    asyaml = yaml.safe_dump_all(yamlobjects, indent=4, sort_keys=True)
-    # print('\n'+asyaml)
-    with open(os.path.join(FIXTURES_DIR, 'rendered-templates', f'{jobtype}.yaml'), 'r') as f:
-        expected = f.read()
-        assert asyaml == expected
 
 
 def get_kind_and_names(create_from_yaml_mock):
@@ -31,11 +20,6 @@ def get_kind_and_names(create_from_yaml_mock):
         yamlobjs = args[0][0]
         ret.append((yamlobjs['kind'], yamlobjs['metadata']['name']))
     return ret
-
-
-def compare_rendered_template_from_mock(mock_create_from_dict, jobtype: str, index=0):
-    yamlobjects = mock_create_from_dict.call_args_list[index].args[0]
-    compare_rendered_template([yamlobjects], jobtype)
 
 
 async def test_start_run_cache_miss(redis, mocker, testrun: NewTestRun,
