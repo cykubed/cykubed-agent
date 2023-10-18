@@ -19,7 +19,7 @@ while getopts "rn:t:" opt; do
   esac
 done
 
-TAG=$(poetry version -s)
+TAG=$(poetry version patch -s)
 docker build  . -t us-docker.pkg.dev/cykubed/public/agent:"$TAG"
 
 if [ -z "$TOKEN" ]; then

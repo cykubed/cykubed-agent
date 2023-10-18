@@ -62,7 +62,7 @@ async def test_start_run_cache_miss(redis, mocker, testrun: NewTestRun,
     assert state.rw_build_pvc == '5-project-1-rw'
     assert state.trid == testrun.id
 
-    delete_jobs.assert_called_once_with(testrun.id, 'master')
+    delete_jobs.assert_called_once_with(testrun)
     # there will be two calls here: one to create the PVC, another to run the build Job
     assert mock_create_from_dict.call_count == 2
 
@@ -123,7 +123,7 @@ async def test_start_rerun(redis, mocker, testrun: NewTestRun,
 
     await handle_start_run(testrun)
 
-    delete_jobs.assert_called_once_with(testrun.id, 'master')
+    delete_jobs.assert_called_once_with(testrun)
 
     # this will add an entry to the testrun collection
     saved_tr_json = await redis.get(f'testrun:{testrun.id}')

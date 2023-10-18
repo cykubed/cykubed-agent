@@ -112,7 +112,7 @@ async def handle_new_run(testrun: schemas.NewTestRun):
     # stop existing jobs
     await app.update_status(testrun.id, 'started')
 
-    await delete_jobs_for_branch(testrun.id, testrun.branch)
+    await delete_jobs_for_branch(testrun)
     state = TestRunBuildState(trid=testrun.id,
                               project_id=testrun.project.id,
                               build_storage=testrun.project.build_storage)
@@ -335,16 +335,17 @@ async def delete_testrun_job(job, trid: int = None):
         await handle_run_completed(trid)
 
 
-async def delete_jobs_for_branch(trid: int, branch: str):
+async def delete_jobs_for_branch(testrun: schemas.NewTestRun):
     if settings.K8:
         # delete any job already running
         api = get_batch_api()
-        jobs = await api.list_namespaced_job(settings.NAMESPACE, label_selector=f'branch={branch}')
+        jobs = await api.list_namespaced_job(settings.NAMESPACE,
+                                             label_selector=f'project_id={testrun.project.id},branch={testrun.branch}')
         if jobs.items:
-            logger.info(f'Found {len(jobs.items)} existing Jobs - deleting them', trid=trid)
+            logger.info(f'Found {len(jobs.items)} existing Jobs - deleting them')
             # delete it (there should just be one, but iterate anyway)
             for job in jobs.items:
-                await delete_testrun_job(job, trid)
+                await delete_testrun_job(job, testrun.id)
 
 
 async def delete_jobs_for_project(project_id):
