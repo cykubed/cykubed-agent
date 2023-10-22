@@ -155,7 +155,7 @@ async def test_create_full_spot_runner(redis, testrun: NewTestRun,
 
 
 async def test_create_runner_ephemeral_volumes(redis, testrun: NewTestRun,
-                                                mock_create_from_dict):
+                                               mock_create_from_dict):
     testrun.spot_percentage = 0
     settings.PREFER_READ_ONLY_MANY = False
     st = TestRunBuildState(trid=testrun.id,
@@ -169,7 +169,7 @@ async def test_create_runner_ephemeral_volumes(redis, testrun: NewTestRun,
 
 
 async def test_create_runner_ephemeral_volumes_spot_aks(redis, testrun: NewTestRun,
-                                                mock_create_from_dict):
+                                                        mock_create_from_dict):
     testrun.spot_percentage = 80
     settings.PLATFORM = 'AKS'
     settings.PREFER_READ_ONLY_MANY = False
@@ -184,15 +184,15 @@ async def test_create_runner_ephemeral_volumes_spot_aks(redis, testrun: NewTestR
     compare_rendered_template_from_mock(mock_create_from_dict, 'runner-ephemeral-aks-spot', 0)
 
 
-async def test_full_run(redis, mocker, mock_create_from_dict,
-                        respx_mock,
-                        post_started_status,
-                        post_building_status,
-                        k8_core_api_mock,
-                        k8_batch_api_mock,
-                        delete_pvc_mock,
-                        k8_custom_api_mock,
-                        testrun: NewTestRun):
+async def test_full_run_gke(redis, mocker, mock_create_from_dict,
+                            respx_mock,
+                            post_started_status,
+                            post_building_status,
+                            k8_core_api_mock,
+                            k8_batch_api_mock,
+                            delete_pvc_mock,
+                            k8_custom_api_mock,
+                            testrun: NewTestRun):
     running_update_status = \
         respx_mock.post('https://api.cykubed.com/agent/testrun/20/status/running') \
             .mock(return_value=Response(200))
@@ -247,6 +247,61 @@ async def test_full_run(redis, mocker, mock_create_from_dict,
     kinds_and_names = get_kind_and_names(mock_create_from_dict)
     assert {('PersistentVolumeClaim', '5-project-1-rw'),
             ('PersistentVolumeClaim', '5-project-1-ro'),
+            ('Job', '5-builder-project-1'),
+            ('Job', '5-runner-project-1-0'),
+            ('Job', '5-cache-project-1')
+            } == set(kinds_and_names)
+
+    assert k8_create_custom.call_count == 2
+    compare_rendered_template([k8_create_custom.call_args_list[0].kwargs['body']], 'build-snapshot')
+    compare_rendered_template([k8_create_custom.call_args_list[1].kwargs['body']], 'node-snapshot')
+
+    assert k8_delete_job.call_count == 0
+
+
+async def test_full_run_aks(redis, mocker, mock_create_from_dict,
+                            respx_mock,
+                            post_started_status,
+                            post_building_status,
+                            k8_core_api_mock,
+                            k8_batch_api_mock,
+                            delete_pvc_mock,
+                            k8_custom_api_mock,
+                            testrun: NewTestRun):
+    settings.PLATFORM = 'AKS'
+
+    respx_mock.post('https://api.cykubed.com/agent/testrun/20/status/running') \
+        .mock(return_value=Response(200))
+    respx_mock.post('https://api.cykubed.com/agent/testrun/20/build-completed').mock(return_value=Response(200))
+    respx_mock.post('https://api.cykubed.com/agent/testrun/20/run-completed') \
+        .mock(return_value=Response(200))
+    mocker.patch('jobs.delete_jobs_for_branch')
+    k8_create_custom = k8_custom_api_mock.create_namespaced_custom_object
+    k8_delete_job = k8_batch_api_mock.delete_namespaced_job = mocker.AsyncMock()
+    mocker.patch('jobs.get_cache_key', return_value='absd234weefw')
+    mocker.patch('jobs.wait_for_snapshot_ready', return_value=True)
+
+    # start the run
+    await handle_start_run(testrun)
+    # build completed
+    msg = AgentBuildCompletedEvent(type=AgentEventType.build_completed,
+                                   specs=['test1.ts'],
+                                   duration=10,
+                                   testrun_id=testrun.id)
+    websocket = mocker.AsyncMock()
+    await handle_agent_message(websocket, msg.json())
+    # the cache is preprared
+    await handle_agent_message(websocket, AgentEvent(type=AgentEventType.cache_prepared,
+                                                     testrun_id=testrun.id).json())
+    # run completed
+    await handle_run_completed(testrun.id)
+
+    # clean up
+    assert delete_pvc_mock.call_count == 1
+
+    # this will have created 1 PVCs, 2 snapshots and 2 Jobs
+    kinds_and_names = get_kind_and_names(mock_create_from_dict)
+    assert {('PersistentVolumeClaim', '5-project-1-rw'),
             ('Job', '5-builder-project-1'),
             ('Job', '5-runner-project-1-0'),
             ('Job', '5-cache-project-1')
