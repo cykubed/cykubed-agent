@@ -40,7 +40,11 @@ def common_context(testrun: schemas.NewTestRun, **kwargs):
                 spot_percentage=testrun.spot_percentage,
                 preprovision=testrun.preprovision,
                 parallelism=testrun.project.parallelism,
-                use_spot_affinity=(0 < testrun.spot_percentage < 100),
+                read_only_pvc=True,
+                use_spot_affinity=(settings.PLATFORM == 'GKE' and
+                                  (0 < testrun.spot_percentage < 100)),
+                gke=(settings.PLATFORM == 'GKE'),
+                aks=(settings.PLATFORM == 'AKS'),
                 project=testrun.project, **kwargs)
 
 

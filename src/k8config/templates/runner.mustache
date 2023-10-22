@@ -26,9 +26,22 @@ spec:
       serviceAccountName: "cykubed"
       volumes:
         - name: build-volume
+          {{#read_only_pvc}}
           persistentVolumeClaim:
             readOnly: true
             claimName: "{{pvc_name}}"
+          {{/read_only_pvc}}
+          {{^read_only_pvc}}
+          ephemeral:
+            volumeClaimTemplate:
+              spec:
+                dataSource:
+                  apiGroup: snapshot.storage.k8s.io
+                  kind: VolumeSnapshot
+                  name: {{build_snapshot}}
+                accessModes:
+                  - ReadWriteOnce
+          {{/read_only_pvc}}
       {{#spot_enabled}}
       {{#use_spot_affinity}}
       affinity:
@@ -37,10 +50,18 @@ spec:
           - weight: {{spot_percentage}}
             preference:
               matchExpressions:
+              {{#gke}}
               - key: cloud.google.com/gke-spot
                 operator: In
                 values:
                 - "true"
+              {{/gke}}
+              {{#aks}}
+              - key: "kubernetes.azure.com/scalesetpriority"
+                operator: In
+                values:
+                - "spot"
+              {{/aks}}
       {{/use_spot_affinity}}
       {{^use_spot_affinity}}
       nodeSelector:
