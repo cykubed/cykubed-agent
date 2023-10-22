@@ -12,7 +12,7 @@ class AgentSettings(BaseSettings):
     PLATFORM: str = 'generic'
     VOLUME_SNAPSHOT_CLASS: str = None
 
-    PREFER_READ_ONLY_MANY: bool = True
+    READ_ONLY_MANY: bool = True
 
     SERVER_START_TIMEOUT: int = 60
     CYPRESS_RUN_TIMEOUT: int = 10*60
@@ -47,7 +47,7 @@ class AgentSettings(BaseSettings):
 
     @property
     def use_read_only_many(self):
-        return self.PLATFORM in ['minikube', 'GKE'] and self.PREFER_READ_ONLY_MANY
+        return self.PLATFORM in ['minikube', 'GKE'] and self.READ_ONLY_MANY
 
 
 settings = AgentSettings()

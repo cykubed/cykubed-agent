@@ -21,7 +21,7 @@ volumeSnapshotClassPlatforms:
   - AKS
   - GKE
   - minikube
-preferReadOnlyMany: true
+readOnlyMany: true
 redis:
   sentinel:
     enabled: true

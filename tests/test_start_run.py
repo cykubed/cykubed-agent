@@ -157,7 +157,7 @@ async def test_create_full_spot_runner(redis, testrun: NewTestRun,
 async def test_create_runner_ephemeral_volumes(redis, testrun: NewTestRun,
                                                mock_create_from_dict):
     testrun.spot_percentage = 0
-    settings.PREFER_READ_ONLY_MANY = False
+    settings.READ_ONLY_MANY = False
     st = TestRunBuildState(trid=testrun.id,
                            project_id=testrun.project.id,
                            run_job_index=1,
@@ -172,7 +172,7 @@ async def test_create_runner_ephemeral_volumes_spot_aks(redis, testrun: NewTestR
                                                         mock_create_from_dict):
     testrun.spot_percentage = 80
     settings.PLATFORM = 'AKS'
-    settings.PREFER_READ_ONLY_MANY = False
+    settings.READ_ONLY_MANY = False
     testrun.spot_percentage = 80
     st = TestRunBuildState(trid=testrun.id,
                            project_id=testrun.project.id,

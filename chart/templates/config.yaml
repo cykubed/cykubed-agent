@@ -19,7 +19,11 @@ data:
   AGENT_VERSION: "{{ .Chart.Version }}"
   MAIN_API_URL: {{ .Values.apiUrl }}
   NAMESPACE: {{ .Release.Namespace }}
-  PREFER_READ_ONLY_MANY: "{{ .Values.preferReadOnlyMany }}"
+{{ if .Values.platform eq "AKS" }}
+  READ_ONLY_MANY: "false"
+{{ else }}
+  READ_ONLY_MANY: "{{ .Values.readOnlyMany }}"
+{{ end }}
   PLATFORM: {{ required "Please specify the target platform" .Values.platform | lower }}
   STORAGE_CLASS: "{{ default .Release.Name .Values.storageClass }}"
   PRIORITY_CLASS: "{{ .Release.Namespace }}-high-priority"
