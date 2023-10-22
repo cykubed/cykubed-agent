@@ -38,7 +38,7 @@ spec:
                 dataSource:
                   apiGroup: snapshot.storage.k8s.io
                   kind: VolumeSnapshot
-                  name: "{{snapshot_name}}"
+                  name: "{{build_snapshot_name}}"
                 accessModes:
                   - ReadWriteOnce
                 resources:

@@ -11,6 +11,7 @@ from common.enums import AgentEventType
 from common.schemas import NewTestRun, AgentEvent, TestRunErrorReport, AgentTestRunErrorEvent, AgentBuildCompletedEvent
 from db import new_testrun
 from jobs import handle_run_completed, handle_testrun_error, create_runner_job, handle_delete_project
+from settings import settings
 from state import TestRunBuildState, get_build_state
 from ws import handle_start_run, handle_agent_message
 
@@ -153,6 +154,36 @@ async def test_create_full_spot_runner(redis, testrun: NewTestRun,
     compare_rendered_template_from_mock(mock_create_from_dict, 'runner-full-spot', 0)
 
 
+async def test_create_runner_ephemeral_volumes(redis, testrun: NewTestRun,
+                                                mock_create_from_dict):
+    testrun.spot_percentage = 0
+    settings.PREFER_READ_ONLY_MANY = False
+    st = TestRunBuildState(trid=testrun.id,
+                           project_id=testrun.project.id,
+                           run_job_index=1,
+                           build_storage=10,
+                           build_snapshot_name='5-project-1-snap',
+                           specs=['spec1.ts'])
+    await create_runner_job(testrun, st)
+    compare_rendered_template_from_mock(mock_create_from_dict, 'runner-ephemeral', 0)
+
+
+async def test_create_runner_ephemeral_volumes_spot_aks(redis, testrun: NewTestRun,
+                                                mock_create_from_dict):
+    testrun.spot_percentage = 80
+    settings.PLATFORM = 'AKS'
+    settings.PREFER_READ_ONLY_MANY = False
+    testrun.spot_percentage = 80
+    st = TestRunBuildState(trid=testrun.id,
+                           project_id=testrun.project.id,
+                           run_job_index=1,
+                           build_storage=10,
+                           build_snapshot_name='5-project-1-snap',
+                           specs=['spec1.ts'])
+    await create_runner_job(testrun, st)
+    compare_rendered_template_from_mock(mock_create_from_dict, 'runner-ephemeral-aks-spot', 0)
+
+
 async def test_full_run(redis, mocker, mock_create_from_dict,
                         respx_mock,
                         post_started_status,
@@ -174,7 +205,6 @@ async def test_full_run(redis, mocker, mock_create_from_dict,
     k8_create_custom = k8_custom_api_mock.create_namespaced_custom_object
     k8_delete_job = k8_batch_api_mock.delete_namespaced_job = mocker.AsyncMock()
     get_cache_key = mocker.patch('jobs.get_cache_key', return_value='absd234weefw')
-    wait_for_pvc = mocker.patch('jobs.wait_for_pvc_ready', return_value=True)
     wait_for_snapshot = mocker.patch('jobs.wait_for_snapshot_ready', return_value=True)
 
     # start the run

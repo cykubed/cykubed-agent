@@ -41,8 +41,8 @@ def common_context(testrun: schemas.NewTestRun, **kwargs):
                 preprovision=testrun.preprovision,
                 parallelism=testrun.project.parallelism,
                 read_only_pvc=settings.use_read_only_many,
-                use_spot_affinity=(settings.PLATFORM == 'GKE' and
-                                  (0 < testrun.spot_percentage < 100)),
+                use_spot_affinity=(settings.PLATFORM == 'AKS' or (settings.PLATFORM == 'GKE' and
+                                  (0 < testrun.spot_percentage < 100))),
                 gke=(settings.PLATFORM == 'GKE'),
                 aks=(settings.PLATFORM == 'AKS'),
                 project=testrun.project, **kwargs)
@@ -196,52 +196,54 @@ async def handle_build_completed(event: AgentBuildCompletedEvent):
     logger.info(f'Build completed for testrun {testrun_id}')
 
     testrun = await get_testrun(testrun_id)
-    state = await get_build_state(testrun_id, True)
+    st = await get_build_state(testrun_id, True)
 
     if not event.specs:
         # no specs - default pass
         await app.update_status(testrun_id, 'passed')
-        await delete_pvcs(state)
-        await state.notify_run_completed()
+        await delete_pvcs(st)
+        await st.notify_run_completed()
         return
 
-    state.specs = event.specs
+    st.specs = event.specs
     logger.info(f"Found {len(event.specs)} spec files")
 
-    await db.set_specs(testrun, state.specs)
+    await db.set_specs(testrun, st.specs)
 
     # create a snapshot from the build PVC
     context = common_context(testrun,
                              snapshot_name=get_build_snapshot_name(testrun),
-                             pvc_name=state.rw_build_pvc)
+                             pvc_name=st.rw_build_pvc)
 
-    if state.preprovision_job:
+    if st.preprovision_job:
         logger.debug('Delete pre-provision job')
-        await async_delete_job(state.preprovision_job)
+        await async_delete_job(st.preprovision_job)
 
     await create_k8_snapshot('pvc-snapshot', context)
     await add_build_snapshot_cache_item(testrun.project.organisation_id,
                                         testrun.sha,
-                                        state.specs,
+                                        st.specs,
                                         testrun.project.build_storage)
 
-    await wait_for_snapshot_ready(f'build-{testrun.sha}')
+    st.build_snapshot_name = f'build-{testrun.sha}'
+    await wait_for_snapshot_ready(st.build_snapshot_name)
 
-    # create a RO PVC from this snapshot and a runner that uses it
-    state.ro_build_pvc = create_ro_pvc_name(testrun)
-    await state.save()
-    context.update(dict(pvc_name=state.ro_build_pvc,
-                        read_only=True))
-    await create_k8_objects('pvc', context)
+    if settings.use_read_only_many:
+        # create a RO PVC from this snapshot and a runner that uses it
+        st.ro_build_pvc = create_ro_pvc_name(testrun)
+        await st.save()
+        context.update(dict(pvc_name=st.ro_build_pvc,
+                            read_only=True))
+        await create_k8_objects('pvc', context)
 
     # tell the main server
-    await state.notify_build_completed()
+    await st.notify_build_completed()
 
     # and create the runner job
-    await create_runner_job(testrun, state)
+    await create_runner_job(testrun, st)
 
-    if not state.node_snapshot_name:
-        await prepare_cache_wait(state, testrun)
+    if not st.node_snapshot_name:
+        await prepare_cache_wait(st, testrun)
 
 
 async def prepare_cache_wait(state, testrun):
@@ -293,6 +295,7 @@ async def create_runner_job(testrun: schemas.NewTestRun, state: TestRunBuildStat
     context.update(
         dict(name=f'{testrun.project.organisation_id}-runner-{testrun.project.name}-{testrun.local_id}-{state.run_job_index}',
              parallelism=min(testrun.project.parallelism, len(state.specs)),
+             build_snapshot_name=state.build_snapshot_name,
              pvc_name=state.ro_build_pvc))
     if settings.PLATFORM not in PLATFORMS_SUPPORTING_SPOT and testrun.spot_percentage > 0:
         # no spot on this platform

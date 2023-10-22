@@ -1,0 +1,90 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+    labels:
+        branch: master
+        cykubed_job: runner
+        local_id: '1'
+        project_id: '10'
+        testrun_id: '20'
+    name: 5-runner-project-1-1
+    namespace: cykubed
+spec:
+    activeDeadlineSeconds: 3600
+    backoffLimit: 10
+    parallelism: 1
+    template:
+        metadata:
+            labels:
+                branch: master
+                cykubed_job: runner
+                local_id: '1'
+                project_id: '10'
+                testrun_id: '20'
+        spec:
+            affinity:
+                nodeAffinity:
+                    preferredDuringSchedulingIgnoredDuringExecution:
+                    -   preference:
+                            matchExpressions:
+                            -   key: kubernetes.azure.com/scalesetpriority
+                                operator: In
+                                values:
+                                - spot
+                        weight: 80
+            containers:
+            -   args:
+                - run
+                - '20'
+                env:
+                -   name: BUILD_DIR
+                    value: /build
+                -   name: CYPRESS_RETRIES
+                    value: ''
+                -   name: TZ
+                    value: UTC
+                -   name: REDIS_PASSWORD
+                    valueFrom:
+                        secretKeyRef:
+                            key: redis-password
+                            name: cykubed-agent-redis
+                envFrom:
+                -   configMapRef:
+                        name: cykubed-agent-configmap
+                -   secretRef:
+                        name: cykubed-agent-secrets
+                image: cykubed-runner:1234
+                name: cykubed-runner
+                resources:
+                    limits:
+                        cpu: '2.0'
+                        memory: 4.0G
+                    requests:
+                        cpu: '2.0'
+                        memory: 4.0G
+                volumeMounts:
+                -   mountPath: /build
+                    name: build-volume
+            priorityClassName: cykubed-default-priority
+            restartPolicy: OnFailure
+            securityContext:
+                fsGroup: 10000
+                runAsGroup: 10000
+                runAsNonRoot: true
+                runAsUser: 10000
+            serviceAccountName: cykubed
+            volumes:
+            -   ephemeral:
+                    volumeClaimTemplate:
+                        spec:
+                            accessModes:
+                            - ReadWriteOnce
+                            dataSource:
+                                apiGroup: snapshot.storage.k8s.io
+                                kind: VolumeSnapshot
+                                name: 5-project-1-snap
+                            resources:
+                                requests:
+                                    storage: 10Gi
+                name: build-volume
+    ttlSecondsAfterFinished: 3600

@@ -33,6 +33,7 @@ async def project() -> Project:
     # enable spot
     settings.PLATFORM = "GKE"
     settings.VOLUME_SNAPSHOT_CLASS = 'cykubed-snapshotclass'
+    settings.PREFER_READ_ONLY_MANY = True
     return Project(id=10,
                    organisation_id=5,
                    name='project',

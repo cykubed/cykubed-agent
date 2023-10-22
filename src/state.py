@@ -18,6 +18,7 @@ class TestRunBuildState(BaseModel):
     parallelism: Optional[int]
     build_storage: int
     cache_key: str = None
+    build_snapshot_name: str = None
     node_snapshot_name: str = None
     build_job: str = None
     prepare_cache_job: str = None
