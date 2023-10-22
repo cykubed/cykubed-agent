@@ -12,6 +12,8 @@ class AgentSettings(BaseSettings):
     PLATFORM: str = 'generic'
     VOLUME_SNAPSHOT_CLASS: str = None
 
+    FAKE_DATETIME: str = None
+
     READ_ONLY_MANY: bool = True
 
     SERVER_START_TIMEOUT: int = 60
