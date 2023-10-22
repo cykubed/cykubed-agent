@@ -1,5 +1,6 @@
 from kubernetes_asyncio import watch
 from kubernetes_asyncio.client import V1Job, V1JobStatus, V1ObjectMeta, V1Pod, V1PodStatus
+from loguru import logger
 
 from app import app
 from common import schemas
@@ -14,39 +15,45 @@ from state import get_build_state, check_is_spot
 async def watch_pod_events():
     v1 = get_core_api()
     while app.is_running():
-        async with watch.Watch().stream(v1.list_namespaced_pod,
-                                        namespace=settings.NAMESPACE,
-                                        label_selector=f"cykubed_job in (runner,builder)",
-                                        timeout_seconds=10) as stream:
-            while app.is_running():
-                async for event in stream:
-                    await handle_pod_event(event['object'])
+        try:
+            async with watch.Watch().stream(v1.list_namespaced_pod,
+                                            namespace=settings.NAMESPACE,
+                                            label_selector=f"cykubed_job in (runner,builder)",
+                                            timeout_seconds=10) as stream:
+                while app.is_running():
+                    async for event in stream:
+                        await handle_pod_event(event['object'])
+        except Exception as ex:
+            logger.exception('Unexpected error during watch_pod_events loop')
 
 
 async def watch_job_events():
     api = get_batch_api()
     r = async_redis()
     while app.is_running():
-        async with watch.Watch().stream(api.list_namespaced_job,
-                                        namespace=settings.NAMESPACE,
-                                        label_selector=f"cykubed_job=runner",
-                                        timeout_seconds=10) as stream:
-            while app.is_running():
-                async for event in stream:
-                    job: V1Job = event['object']
-                    status: V1JobStatus = job.status
-                    metadata: V1ObjectMeta = job.metadata
-                    labels = metadata.labels
-                    trid = labels["testrun_id"]
-                    if not status.active:
-                        st = await get_build_state(trid)
-                        if st.run_job and st.run_job == metadata.name and status.completion_time:
-                            if utcnow() < st.runner_deadline:
-                                # runner job completed under the deadline: check for specs remaining
-                                specs = await r.smembers(f'testrun:{st.trid}:specs')
-                                if specs:
-                                    # yup - recreate the job
-                                    await recreate_runner_job(st, specs)
+        try:
+            async with watch.Watch().stream(api.list_namespaced_job,
+                                            namespace=settings.NAMESPACE,
+                                            label_selector=f"cykubed_job=runner",
+                                            timeout_seconds=10) as stream:
+                while app.is_running():
+                    async for event in stream:
+                        job: V1Job = event['object']
+                        status: V1JobStatus = job.status
+                        metadata: V1ObjectMeta = job.metadata
+                        labels = metadata.labels
+                        trid = labels["testrun_id"]
+                        if not status.active:
+                            st = await get_build_state(trid)
+                            if st.run_job and st.run_job == metadata.name and status.completion_time:
+                                if utcnow() < st.runner_deadline:
+                                    # runner job completed under the deadline: check for specs remaining
+                                    specs = await r.smembers(f'testrun:{st.trid}:specs')
+                                    if specs:
+                                        # yup - recreate the job
+                                        await recreate_runner_job(st, specs)
+        except Exception as ex:
+            logger.exception('Unexpected error during watch_job_events loop')
 
 
 async def handle_pod_event(pod: V1Pod):

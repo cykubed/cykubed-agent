@@ -36,13 +36,13 @@ def common_context(testrun: schemas.NewTestRun, **kwargs):
                 branch=testrun.branch,
                 redis_secret_name=settings.REDIS_SECRET_NAME,
                 token=settings.API_TOKEN,
-                spot_enabled=testrun.spot_percentage > 0,
+                spot_enabled=testrun.spot_percentage > 0 and settings.PLATFORM in PLATFORMS_SUPPORTING_SPOT,
                 spot_percentage=testrun.spot_percentage,
                 preprovision=testrun.preprovision,
                 parallelism=testrun.project.parallelism,
                 read_only_pvc=settings.use_read_only_many,
-                use_spot_affinity=(settings.PLATFORM == 'AKS' or (settings.PLATFORM == 'GKE' and
-                                  (0 < testrun.spot_percentage < 100))),
+                use_spot_affinity=(settings.PLATFORM == 'AKS' or
+                                  (settings.PLATFORM == 'GKE' and (0 < testrun.spot_percentage < 100))),
                 gke=(settings.PLATFORM == 'GKE'),
                 aks=(settings.PLATFORM == 'AKS'),
                 project=testrun.project, **kwargs)
@@ -130,9 +130,11 @@ async def handle_new_run(testrun: schemas.NewTestRun):
     build_snap_cache_item = await get_build_snapshot_cache_item(testrun.sha)
     if build_snap_cache_item:
         # this is a rerun of a previous build - just create the RO PVC and runner job
-        logger.info(f'Found cached build for sha {testrun.sha}: reuse')
+        logger.info(f'Found cached build for sha {testrun.sha}: reuse', trid=testrun.id)
         if settings.use_read_only_many:
             state.ro_build_pvc = create_ro_pvc_name(testrun)
+        else:
+            state.build_snapshot_name = build_snap_cache_item.name
         state.specs = build_snap_cache_item.specs
         if testrun.project.spec_filter:
             state.specs = [s for s in state.specs if re.search(testrun.project.spec_filter, s)]
@@ -153,7 +155,7 @@ async def handle_new_run(testrun: schemas.NewTestRun):
 
 
 async def create_build_job(testrun: schemas.NewTestRun, state: TestRunBuildState):
-    logger.debug(f'Create build job for testrun {testrun.local_id}')
+    logger.info(f'Create build job for testrun {testrun.local_id}', trid=testrun.id)
     # First check to see if there is a node cache for this build
     # Perform a sparse checkout to check for the lock file
     cache_key = await get_cache_key(testrun)
@@ -193,7 +195,7 @@ async def handle_build_completed(event: AgentBuildCompletedEvent):
     :return:
     """
     testrun_id = event.testrun_id
-    logger.info(f'Build completed for testrun {testrun_id}')
+    logger.info(f'Build completed', trid=testrun_id)
 
     testrun = await get_testrun(testrun_id)
     st = await get_build_state(testrun_id, True)
@@ -211,21 +213,23 @@ async def handle_build_completed(event: AgentBuildCompletedEvent):
     await db.set_specs(testrun, st.specs)
 
     # create a snapshot from the build PVC
+    st.build_snapshot_name = get_build_snapshot_name(testrun)
     context = common_context(testrun,
-                             snapshot_name=get_build_snapshot_name(testrun),
+                             snapshot_name=st.build_snapshot_name,
                              pvc_name=st.rw_build_pvc)
 
     if st.preprovision_job:
         logger.debug('Delete pre-provision job')
         await async_delete_job(st.preprovision_job)
 
+    logger.info(f'Create build snapshot', trid=testrun_id)
     await create_k8_snapshot('pvc-snapshot', context)
+    await st.save()
     await add_build_snapshot_cache_item(testrun.project.organisation_id,
                                         testrun.sha,
                                         st.specs,
                                         testrun.project.build_storage)
 
-    st.build_snapshot_name = f'build-{testrun.sha}'
     await wait_for_snapshot_ready(st.build_snapshot_name)
 
     if settings.use_read_only_many:
@@ -235,6 +239,8 @@ async def handle_build_completed(event: AgentBuildCompletedEvent):
         context.update(dict(pvc_name=st.ro_build_pvc,
                             read_only=True))
         await create_k8_objects('pvc', context)
+
+    logger.info(f'Build snapshot ready', trid=testrun_id)
 
     # tell the main server
     await st.notify_build_completed()

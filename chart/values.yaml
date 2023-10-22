@@ -10,6 +10,7 @@ gcpServiceAccount: ""
 storageClass: ""
 platform: "minikube"
 architecture: "replicated"
+keepAliveOnFailure: true
 validPlatforms:
   - GKE
   - AKS

@@ -76,5 +76,6 @@ spec:
                             resources:
                                 requests:
                                     storage: 10Gi
+                            storageClassName: cykubed
                 name: build-volume
     ttlSecondsAfterFinished: 3600

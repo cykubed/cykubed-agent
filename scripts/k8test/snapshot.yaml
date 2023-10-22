@@ -1,0 +1,11 @@
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshot
+metadata:
+  labels:
+    testrun_id: "25"
+  name: test-snap1
+  namespace: cykubed
+spec:
+  source:
+    persistentVolumeClaimName: 1-dummyui-22-rw
+  volumeSnapshotClassName: cykubed

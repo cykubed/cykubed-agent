@@ -25,6 +25,9 @@ data:
   PRIORITY_CLASS: "{{ .Release.Namespace }}-high-priority"
   APP_DISTRIBUTION_CACHE_TTL: "{{ .Values.cache.appTTL }}"
   NODE_DISTRIBUTION_CACHE_TTL: "{{ .Values.cache.nodeTTL }}"
+{{ if .Values.keepAliveOnFailure }}
+  KEEPALIVE_ON_FAILURE: "true"
+{{ end }}
 {{ if has .Values.platform .Values.volumeSnapshotClassPlatforms }}
   VOLUME_SNAPSHOT_CLASS: "{{ .Release.Name }}"
 {{ end }}

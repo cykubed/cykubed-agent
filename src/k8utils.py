@@ -124,6 +124,7 @@ async def create_k8_objects(jobtype, context) -> str:
         name = yamlobjects[0]['metadata'].get('name')
         if name:
             logger.info(f'Creating {kind} {name}', id=context['testrun_id'])
+        # print(yaml.safe_dump(yamlobjects[0], indent=4))
         await create_from_dict(yamlobjects[0])
         return name
     except YAMLError as ex:
