@@ -94,8 +94,8 @@ async def test_start_run_node_cache_hit(redis, mocker, testrun: NewTestRun,
     async_get_snapshot.assert_called_once()
     get_cache_key.assert_called_once()
 
-    state = await get_build_state(testrun.id)
-    assert state.node_snapshot_name == 'node-absd234weefw'
+    st = await get_build_state(testrun.id)
+    assert st.node_snapshot_name == 'node-absd234weefw'
 
     # mock out the actual Job to check the rendered template
     compare_rendered_template_from_mock(mock_create_from_dict, 'build-rw-pvc-from-snapshot', 0)
