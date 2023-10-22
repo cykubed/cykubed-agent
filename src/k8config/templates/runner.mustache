@@ -38,9 +38,12 @@ spec:
                 dataSource:
                   apiGroup: snapshot.storage.k8s.io
                   kind: VolumeSnapshot
-                  name: {{build_snapshot}}
+                  name: "{{snapshot_name}}"
                 accessModes:
                   - ReadWriteOnce
+                resources:
+                    requests:
+                      storage: "{{storage}}Gi"
           {{/read_only_pvc}}
       {{#spot_enabled}}
       {{#use_spot_affinity}}

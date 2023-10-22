@@ -194,8 +194,6 @@ async def test_full_run(redis, mocker, mock_create_from_dict,
     websocket = mocker.AsyncMock()
     await handle_agent_message(websocket, msg.json())
 
-    wait_for_pvc.assert_called_once_with('5-project-1-ro')
-
     assert build_completed.call_count == 1
 
     assert await redis.smembers('testrun:20:specs') == {'test1.ts'}
@@ -320,12 +318,9 @@ async def test_build_completed_no_node_cache(redis, mock_create_from_dict,
                               specs=['test1.ts'])
     await state.save()
 
-    wait_for_pvc = mocker.patch('jobs.wait_for_pvc_ready', return_value=True)
     await handle_agent_message(websocket, msg.json())
 
     # not cached - wait for PVC to be ready then kick off the prepare job
-    wait_for_pvc.assert_called_once()
-    wait_for_pvc.assert_called_once_with('5-project-1-ro')
     assert mock_create_from_dict.call_count == 3
     compare_rendered_template_from_mock(mock_create_from_dict, 'build-ro-pvc-from-snapshot', 0)
     compare_rendered_template_from_mock(mock_create_from_dict, 'runner', 1)

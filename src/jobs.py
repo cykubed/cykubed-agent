@@ -18,7 +18,7 @@ from common.schemas import AgentBuildCompletedEvent, CacheItem
 from common.utils import utcnow, get_lock_hash
 from db import get_testrun
 from k8utils import async_get_snapshot, async_delete_pvc, async_delete_job, create_k8_objects, create_k8_snapshot, \
-    wait_for_pvc_ready, wait_for_snapshot_ready
+    wait_for_snapshot_ready
 from settings import settings
 from state import TestRunBuildState, get_build_state
 
@@ -40,7 +40,7 @@ def common_context(testrun: schemas.NewTestRun, **kwargs):
                 spot_percentage=testrun.spot_percentage,
                 preprovision=testrun.preprovision,
                 parallelism=testrun.project.parallelism,
-                read_only_pvc=True,
+                read_only_pvc=settings.use_read_only_many,
                 use_spot_affinity=(settings.PLATFORM == 'GKE' and
                                   (0 < testrun.spot_percentage < 100)),
                 gke=(settings.PLATFORM == 'GKE'),
@@ -131,16 +131,19 @@ async def handle_new_run(testrun: schemas.NewTestRun):
     if build_snap_cache_item:
         # this is a rerun of a previous build - just create the RO PVC and runner job
         logger.info(f'Found cached build for sha {testrun.sha}: reuse')
-        state.ro_build_pvc = create_ro_pvc_name(testrun)
+        if settings.use_read_only_many:
+            state.ro_build_pvc = create_ro_pvc_name(testrun)
         state.specs = build_snap_cache_item.specs
         if testrun.project.spec_filter:
             state.specs = [s for s in state.specs if re.search(testrun.project.spec_filter, s)]
         state.build_storage = build_snap_cache_item.storage_size
         await state.save()
-        context = common_context(testrun,
-                                 read_only=True, snapshot_name=build_snap_cache_item.name,
-                                 pvc_name=state.ro_build_pvc)
-        await create_k8_objects('pvc', context)
+
+        if settings.use_read_only_many:
+            context = common_context(testrun,
+                                     read_only=True, snapshot_name=build_snap_cache_item.name,
+                                     pvc_name=state.ro_build_pvc)
+            await create_k8_objects('pvc', context)
 
         await db.set_specs(testrun, state.specs)
         await state.notify_build_completed()
@@ -249,13 +252,6 @@ async def prepare_cache_wait(state, testrun):
     :param testrun:
     :return:
     """
-    logger.info('Wait for RO PVC', trid=testrun.id)
-
-    # we need to create a snapshot
-
-    # wait for the RO PVC to be bound
-    await wait_for_pvc_ready(state.ro_build_pvc)
-
     logger.info('Create prepare cache job', trid=testrun.id)
 
     # create the prepare job
