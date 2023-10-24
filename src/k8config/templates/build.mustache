@@ -32,6 +32,23 @@ spec:
         - name: build-volume
           persistentVolumeClaim:
             claimName: "{{pvc_name}}"
+      {{#spot_enabled}}
+      {{#aks}}
+      affinity:
+        nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                - matchExpressions:
+                  - key: "kubernetes.azure.com/scalesetpriority"
+                    operator: In
+                    values:
+                    - "spot"
+      {{/aks}}
+      {{#gke}}
+      nodeSelector:
+        cloud.google.com/gke-spot: "true"
+      {{/gke}}
+      {{/spot_enabled}}
       restartPolicy: Never
       priorityClassName: "{{priority_class}}"
       containers:

@@ -59,9 +59,9 @@ async def test_start_run_cache_miss(redis, mocker, testrun: NewTestRun,
     savedtr = NewTestRun.parse_raw(saved_tr_json)
     assert savedtr == testrun
 
-    state = await get_build_state(testrun.id)
-    assert state.rw_build_pvc == '5-project-1-rw'
-    assert state.trid == testrun.id
+    st = await get_build_state(testrun.id)
+    assert st.rw_build_pvc == '5-project-1-rw'
+    assert st.trid == testrun.id
 
     delete_jobs.assert_called_once_with(testrun)
     # there will be two calls here: one to create the PVC, another to run the build Job
@@ -69,9 +69,40 @@ async def test_start_run_cache_miss(redis, mocker, testrun: NewTestRun,
 
     # mock out the actual Job to check the rendered template
     compare_rendered_template_from_mock(mock_create_from_dict, 'build-rw-pvc', 0)
-    compare_rendered_template_from_mock(mock_create_from_dict, 'build-job', 1)
+    compare_rendered_template_from_mock(mock_create_from_dict, 'build-job-spot-gke', 1)
 
     assert post_building_status.called == 1
+
+
+async def test_start_run_cache_miss_no_spot(redis, mocker, testrun: NewTestRun,
+                                    post_building_status,
+                                    post_started_status,
+                                    respx_mock, mock_create_from_dict):
+    """
+    New run with no node cache
+    """
+    testrun.spot_percentage = 0
+    mocker.patch('jobs.get_cache_key', return_value='absd234weefw')
+    mocker.patch('jobs.delete_jobs_for_branch')
+    await handle_start_run(testrun)
+    # mock out the actual Job to check the rendered template
+    compare_rendered_template_from_mock(mock_create_from_dict, 'build-job-no-spot', 1)
+
+
+async def test_start_run_cache_miss_spot_aks(redis, mocker, testrun: NewTestRun,
+                                    post_building_status,
+                                    post_started_status,
+                                    respx_mock, mock_create_from_dict):
+    """
+    New run with no node cache
+    """
+    settings.PLATFORM = 'AKS'
+    testrun.spot_percentage = 100
+    mocker.patch('jobs.get_cache_key', return_value='absd234weefw')
+    mocker.patch('jobs.delete_jobs_for_branch')
+    await handle_start_run(testrun)
+    # mock out the actual Job to check the rendered template
+    compare_rendered_template_from_mock(mock_create_from_dict, 'build-job-spot-aks', 1)
 
 
 async def test_start_run_node_cache_hit(redis, mocker, testrun: NewTestRun,
@@ -85,7 +116,7 @@ async def test_start_run_node_cache_hit(redis, mocker, testrun: NewTestRun,
 
     get_cache_key = mocker.patch('jobs.get_cache_key', return_value='absd234weefw')
 
-    delete_jobs = mocker.patch('jobs.delete_jobs_for_branch')
+    mocker.patch('jobs.delete_jobs_for_branch')
     async_get_snapshot = mocker.patch('jobs.async_get_snapshot', return_value=True)
 
     await handle_start_run(testrun)
@@ -99,7 +130,7 @@ async def test_start_run_node_cache_hit(redis, mocker, testrun: NewTestRun,
 
     # mock out the actual Job to check the rendered template
     compare_rendered_template_from_mock(mock_create_from_dict, 'build-rw-pvc-from-snapshot', 0)
-    compare_rendered_template_from_mock(mock_create_from_dict, 'build-job', 1)
+    compare_rendered_template_from_mock(mock_create_from_dict, 'build-job-spot-gke', 1)
 
     assert post_building_status.called == 1
 
