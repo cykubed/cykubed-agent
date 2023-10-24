@@ -1,6 +1,5 @@
 import os
 
-import aiofiles
 import chevron
 import yaml
 from chevron import ChevronError
@@ -12,6 +11,8 @@ from yaml import YAMLError
 from common.exceptions import BuildFailedException, InvalidTemplateException
 from common.k8common import get_batch_api, get_custom_api, get_core_api, get_client
 from settings import settings
+
+template_cache=dict()
 
 
 async def async_get_pvc(pvc_name: str) -> bool:
@@ -118,7 +119,7 @@ async def create_from_dict(data: dict):
 
 async def create_k8_objects(jobtype, context) -> str:
     try:
-        yamlobjects = await render_template(jobtype, context)
+        yamlobjects = render_yaml_template(jobtype, context)
         # should only be one object
         kind = yamlobjects[0]['kind']
         name = yamlobjects[0]['metadata'].get('name')
@@ -136,10 +137,13 @@ async def create_k8_objects(jobtype, context) -> str:
         raise ex
 
 
-async def render_template(jobtype, context):
-    template = await get_job_template(jobtype)
-    jobyaml = chevron.render(template, context)
-    return list(yaml.safe_load_all(jobyaml))
+def render_template(jobtype, context) -> str:
+    template = get_job_template(jobtype)
+    return chevron.render(template, context)
+
+
+def render_yaml_template(jobtype, context) -> list:
+    return list(yaml.safe_load_all(render_template(jobtype, context)))
 
 
 async def create_k8_snapshot(jobtype, context):
@@ -150,7 +154,7 @@ async def create_k8_snapshot(jobtype, context):
     :return:
     """
     try:
-        yamlobjects = await render_template(jobtype, context)
+        yamlobjects = render_yaml_template(jobtype, context)
         await async_create_snapshot(yamlobjects[0])
     except YAMLError as ex:
         raise InvalidTemplateException(f'Invalid YAML in {jobtype} template: {ex}')
@@ -158,9 +162,12 @@ async def create_k8_snapshot(jobtype, context):
         raise InvalidTemplateException(f'Invalid {jobtype} template: {ex}')
 
 
-async def get_job_template(name: str) -> str:
-    async with aiofiles.open(get_template_path(name), mode='r') as f:
-        return await f.read()
+def get_job_template(name: str) -> str:
+    t = template_cache.get(name)
+    if not t:
+        with open(get_template_path(name), mode='r') as f:
+            t = template_cache[name] = f.read()
+    return t
 
 
 def get_template_path(name: str) -> str:

@@ -73,6 +73,11 @@ spec:
                 runAsNonRoot: true
                 runAsUser: 10000
             serviceAccountName: cykubed
+            tolerations:
+            -   effect: NoSchedule
+                key: kubernetes.azure.com/scalesetpriority
+                operator: Equal
+                value: spot
             volumes:
             -   ephemeral:
                     volumeClaimTemplate:

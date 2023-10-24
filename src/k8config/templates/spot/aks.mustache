@@ -1,0 +1,15 @@
+      tolerations:
+        - key: "kubernetes.azure.com/scalesetpriority"
+          operator: "Equal"
+          value: "spot"
+          effect: "NoSchedule"
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: {{spot_percentage}}
+            preference:
+              matchExpressions:
+              - key: "kubernetes.azure.com/scalesetpriority"
+                operator: In
+                values:
+                - "spot"

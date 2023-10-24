@@ -97,7 +97,7 @@ async def test_start_run_cache_miss_spot_aks(redis, mocker, testrun: NewTestRun,
     New run with no node cache
     """
     settings.PLATFORM = 'aks'
-    testrun.spot_percentage = 100
+    testrun.spot_percentage = 80
     mocker.patch('jobs.get_cache_key', return_value='absd234weefw')
     mocker.patch('jobs.delete_jobs_for_branch')
     await handle_start_run(testrun)
@@ -204,7 +204,6 @@ async def test_create_runner_ephemeral_volumes_spot_aks(redis, testrun: NewTestR
     testrun.spot_percentage = 80
     settings.PLATFORM = 'aks'
     settings.READ_ONLY_MANY = False
-    testrun.spot_percentage = 80
     st = TestRunBuildState(trid=testrun.id,
                            project_id=testrun.project.id,
                            run_job_index=1,

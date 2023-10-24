@@ -18,9 +18,20 @@ from common.schemas import AgentBuildCompletedEvent, CacheItem
 from common.utils import utcnow, get_lock_hash
 from db import get_testrun
 from k8utils import async_get_snapshot, async_delete_pvc, async_delete_job, create_k8_objects, create_k8_snapshot, \
-    wait_for_snapshot_ready
+    wait_for_snapshot_ready, render_template
 from settings import settings
 from state import TestRunBuildState, get_build_state
+
+
+def get_spot_config(spot_percentage: int) -> str:
+    if spot_percentage and settings.PLATFORM in PLATFORMS_SUPPORTING_SPOT:
+        context = dict(spot_percentage=spot_percentage)
+        if settings.PLATFORM == 'gke' and spot_percentage < 100:
+            context['use_spot_affinity'] = True
+        spot = render_template(f'spot/{settings.PLATFORM}', context)
+    else:
+        spot = ""
+    return spot
 
 
 def common_context(testrun: schemas.NewTestRun, **kwargs):
@@ -36,8 +47,6 @@ def common_context(testrun: schemas.NewTestRun, **kwargs):
                 branch=testrun.branch,
                 redis_secret_name=settings.REDIS_SECRET_NAME,
                 token=settings.API_TOKEN,
-                spot_enabled=testrun.spot_percentage > 0 and settings.PLATFORM in PLATFORMS_SUPPORTING_SPOT,
-                spot_percentage=testrun.spot_percentage,
                 preprovision=testrun.preprovision,
                 parallelism=testrun.project.parallelism,
                 read_only_pvc=settings.use_read_only_many,
@@ -180,6 +189,9 @@ async def create_build_job(testrun: schemas.NewTestRun, state: TestRunBuildState
     await create_k8_objects('pvc', context)
     # and create the build job
     context['job_name'] = f'{testrun.project.organisation_id}-builder-{testrun.project.name}-{testrun.local_id}'
+    if testrun.spot_percentage > 0:
+        # all or nothing for the build
+        context['spot'] = get_spot_config(100)
     state.build_job = await create_k8_objects('build', context)
     await state.save()
     await app.update_status(testrun.id, 'building')
@@ -303,9 +315,9 @@ async def create_runner_job(testrun: schemas.NewTestRun, state: TestRunBuildStat
              parallelism=min(testrun.project.parallelism, len(state.specs)),
              build_snapshot_name=state.build_snapshot_name,
              pvc_name=state.ro_build_pvc))
-    if settings.PLATFORM not in PLATFORMS_SUPPORTING_SPOT and testrun.spot_percentage > 0:
+    if settings.PLATFORM in PLATFORMS_SUPPORTING_SPOT and testrun.spot_percentage > 0:
         # no spot on this platform
-        testrun.spot_percentage = 0
+        context['spot'] = get_spot_config(testrun.spot_percentage)
     if not state.runner_deadline:
         state.runner_deadline = utcnow() + datetime.timedelta(seconds=testrun.project.runner_deadline)
     state.run_job = await create_k8_objects('runner', context)

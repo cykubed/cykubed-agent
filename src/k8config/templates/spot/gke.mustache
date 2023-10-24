@@ -1,0 +1,16 @@
+      {{#use_spot_affinity}}
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: {{spot_percentage}}
+            preference:
+              matchExpressions:
+              - key: cloud.google.com/gke-spot
+                operator: In
+                values:
+                - "true"
+      {{/use_spot_affinity}}
+      {{^use_spot_affinity}}
+      nodeSelector:
+        cloud.google.com/gke-spot: "true"
+      {{/use_spot_affinity}}

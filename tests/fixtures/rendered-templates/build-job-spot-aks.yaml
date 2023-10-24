@@ -23,13 +23,14 @@ spec:
         spec:
             affinity:
                 nodeAffinity:
-                    requiredDuringSchedulingIgnoredDuringExecution:
-                        nodeSelectorTerms:
-                        -   matchExpressions:
+                    preferredDuringSchedulingIgnoredDuringExecution:
+                    -   preference:
+                            matchExpressions:
                             -   key: kubernetes.azure.com/scalesetpriority
                                 operator: In
                                 values:
                                 - spot
+                        weight: 100
             containers:
             -   args:
                 - build
@@ -67,6 +68,11 @@ spec:
                 runAsNonRoot: true
                 runAsUser: 10000
             serviceAccountName: cykubed
+            tolerations:
+            -   effect: NoSchedule
+                key: kubernetes.azure.com/scalesetpriority
+                operator: Equal
+                value: spot
             volumes:
             -   name: build-volume
                 persistentVolumeClaim:

@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  generateName: pvctest-
+  generateName: spottest-
   namespace: cykubed
 spec:
   backoffLimit: 0
@@ -9,8 +9,6 @@ spec:
   ttlSecondsAfterFinished: 3600
   template:
     spec:
-      nodeSelector:
-        cloud.google.com/gke-spot: "true"
       restartPolicy: Never
       securityContext:
         runAsNonRoot: true
@@ -18,11 +16,6 @@ spec:
         runAsUser: 10000
         runAsGroup: 10000
       serviceAccountName: "cykubed"
-      volumes:
-        - name: build-volume
-          persistentVolumeClaim:
-            readOnly: true
-            claimName: "test-ropvc"
       containers:
         - name: test
           imagePullPolicy: IfNotPresent
@@ -30,13 +23,4 @@ spec:
           command: [ "/bin/bash", "-c", "--" ]
           args:
              - "sleep 300"
-          env:
-          - name: BUILD_DIR
-            value: "/build"
-          envFrom:
-            - configMapRef:
-                name: cykubed-agent-configmap
-          volumeMounts:
-          - mountPath: "/build"
-            name: build-volume
 
