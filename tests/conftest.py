@@ -31,7 +31,7 @@ def mock_create_from_dict(mocker):
 @pytest.fixture()
 async def project() -> Project:
     # enable spot
-    settings.PLATFORM = "GKE"
+    settings.PLATFORM = "gke"
     settings.VOLUME_SNAPSHOT_CLASS = 'cykubed-snapshotclass'
     settings.READ_ONLY_MANY = True
     return Project(id=10,

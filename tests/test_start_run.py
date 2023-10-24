@@ -96,7 +96,7 @@ async def test_start_run_cache_miss_spot_aks(redis, mocker, testrun: NewTestRun,
     """
     New run with no node cache
     """
-    settings.PLATFORM = 'AKS'
+    settings.PLATFORM = 'aks'
     testrun.spot_percentage = 100
     mocker.patch('jobs.get_cache_key', return_value='absd234weefw')
     mocker.patch('jobs.delete_jobs_for_branch')
@@ -202,7 +202,7 @@ async def test_create_runner_ephemeral_volumes(redis, testrun: NewTestRun,
 async def test_create_runner_ephemeral_volumes_spot_aks(redis, testrun: NewTestRun,
                                                         mock_create_from_dict):
     testrun.spot_percentage = 80
-    settings.PLATFORM = 'AKS'
+    settings.PLATFORM = 'aks'
     settings.READ_ONLY_MANY = False
     testrun.spot_percentage = 80
     st = TestRunBuildState(trid=testrun.id,
@@ -299,7 +299,7 @@ async def test_full_run_aks(redis, mocker, mock_create_from_dict,
                             delete_pvc_mock,
                             k8_custom_api_mock,
                             testrun: NewTestRun):
-    settings.PLATFORM = 'AKS'
+    settings.PLATFORM = 'aks'
 
     respx_mock.post('https://api.cykubed.com/agent/testrun/20/status/running') \
         .mock(return_value=Response(200))

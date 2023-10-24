@@ -41,10 +41,10 @@ def common_context(testrun: schemas.NewTestRun, **kwargs):
                 preprovision=testrun.preprovision,
                 parallelism=testrun.project.parallelism,
                 read_only_pvc=settings.use_read_only_many,
-                use_spot_affinity=(settings.PLATFORM == 'AKS' or
-                                  (settings.PLATFORM == 'GKE' and (0 < testrun.spot_percentage < 100))),
-                gke=(settings.PLATFORM == 'GKE'),
-                aks=(settings.PLATFORM == 'AKS'),
+                use_spot_affinity=(settings.PLATFORM == 'aks' or
+                                  (settings.PLATFORM == 'gke' and (0 < testrun.spot_percentage < 100))),
+                gke=(settings.PLATFORM == 'gke'),
+                aks=(settings.PLATFORM == 'aks'),
                 project=testrun.project, **kwargs)
 
 
