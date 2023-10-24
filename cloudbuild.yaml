@@ -7,13 +7,13 @@ steps:
 
  - name: gcr.io/kaniko-project/executor:latest
    args: [ "--dockerfile=Dockerfile",
-           "--destination=us-docker.pkg.dev/cykubed/public/agent:1.29.0",
+           "--destination=us-docker.pkg.dev/cykubed/public/agent:1.30.0",
            "--cache=true"]
 
  - name: 'gcr.io/cykubed/helm:3.7.0'
    id: 'Build chart'
    script: |
-      helm package ./chart -d ./dist --app-version "1.29.0" --version "1.29.0"
+      helm package ./chart -d ./dist --app-version "1.30.0" --version "1.30.0"
       helm repo index ./dist --url https://charts.cykubed.com
 
  - name: 'gcr.io/cloud-builders/npm'
@@ -21,20 +21,20 @@ steps:
    script: |
        npm i -g wrangler
        wrangler r2 object put charts/index.yaml --file=./dist/index.yaml 
-       wrangler r2 object put "charts/agent-1.29.0.tgz" --file=./dist/agent-1.29.0.tgz
+       wrangler r2 object put "charts/agent-1.30.0.tgz" --file=./dist/agent-1.30.0.tgz
    secretEnv: ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID']
 
  - name: alpine/httpie
    id: Set current version number
    script: |
-       http POST "https://api.cykubed.com/admin/image/agent/current-version/1.29.0" -A bearer -a $CYKUBED_API_TOKEN
+       http POST "https://api.cykubed.com/admin/image/agent/current-version/1.30.0" -A bearer -a $CYKUBED_API_TOKEN
    secretEnv: ['CYKUBED_API_TOKEN']
 
  - name: gcr.io/cloud-builders/curl
    id: Notify Slack
    secretEnv: ['SLACK_HOOK_URL']
    script: |
-      echo "{\"text\":\"Cykubed agent published created with tag 1.29.0\"}" > payload.json
+      echo "{\"text\":\"Cykubed agent published created with tag 1.30.0\"}" > payload.json
       /usr/bin/curl -X POST -H 'Content-type: application/json' --data "@payload.json" $SLACK_HOOK_URL
 
 availableSecrets:
