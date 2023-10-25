@@ -12,7 +12,7 @@ websockets = "*"
 httpx = "*"
 cachetools = "^5.2.0"
 python-dateutil = "^2.8.2"
-sentry-sdk = {extras = ["httpx"], version = "*"}
+sentry-sdk = {extras = ["httpx", "loguru"], version = "*"}
 aiofiles = "^23.1.0"
 redis = {extras = ["hiredis"], version = "==4.5.4"}
 aioshutil = "^1.3"

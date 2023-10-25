@@ -3,8 +3,12 @@ import asyncio
 import sys
 from time import sleep
 
+import sentry_sdk
 from aiohttp import web
 from loguru import logger
+from sentry_sdk.integrations.asyncio import AsyncioIntegration
+from sentry_sdk.integrations.loguru import LoguruIntegration
+from sentry_sdk.integrations.redis import RedisIntegration
 
 import ws
 from app import app
@@ -83,10 +87,10 @@ if __name__ == "__main__":
         sys.exit(0)
     else:
         logger.info("Cykubed agent starting")
-        # if settings.SENTRY_DSN:
-        #     sentry_sdk.init(
-        #         dsn=settings.SENTRY_DSN,
-        #         integrations=[RedisIntegration(), AsyncioIntegration(),], )
+        if settings.SENTRY_DSN:
+            sentry_sdk.init(
+                dsn=settings.SENTRY_DSN,
+                integrations=[RedisIntegration(), AsyncioIntegration(), LoguruIntegration()], )
         try:
             asyncio.run(run())
         except KeyboardInterrupt:
