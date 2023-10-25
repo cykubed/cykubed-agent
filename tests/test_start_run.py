@@ -56,7 +56,7 @@ async def test_start_run_cache_miss(redis, mocker, testrun: NewTestRun,
 
     # this will add an entry to the testrun collection
     saved_tr_json = await redis.get(f'testrun:{testrun.id}')
-    savedtr = NewTestRun.parse_raw(saved_tr_json)
+    savedtr = NewTestRun.model_validate_json(saved_tr_json)
     assert savedtr == testrun
 
     st = await get_build_state(testrun.id)

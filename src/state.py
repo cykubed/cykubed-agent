@@ -15,20 +15,20 @@ class TestRunBuildState(BaseModel):
     trid: int
     project_id: int
     specs: list[str] = []
-    parallelism: Optional[int]
+    parallelism: Optional[int] = None
     build_storage: int
-    cache_key: str = None
-    build_snapshot_name: str = None
-    node_snapshot_name: str = None
-    build_job: str = None
-    prepare_cache_job: str = None
-    preprovision_job: str = None
-    run_job: str = None
-    runner_deadline: datetime.datetime = None
-    run_job_index = 0
+    cache_key: Optional[str] = None
+    build_snapshot_name: Optional[str] = None
+    node_snapshot_name: Optional[str] = None
+    build_job: Optional[str] = None
+    prepare_cache_job: Optional[str] = None
+    preprovision_job: Optional[str] = None
+    run_job: Optional[str] = None
+    runner_deadline: Optional[datetime.datetime] = None
+    run_job_index: int = 0
     completed: bool = False
-    rw_build_pvc: Optional[str]
-    ro_build_pvc: Optional[str]
+    rw_build_pvc: Optional[str] = None
+    ro_build_pvc: Optional[str] = None
 
     async def get_duration(self, cmd: str, spot: bool):
         spot_or_normal = 'spot' if spot else 'normal'

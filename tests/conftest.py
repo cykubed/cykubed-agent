@@ -37,6 +37,7 @@ async def project() -> Project:
     return Project(id=10,
                    organisation_id=5,
                    name='project',
+                   browser='electron',
                    repos='project',
                    default_branch='master',
                    agent_id=1,

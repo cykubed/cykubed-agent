@@ -20,7 +20,7 @@ async def test_check_add_cached_item(testrun: NewTestRun, redis):
                                     'storage_size': 10,
                                     'organisation_id': 5,
                                     'specs': None,
-                                    'expires': '2022-04-03T21:10:00+00:00'
+                                    'expires': '2022-04-03T21:10:00Z'
                                     }
 
 
