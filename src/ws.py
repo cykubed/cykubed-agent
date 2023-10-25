@@ -64,7 +64,7 @@ async def handle_websocket_message(data: dict):
         payload = data['payload']
         logger.debug(f'Received {cmd} command')
         if cmd == 'start':
-            await handle_start_run(NewTestRun.parse_raw(payload))
+            await handle_start_run(NewTestRun.model_validate_json(payload))
         elif cmd == 'delete_project':
             await handle_delete_project(payload['project_id'])
         elif cmd == 'cancel':
@@ -91,15 +91,15 @@ async def consumer_handler(websocket):
 
 
 async def handle_agent_message(websocket, rawmsg: str):
-    event = AgentEvent.parse_raw(rawmsg)
+    event = AgentEvent.model_validate_json(rawmsg)
     # logger.debug(f'Msg: {event.type} for {event.testrun_id}')
     if event.type == AgentEventType.build_completed:
         # build completed - create runner jobs
-        await jobs.handle_build_completed(AgentBuildCompletedEvent.parse_raw(rawmsg))
+        await jobs.handle_build_completed(AgentBuildCompletedEvent.model_validate_json(rawmsg))
     elif event.type == AgentEventType.cache_prepared:
         await jobs.handle_cache_prepared(event.testrun_id)
     elif event.type == AgentEventType.error:
-        await jobs.handle_testrun_error(AgentTestRunErrorEvent.parse_raw(rawmsg))
+        await jobs.handle_testrun_error(AgentTestRunErrorEvent.model_validate_json(rawmsg))
     elif event.type == AgentEventType.run_completed:
         # run completed - notify and clean up
         await jobs.handle_run_completed(event.testrun_id)

@@ -343,7 +343,8 @@ async def handle_run_completed(testrun_id: int, delete_pvcs_only=True):
 
 async def handle_testrun_error(event: schemas.AgentTestRunErrorEvent):
     logger.info(f'Run {event.testrun_id} failed at stage {event.report.stage}')
-    await app.httpclient.post(f'/agent/testrun/{event.testrun_id}/error', json=event.report.dict())
+    await app.httpclient.post(f'/agent/testrun/{event.testrun_id}/error',
+                              json=event.report.model_dump())
     await handle_run_completed(event.testrun_id)
 
 
@@ -414,7 +415,7 @@ async def handle_delete_project(project_id: int):
         async for key in r.scan_iter('testrun:state:*'):
             st = await r.get(key)
             if st:
-                buildstate: TestRunBuildState = TestRunBuildState.parse_raw(st)
+                buildstate: TestRunBuildState = TestRunBuildState.model_validate_json(st)
                 if buildstate.project_id == project_id:
                     await delete_jobs(buildstate)
                     await delete_pvcs(buildstate, True)

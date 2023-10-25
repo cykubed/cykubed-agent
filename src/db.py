@@ -9,7 +9,7 @@ from common.schemas import NewTestRun
 
 async def new_testrun(tr: NewTestRun):
     r = async_redis()
-    await r.set(f'testrun:{tr.id}', tr.json())
+    await r.set(f'testrun:{tr.id}', tr.model_dump_json())
 
 
 async def set_specs(tr: NewTestRun, specs: list[str]):
@@ -30,7 +30,7 @@ async def get_testrun(id: int) -> NewTestRun | None:
     """
     d = await async_redis().get(f'testrun:{id}')
     if d:
-        return NewTestRun.parse_raw(d)
+        return NewTestRun.model_validate_json(d)
     return None
 
 

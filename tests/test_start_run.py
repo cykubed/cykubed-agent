@@ -159,7 +159,7 @@ async def test_start_rerun(redis, mocker, testrun: NewTestRun,
 
     # this will add an entry to the testrun collection
     saved_tr_json = await redis.get(f'testrun:{testrun.id}')
-    savedtr = NewTestRun.parse_raw(saved_tr_json)
+    savedtr = NewTestRun.model_validate_json(saved_tr_json)
     assert savedtr == testrun
 
     assert await redis.smembers('testrun:20:specs') == {'spec1.ts'}
@@ -252,7 +252,7 @@ async def test_full_run_gke(redis, mocker, mock_create_from_dict,
                                    testrun_id=testrun.id)
 
     websocket = mocker.AsyncMock()
-    await handle_agent_message(websocket, msg.json())
+    await handle_agent_message(websocket, msg.model_dump_json())
 
     assert build_completed.call_count == 1
 
@@ -261,7 +261,7 @@ async def test_full_run_gke(redis, mocker, mock_create_from_dict,
 
     # the cache is preprared
     await handle_agent_message(websocket, AgentEvent(type=AgentEventType.cache_prepared,
-                                                     testrun_id=testrun.id).json())
+                                                     testrun_id=testrun.id).model_dump_json())
 
     assert wait_for_snapshot.called
 
@@ -319,10 +319,10 @@ async def test_full_run_aks(redis, mocker, mock_create_from_dict,
                                    duration=10,
                                    testrun_id=testrun.id)
     websocket = mocker.AsyncMock()
-    await handle_agent_message(websocket, msg.json())
+    await handle_agent_message(websocket, msg.model_dump_json())
     # the cache is preprared
     await handle_agent_message(websocket, AgentEvent(type=AgentEventType.cache_prepared,
-                                                     testrun_id=testrun.id).json())
+                                                     testrun_id=testrun.id).model_dump_json())
     # run completed
     await handle_run_completed(testrun.id)
 
@@ -375,7 +375,7 @@ async def test_build_completed_node_cache_used(redis, mock_create_from_dict,
                               specs=['test1.ts'])
     await state.save()
 
-    await handle_agent_message(websocket, msg.json())
+    await handle_agent_message(websocket, msg.model_dump_json())
 
     state = await get_build_state(testrun.id)
     assert state.ro_build_pvc == '5-project-1-ro'
@@ -433,7 +433,7 @@ async def test_build_completed_no_node_cache(redis, mock_create_from_dict,
                               specs=['test1.ts'])
     await state.save()
 
-    await handle_agent_message(websocket, msg.json())
+    await handle_agent_message(websocket, msg.model_dump_json())
 
     # not cached - wait for PVC to be ready then kick off the prepare job
     assert mock_create_from_dict.call_count == 3
@@ -462,7 +462,7 @@ async def test_prepare_cache_completed(mocker, redis, testrun,
     wait_for_snapshot = mocker.patch('jobs.wait_for_snapshot_ready', return_value=True)
 
     await handle_agent_message(websocket, AgentEvent(type=AgentEventType.cache_prepared,
-                                                     testrun_id=testrun.id).json())
+                                                     testrun_id=testrun.id).model_dump_json())
     assert create_custom_mock.call_count == 1
     compare_rendered_template([create_custom_mock.call_args_list[0].kwargs['body']], 'node-snapshot')
     # the build PVC will be deleted

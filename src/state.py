@@ -36,11 +36,11 @@ class TestRunBuildState(BaseModel):
         return int(val) if val is not None else 0
 
     async def save(self):
-        await async_redis().set(f'testrun:state:{self.trid}', self.json(), ex=24*3600)
+        await async_redis().set(f'testrun:state:{self.trid}', self.model_dump_json(), ex=24*3600)
 
     async def notify_build_completed(self):
         resp = await app.httpclient.post(f'/agent/testrun/{self.trid}/build-completed',
-                                         content=AgentBuildCompleted(specs=self.specs).json())
+                                         content=AgentBuildCompleted(specs=self.specs).model_dump_json())
         if resp.status_code != 200:
             logger.error(f'Failed to update server that build was completed:'
                          f' {resp.status_code}: {resp.text}')
@@ -55,7 +55,7 @@ class TestRunBuildState(BaseModel):
 async def get_build_state(trid: int, check=False) -> TestRunBuildState:
     st = await async_redis().get(f'testrun:state:{trid}')
     if st:
-        return TestRunBuildState.parse_raw(st)
+        return TestRunBuildState.model_validate_json(st)
     if check:
         raise BuildFailedException("Missing state")
 

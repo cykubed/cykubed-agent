@@ -76,5 +76,5 @@ async def handle_pod_event(pod: V1Pod):
                                      is_spot=check_is_spot(annotations),
                                      duration=int((utcnow() - status.start_time).seconds))
             await app.httpclient.post(f'/agent/testrun/{testrun_id}/pod-duration',
-                                      content=st.json())
+                                      content=st.model_dump_json())
 

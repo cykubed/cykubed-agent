@@ -34,7 +34,7 @@ def rest_logsink(msg: loguru.Message):
                                                          msg=msg,
                                                          source=app.hostname))
 
-        sync_redis().rpush('messages', item.json())
+        sync_redis().rpush('messages', item.model_dump_json())
 
 
 def configure_logging():

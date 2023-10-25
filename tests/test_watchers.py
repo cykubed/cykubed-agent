@@ -26,7 +26,7 @@ async def test_handle_post_event(respx_mock, mocker, redis):
 
         assert store_duration.called
 
-        st = schemas.PodDuration.parse_raw(store_duration.calls[0].request.content.decode())
+        st = schemas.PodDuration.model_validate_json(store_duration.calls[0].request.content.decode())
         assert st.duration == 150
         assert not st.is_spot
         assert st.job_type == 'runner'

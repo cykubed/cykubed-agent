@@ -125,11 +125,11 @@ async def get_cached_item(key: str, update_expiry=True) -> CacheItem | None:
     itemstr = await async_redis().get(f'cache:{key}')
     if not itemstr:
         return None
-    item = CacheItem.parse_raw(itemstr)
+    item = CacheItem.model_validate_json(itemstr)
     if update_expiry:
         # update expiry
         item.expires = utcnow() + datetime.timedelta(seconds=item.ttl)
-        await async_redis().set(f'cache:{key}', item.json())
+        await async_redis().set(f'cache:{key}', item.model_dump_json())
     return item
 
 
@@ -143,7 +143,7 @@ async def add_cached_item(organisation_id: int,
                      organisation_id=organisation_id,
                      storage_size=storage_size,
                      expires=utcnow() + datetime.timedelta(seconds=ttl), **kwargs)
-    await async_redis().set(f'cache:{key}', item.json())
+    await async_redis().set(f'cache:{key}', item.model_dump_json())
     return item
 
 
