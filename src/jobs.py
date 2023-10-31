@@ -34,6 +34,10 @@ def get_spot_config(spot_percentage: int) -> str:
     return spot
 
 
+def use_read_only_pvc(testrun: schemas.NewTestRun) -> bool:
+    return settings.use_read_only_many and not testrun.project.server_cmd
+
+
 def common_context(testrun: schemas.NewTestRun, **kwargs):
     return dict(sha=testrun.sha,
                 priority_class=settings.PRIORITY_CLASS,
@@ -49,7 +53,7 @@ def common_context(testrun: schemas.NewTestRun, **kwargs):
                 token=settings.API_TOKEN,
                 preprovision=testrun.preprovision,
                 parallelism=testrun.project.parallelism,
-                read_only_pvc=settings.use_read_only_many,
+                read_only_pvc=use_read_only_pvc(testrun),
                 use_spot_affinity=(settings.PLATFORM == 'aks' or
                                   (settings.PLATFORM == 'gke' and (0 < testrun.spot_percentage < 100))),
                 gke=(settings.PLATFORM == 'gke'),
@@ -140,7 +144,7 @@ async def handle_new_run(testrun: schemas.NewTestRun):
     if build_snap_cache_item:
         # this is a rerun of a previous build - just create the RO PVC and runner job
         logger.info(f'Found cached build for sha {testrun.sha}: reuse', trid=testrun.id)
-        if settings.use_read_only_many:
+        if use_read_only_pvc(testrun):
             state.ro_build_pvc = create_ro_pvc_name(testrun)
         else:
             state.build_snapshot_name = build_snap_cache_item.name
@@ -150,7 +154,7 @@ async def handle_new_run(testrun: schemas.NewTestRun):
         state.build_storage = build_snap_cache_item.storage_size
         await state.save()
 
-        if settings.use_read_only_many:
+        if use_read_only_pvc(testrun):
             context = common_context(testrun,
                                      read_only=True, snapshot_name=build_snap_cache_item.name,
                                      pvc_name=state.ro_build_pvc)
@@ -244,7 +248,7 @@ async def handle_build_completed(event: AgentBuildCompletedEvent):
 
     await wait_for_snapshot_ready(st.build_snapshot_name)
 
-    if settings.use_read_only_many:
+    if use_read_only_pvc(testrun):
         # create a RO PVC from this snapshot and a runner that uses it
         st.ro_build_pvc = create_ro_pvc_name(testrun)
         await st.save()
