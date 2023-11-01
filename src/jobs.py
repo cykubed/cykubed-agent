@@ -43,6 +43,7 @@ def common_context(testrun: schemas.NewTestRun, **kwargs):
                 priority_class=settings.PRIORITY_CLASS,
                 snapshot_class_name=settings.VOLUME_SNAPSHOT_CLASS,
                 namespace=settings.NAMESPACE,
+                image=testrun.project.docker_image.image,
                 storage_class=settings.STORAGE_CLASS,
                 storage=testrun.project.build_storage,
                 local_id=testrun.local_id,

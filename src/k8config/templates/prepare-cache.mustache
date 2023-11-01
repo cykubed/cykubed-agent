@@ -35,7 +35,7 @@ spec:
       priorityClassName: "{{ priority_class }}"
       containers:
       - name: "prepare"
-        image: "{{project.runner_image}}"
+        image: "{{image}}"
         env:
         - name: REDIS_PASSWORD
           valueFrom:

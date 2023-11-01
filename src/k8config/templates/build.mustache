@@ -37,7 +37,7 @@ spec:
       priorityClassName: "{{priority_class}}"
       containers:
       - name: "cykubed-builder"
-        image: "{{project.runner_image}}"
+        image: "{{image}}"
         env:
         - name: REDIS_PASSWORD
           valueFrom:
