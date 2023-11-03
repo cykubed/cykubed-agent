@@ -151,7 +151,7 @@ async def add_build_snapshot_cache_item(organisation_id: int,
                                         sha: str, specs: list[str],
                                         storage_size: int) -> CacheItem:
     return await add_cached_item(organisation_id,
-                                 f'build-{sha}',
+                                 f'{organisation_id}-build-{sha}',
                                  ttl=settings.APP_DISTRIBUTION_CACHE_TTL,
                                  specs=specs,
                                  storage_size=storage_size)

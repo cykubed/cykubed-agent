@@ -3,7 +3,7 @@ kind: VolumeSnapshot
 metadata:
     labels:
         testrun_id: '20'
-    name: build-deadbeef0101
+    name: 5-build-deadbeef0101
     namespace: cykubed
 spec:
     source:

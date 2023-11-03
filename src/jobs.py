@@ -107,8 +107,8 @@ def create_rw_pvc_name(testrun: schemas.NewTestRun):
     return create_pvc_name(testrun, 'rw')
 
 
-async def get_build_snapshot_cache_item(sha: str) -> CacheItem:
-    key = f'build-{sha}'
+async def get_build_snapshot_cache_item(testrun: schemas.NewTestRun) -> CacheItem:
+    key = get_build_snapshot_name(testrun)
     item = await get_cached_item(key)
     if item:
         # check for volume snapshot
@@ -141,7 +141,7 @@ async def handle_new_run(testrun: schemas.NewTestRun):
     await r.sadd(f'testrun:{testrun.id}:completed_pods', 'dummy')
     await r.expire(f'testrun:{testrun.id}:completed_pods', 6 * 3600)
 
-    build_snap_cache_item = await get_build_snapshot_cache_item(testrun.sha)
+    build_snap_cache_item = await get_build_snapshot_cache_item(testrun)
     if build_snap_cache_item:
         # this is a rerun of a previous build - just create the RO PVC and runner job
         logger.info(f'Found cached build for sha {testrun.sha}: reuse', trid=testrun.id)
@@ -173,7 +173,7 @@ async def create_build_job(testrun: schemas.NewTestRun, state: TestRunBuildState
     # First check to see if there is a node cache for this build
     # Perform a sparse checkout to check for the lock file
     cache_key = await get_cache_key(testrun)
-    node_snapshot_name = f'node-{cache_key}'
+    node_snapshot_name = f'{testrun.project.organisation_id}-node-{cache_key}'
     cached_node_item = await get_cached_snapshot(node_snapshot_name)
 
     # we need a RW PVC for the build
@@ -203,7 +203,7 @@ async def create_build_job(testrun: schemas.NewTestRun, state: TestRunBuildState
 
 
 def get_build_snapshot_name(testrun):
-    return f'build-{testrun.sha}'
+    return f'{testrun.project.organisation_id}-build-{testrun.sha}'
 
 
 async def handle_build_completed(event: AgentBuildCompletedEvent):
@@ -294,9 +294,9 @@ async def handle_cache_prepared(testrun_id):
     Create a snapshot from the RW PVC
     """
     logger.info(f"Handle cache_prepared event for {testrun_id}")
-    testrun = await get_testrun(testrun_id)
+    testrun: schemas.NewTestRun = await get_testrun(testrun_id)
     state = await get_build_state(testrun_id, True)
-    name = f'node-{state.cache_key}'
+    name = f'{testrun.project.organisation_id}-node-{state.cache_key}'
     context = common_context(testrun,
                              snapshot_name=name,
                              cache_key=state.cache_key,
@@ -412,15 +412,16 @@ async def recreate_runner_job(st: TestRunBuildState, specs: list[str]):
     await create_runner_job(tr, st)
 
 
-async def handle_delete_project(project_id: int):
+async def handle_delete_project(project_id: int, organisation_id: int):
     logger.info(f'Deleting project {project_id}')
-    if settings.K8:
-        r = async_redis()
-        async for key in r.scan_iter('testrun:state:*'):
-            st = await r.get(key)
-            if st:
-                buildstate: TestRunBuildState = TestRunBuildState.parse_raw(st)
-                if buildstate.project_id == project_id:
-                    await delete_jobs(buildstate)
-                    await delete_pvcs(buildstate, True)
-                    await r.delete(key)
+    r = async_redis()
+    async for key in r.scan_iter('testrun:state:*'):
+        st = await r.get(key)
+        if st:
+            buildstate: TestRunBuildState = TestRunBuildState.parse_raw(st)
+            if buildstate.project_id == project_id:
+                await delete_jobs(buildstate)
+                await delete_pvcs(buildstate, True)
+                await r.delete(key)
+
+    await cache.clear_cache(organisation_id)

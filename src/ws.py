@@ -66,7 +66,8 @@ async def handle_websocket_message(data: dict):
         if cmd == 'start':
             await handle_start_run(NewTestRun.parse_raw(payload))
         elif cmd == 'delete_project':
-            await handle_delete_project(payload['project_id'])
+            await handle_delete_project(project_id=payload['project_id'],
+                                        organisation_id=payload['organisation_id'])
         elif cmd == 'cancel':
             st = await state.get_build_state(payload['testrun_id'])
             if st:

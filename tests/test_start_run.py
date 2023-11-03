@@ -8,7 +8,8 @@ from httpx import Response
 import state
 from cache import add_cached_item, add_build_snapshot_cache_item
 from common.enums import AgentEventType
-from common.schemas import NewTestRun, AgentEvent, TestRunErrorReport, AgentTestRunErrorEvent, AgentBuildCompletedEvent
+from common.schemas import NewTestRun, AgentEvent, TestRunErrorReport, AgentTestRunErrorEvent, AgentBuildCompletedEvent, \
+    Project
 from db import new_testrun
 from jobs import handle_run_completed, handle_testrun_error, create_runner_job, handle_delete_project
 from settings import settings
@@ -112,7 +113,7 @@ async def test_start_run_node_cache_hit(redis, mocker, testrun: NewTestRun,
     """
     New run with a node cache
     """
-    await add_cached_item(testrun.project.organisation_id, 'node-absd234weefw', 10)
+    await add_cached_item(testrun.project.organisation_id, '5-node-absd234weefw', 10)
 
     get_cache_key = mocker.patch('jobs.get_cache_key', return_value='absd234weefw')
 
@@ -126,7 +127,7 @@ async def test_start_run_node_cache_hit(redis, mocker, testrun: NewTestRun,
     get_cache_key.assert_called_once()
 
     st = await get_build_state(testrun.id)
-    assert st.node_snapshot_name == 'node-absd234weefw'
+    assert st.node_snapshot_name == '5-node-absd234weefw'
 
     # mock out the actual Job to check the rendered template
     compare_rendered_template_from_mock(mock_create_from_dict, 'build-rw-pvc-from-snapshot', 0)
@@ -147,7 +148,7 @@ async def test_start_rerun(redis, mocker, testrun: NewTestRun,
 
     mocker.patch('jobs.get_cache_key', return_value='absd234weefw')
 
-    await add_cached_item(testrun.project.organisation_id, 'node-absd234weefw', 10)
+    await add_cached_item(testrun.project.organisation_id, '5-node-absd234weefw', 10)
     await add_build_snapshot_cache_item(testrun.project.organisation_id,
                                         'deadbeef0101', ['spec1.ts'], 1)
 
@@ -488,19 +489,16 @@ async def test_run_error(redis, mocker, respx_mock, testrun):
     assert payload == {'stage': 'runner', 'msg': 'Argh', 'error_code': None}
 
 
-async def test_delete_project(redis, mocker):
+async def test_delete_project(redis, mocker, project: Project):
     """
     Delete that delete_project deletes the relevant PVCs and jobs
-    :param redis:
-    :param mocker:
-    :return:
     """
-    await state.TestRunBuildState(trid=100, project_id=5,
+    await state.TestRunBuildState(trid=100, project_id=project.id,
                                   ro_build_pvc='dummy-ro-1', build_job='build-1', run_job='run-1',
                                   build_storage=10,
                                   rw_build_pvc='dummy-rw-1').save()
 
-    await state.TestRunBuildState(trid=101, project_id=5,
+    await state.TestRunBuildState(trid=101, project_id=project.id,
                                   ro_build_pvc='dummy-ro-2', build_job='build-2',
                                   build_storage=10,
                                   rw_build_pvc='dummy-rw-2').save()
@@ -513,13 +511,17 @@ async def test_delete_project(redis, mocker):
     keys = set(await redis.keys('testrun:state:*'))
     assert keys == {'testrun:state:102', 'testrun:state:101', 'testrun:state:100'}
 
+    mock_clear_cache = mocker.patch('cache.clear_cache')
     mock_delete_job = mocker.patch('jobs.async_delete_job')
     mock_delete_pvc = mocker.patch('jobs.async_delete_pvc')
 
-    await handle_delete_project(5)
+    await handle_delete_project(organisation_id=project.organisation_id,
+                                project_id=project.id)
 
     assert mock_delete_pvc.call_count == 4
     assert mock_delete_job.call_count == 3
+    assert mock_clear_cache.called_with_args(project.organisation_id)
+
     pvcs = {x.args[0] for x in mock_delete_pvc.call_args_list}
     assert pvcs == {'dummy-rw-2', 'dummy-ro-2', 'dummy-rw-1', 'dummy-ro-1'}
 

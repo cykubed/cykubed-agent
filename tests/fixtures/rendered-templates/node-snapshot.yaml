@@ -3,7 +3,7 @@ kind: VolumeSnapshot
 metadata:
     labels:
         testrun_id: '20'
-    name: node-absd234weefw
+    name: 5-node-absd234weefw
     namespace: cykubed
 spec:
     source:

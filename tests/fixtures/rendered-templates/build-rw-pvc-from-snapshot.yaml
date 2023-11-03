@@ -15,7 +15,7 @@ spec:
     dataSource:
         apiGroup: snapshot.storage.k8s.io
         kind: VolumeSnapshot
-        name: node-absd234weefw
+        name: 5-node-absd234weefw
     resources:
         requests:
             storage: 10Gi
