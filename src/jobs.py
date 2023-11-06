@@ -1,6 +1,5 @@
 import asyncio
 import datetime
-import re
 import tempfile
 
 from loguru import logger
@@ -150,8 +149,6 @@ async def handle_new_run(testrun: schemas.NewTestRun):
         else:
             state.build_snapshot_name = build_snap_cache_item.name
         state.specs = build_snap_cache_item.specs
-        if testrun.project.spec_filter:
-            state.specs = [s for s in state.specs if re.search(testrun.project.spec_filter, s)]
         state.build_storage = build_snap_cache_item.storage_size
         await state.save()
 
