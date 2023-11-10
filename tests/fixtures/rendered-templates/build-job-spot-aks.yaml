@@ -23,14 +23,13 @@ spec:
         spec:
             affinity:
                 nodeAffinity:
-                    preferredDuringSchedulingIgnoredDuringExecution:
-                    -   preference:
-                            matchExpressions:
+                    requiredDuringSchedulingIgnoredDuringExecution:
+                        nodeSelectorTerms:
+                        -   matchExpressions:
                             -   key: kubernetes.azure.com/scalesetpriority
                                 operator: In
                                 values:
                                 - spot
-                        weight: 100
             containers:
             -   args:
                 - build

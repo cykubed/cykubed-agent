@@ -31,6 +31,7 @@ spec:
         - name: build-volume
           persistentVolumeClaim:
             claimName: "{{pvc_name}}"
+{{& spot }}
       restartPolicy: Never
       priorityClassName: "{{ priority_class }}"
       containers:

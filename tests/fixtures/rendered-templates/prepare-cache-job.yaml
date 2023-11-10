@@ -20,6 +20,16 @@ spec:
                 project_id: '10'
                 testrun_id: '20'
         spec:
+            affinity:
+                nodeAffinity:
+                    preferredDuringSchedulingIgnoredDuringExecution:
+                    -   preference:
+                            matchExpressions:
+                            -   key: cloud.google.com/gke-spot
+                                operator: In
+                                values:
+                                - 'true'
+                        weight: 80
             containers:
             -   args:
                 - prepare_cache

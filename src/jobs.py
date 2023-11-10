@@ -38,27 +38,31 @@ def use_read_only_pvc(testrun: schemas.NewTestRun) -> bool:
 
 
 def common_context(testrun: schemas.NewTestRun, **kwargs):
-    return dict(sha=testrun.sha,
-                priority_class=settings.PRIORITY_CLASS,
-                snapshot_class_name=settings.VOLUME_SNAPSHOT_CLASS,
-                namespace=settings.NAMESPACE,
-                image=testrun.project.docker_image.image,
-                storage_class=settings.STORAGE_CLASS,
-                storage=testrun.project.build_storage,
-                local_id=testrun.local_id,
-                testrun_id=testrun.id,
-                testrun=testrun,
-                branch=testrun.branch,
-                redis_secret_name=settings.REDIS_SECRET_NAME,
-                token=settings.API_TOKEN,
-                preprovision=testrun.preprovision,
-                parallelism=testrun.project.parallelism,
-                read_only_pvc=use_read_only_pvc(testrun),
-                use_spot_affinity=(settings.PLATFORM == 'aks' or
-                                  (settings.PLATFORM == 'gke' and (0 < testrun.spot_percentage < 100))),
-                gke=(settings.PLATFORM == 'gke'),
-                aks=(settings.PLATFORM == 'aks'),
-                project=testrun.project, **kwargs)
+    d = dict(sha=testrun.sha,
+             priority_class=settings.PRIORITY_CLASS,
+             snapshot_class_name=settings.VOLUME_SNAPSHOT_CLASS,
+             namespace=settings.NAMESPACE,
+             image=testrun.project.docker_image.image,
+             storage_class=settings.STORAGE_CLASS,
+             storage=testrun.project.build_storage,
+             local_id=testrun.local_id,
+             testrun_id=testrun.id,
+             testrun=testrun,
+             branch=testrun.branch,
+             redis_secret_name=settings.REDIS_SECRET_NAME,
+             token=settings.API_TOKEN,
+             preprovision=testrun.preprovision,
+             parallelism=testrun.project.parallelism,
+             read_only_pvc=use_read_only_pvc(testrun),
+             use_spot_affinity=(settings.PLATFORM == 'aks' or
+                                (settings.PLATFORM == 'gke' and (0 < testrun.spot_percentage < 100))),
+             gke=(settings.PLATFORM == 'gke'),
+             aks=(settings.PLATFORM == 'aks'),
+             project=testrun.project, **kwargs)
+    if settings.PLATFORM in PLATFORMS_SUPPORTING_SPOT and testrun.spot_percentage > 0:
+        # no spot on this platform
+        d['spot'] = get_spot_config(testrun.spot_percentage)
+    return d
 
 
 async def get_cached_snapshot(key: str):
@@ -68,6 +72,7 @@ async def get_cached_snapshot(key: str):
             return item
         # nope - clean up
         await remove_cached_item(key)
+
 
 #
 # def get_new_pvc_name(prefix: str) -> str:
@@ -313,13 +318,11 @@ async def create_runner_job(testrun: schemas.NewTestRun, state: TestRunBuildStat
     # next create the runner job: limit the parallism as there's no point having more runners than specs
     context = common_context(testrun)
     context.update(
-        dict(name=f'{testrun.project.organisation_id}-runner-{testrun.project.name}-{testrun.local_id}-{state.run_job_index}',
-             parallelism=min(testrun.project.parallelism, len(state.specs)),
-             build_snapshot_name=state.build_snapshot_name,
-             pvc_name=state.ro_build_pvc))
-    if settings.PLATFORM in PLATFORMS_SUPPORTING_SPOT and testrun.spot_percentage > 0:
-        # no spot on this platform
-        context['spot'] = get_spot_config(testrun.spot_percentage)
+        dict(
+            name=f'{testrun.project.organisation_id}-runner-{testrun.project.name}-{testrun.local_id}-{state.run_job_index}',
+            parallelism=min(testrun.project.parallelism, len(state.specs)),
+            build_snapshot_name=state.build_snapshot_name,
+            pvc_name=state.ro_build_pvc))
     if not state.runner_deadline:
         state.runner_deadline = utcnow() + datetime.timedelta(seconds=testrun.project.runner_deadline)
     state.run_job = await create_k8_objects('runner', context)

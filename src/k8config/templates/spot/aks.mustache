@@ -5,10 +5,9 @@
           effect: "NoSchedule"
       affinity:
         nodeAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: {{spot_percentage}}
-            preference:
-              matchExpressions:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
               - key: "kubernetes.azure.com/scalesetpriority"
                 operator: In
                 values:
