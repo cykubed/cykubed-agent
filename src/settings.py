@@ -44,6 +44,7 @@ class AgentSettings(BaseSettings):
 
     HOSTNAME: str = None  # for testin
 
+    LOCAL_REDIS: bool = True
     REDIS_SECRET_NAME = 'cykubed-agent-redis'
     STORAGE_CLASS = 'cykubed'
 

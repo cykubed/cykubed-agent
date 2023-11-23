@@ -5,7 +5,6 @@ import tempfile
 from loguru import logger
 
 import cache
-import db
 from app import app
 from cache import get_cached_item, add_build_snapshot_cache_item, remove_cached_item
 from common import schemas
@@ -13,13 +12,14 @@ from common.enums import PLATFORMS_SUPPORTING_SPOT
 from common.exceptions import BuildFailedException
 from common.k8common import get_batch_api
 from common.redisutils import async_redis
-from common.schemas import AgentBuildCompletedEvent, CacheItem
+from common.schemas import AgentBuildCompletedEvent, CacheItem, TestRunBuildState
 from common.utils import utcnow, get_lock_hash
 from db import get_testrun
 from k8utils import async_get_snapshot, async_delete_pvc, async_delete_job, create_k8_objects, create_k8_snapshot, \
     wait_for_snapshot_ready, render_template
 from settings import settings
-from state import TestRunBuildState, get_build_state
+from state import get_build_state, notify_build_completed, set_specs, notify_run_completed, \
+    save_state
 
 
 def get_spot_config(spot_percentage: int) -> str:
@@ -138,7 +138,7 @@ async def handle_new_run(testrun: schemas.NewTestRun):
     state = TestRunBuildState(trid=testrun.id,
                               project_id=testrun.project.id,
                               build_storage=testrun.project.build_storage)
-    await state.save()
+    await save_state(state)
 
     r = async_redis()
     # initialise the completed pods set with an expiry
@@ -155,7 +155,7 @@ async def handle_new_run(testrun: schemas.NewTestRun):
             state.build_snapshot_name = build_snap_cache_item.name
         state.specs = build_snap_cache_item.specs
         state.build_storage = build_snap_cache_item.storage_size
-        await state.save()
+        await save_state(state)
 
         if use_read_only_pvc(testrun):
             context = common_context(testrun,
@@ -163,8 +163,8 @@ async def handle_new_run(testrun: schemas.NewTestRun):
                                      pvc_name=state.ro_build_pvc)
             await create_k8_objects('pvc', context)
 
-        await db.set_specs(testrun, state.specs)
-        await state.notify_build_completed()
+        await set_specs(testrun, state.specs)
+        await notify_build_completed(state)
         await create_runner_job(testrun, state)
     else:
         await create_build_job(testrun, state)
@@ -181,7 +181,7 @@ async def create_build_job(testrun: schemas.NewTestRun, state: TestRunBuildState
     # we need a RW PVC for the build
     state.rw_build_pvc = create_rw_pvc_name(testrun)
     state.cache_key = cache_key
-    await state.save()
+    await save_state(state)
 
     context = common_context(testrun,
                              pvc_name=state.rw_build_pvc)
@@ -200,7 +200,7 @@ async def create_build_job(testrun: schemas.NewTestRun, state: TestRunBuildState
         # all or nothing for the build
         context['spot'] = get_spot_config(100)
     state.build_job = await create_k8_objects('build', context)
-    await state.save()
+    await save_state(state)
     await app.update_status(testrun.id, 'building')
 
 
@@ -229,7 +229,7 @@ async def handle_build_completed(event: AgentBuildCompletedEvent):
     st.specs = event.specs
     logger.info(f"Found {len(event.specs)} spec files")
 
-    await db.set_specs(testrun, st.specs)
+    await set_specs(testrun, st.specs)
 
     # create a snapshot from the build PVC
     st.build_snapshot_name = get_build_snapshot_name(testrun)
@@ -243,7 +243,7 @@ async def handle_build_completed(event: AgentBuildCompletedEvent):
 
     logger.info(f'Create build snapshot', trid=testrun_id)
     await create_k8_snapshot('pvc-snapshot', context)
-    await st.save()
+    await save_state(st)
     await add_build_snapshot_cache_item(testrun.project.organisation_id,
                                         testrun.sha,
                                         st.specs,
@@ -254,7 +254,7 @@ async def handle_build_completed(event: AgentBuildCompletedEvent):
     if use_read_only_pvc(testrun):
         # create a RO PVC from this snapshot and a runner that uses it
         st.ro_build_pvc = create_ro_pvc_name(testrun)
-        await st.save()
+        await save_state(st)
         context.update(dict(pvc_name=st.ro_build_pvc,
                             read_only=True))
         await create_k8_objects('pvc', context)
@@ -262,7 +262,7 @@ async def handle_build_completed(event: AgentBuildCompletedEvent):
     logger.info(f'Build snapshot ready', trid=testrun_id)
 
     # tell the main server
-    await st.notify_build_completed()
+    await notify_build_completed(st)
 
     # and create the runner job
     await create_runner_job(testrun, st)
@@ -288,7 +288,7 @@ async def prepare_cache_wait(state, testrun):
                              pvc_name=state.rw_build_pvc)
     name = await create_k8_objects('prepare-cache', context)
     state.prepare_cache_job = name
-    await state.save()
+    await save_state(state)
 
 
 async def handle_cache_prepared(testrun_id):
@@ -326,7 +326,7 @@ async def create_runner_job(testrun: schemas.NewTestRun, state: TestRunBuildStat
     if not state.runner_deadline:
         state.runner_deadline = utcnow() + datetime.timedelta(seconds=testrun.project.runner_deadline)
     state.run_job = await create_k8_objects('runner', context)
-    await state.save()
+    await save_state(state)
 
 
 async def handle_run_completed(testrun_id: int, delete_pvcs_only=True):
@@ -338,12 +338,10 @@ async def handle_run_completed(testrun_id: int, delete_pvcs_only=True):
     logger.info(f'Run {testrun_id} completed')
     state = await get_build_state(testrun_id)
     if state:
-        await state.notify_run_completed()
+        await notify_run_completed(state)
         await delete_pvcs(state)
         if not delete_pvcs_only:
             await delete_jobs(state)
-        # clean up other redis state
-        await db.cleanup(testrun_id)
 
 
 async def handle_testrun_error(event: schemas.AgentTestRunErrorEvent):

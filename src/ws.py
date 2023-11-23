@@ -29,16 +29,10 @@ async def handle_start_run(tr: NewTestRun):
     """
     logger.info(f'Handle start testrun {tr.id}')
     try:
-        # Store in Redis and kick off a new build job
-        await db.new_testrun(tr)
-        # and create a new one
-        if settings.K8:
-            await jobs.handle_new_run(tr)
-        else:
-            # local testing
-            st = state.TestRunBuildState(trid=tr.id, project_id=tr.project.id, rw_build_pvc='dummy')
-            await st.save()
-            logger.info(f'Now run the runner with args "clone {tr.id}"', tr=tr)
+        # kick off a new build job
+        if settings.LOCAL_REDIS:
+            await db.new_testrun(tr)
+        await jobs.handle_new_run(tr)
     except:
         logger.exception(f"Failed to start test run {tr.id}", tr=tr)
         await app.httpclient.post(f'/agent/testrun/{tr.id}/status/failed')
