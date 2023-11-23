@@ -5,11 +5,12 @@ from time import sleep
 
 from aiohttp import web
 from loguru import logger
+from tenacity import RetryError
 
 import ws
 from app import app
 from cache import prune_cache_loop, garage_collect_loop, delete_all_jobs, \
-    delete_all_pvcs, delete_all_volume_snapshots
+    delete_all_pvcs, delete_all_volume_snapshots, fetch_cached_items
 from common import k8common
 from common.k8common import close
 from common.redisutils import sync_redis, ping_redis, async_redis
@@ -35,15 +36,22 @@ async def hc_server():
 
 
 async def run():
-    sync_redis()
-    # block until we can access Redis
-    while True:
-        if ping_redis():
-            break
-        logger.debug("Cannot ping_redis Redis - waiting")
-        sleep(5)
+    if settings.LOCAL_REDIS:
+        sync_redis()
+        # block until we can access Redis
+        while True:
+            if ping_redis():
+                break
+            logger.debug("Cannot ping_redis Redis - waiting")
+            sleep(5)
 
-    logger.info("Connected to Redis")
+        logger.info("Connected to Redis")
+    else:
+        try:
+            await fetch_cached_items()
+        except RetryError:
+            logger.error("Failed to fetch cached items state from server - bailing out")
+            sys.exit(1)
 
     if not settings.TEST:
         await k8common.init()

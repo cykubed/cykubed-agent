@@ -4,9 +4,9 @@ import tempfile
 
 from loguru import logger
 
-import cache
 from app import app
-from cache import get_cached_item, add_build_snapshot_cache_item, remove_cached_item
+from cache import get_cached_item, add_build_snapshot_cache_item, remove_cached_item, delete_cached_item, \
+    add_cached_item
 from common import schemas
 from common.enums import PLATFORMS_SUPPORTING_SPOT
 from common.exceptions import BuildFailedException
@@ -71,7 +71,7 @@ async def get_cached_snapshot(key: str):
         if await async_get_snapshot(item.name):
             return item
         # nope - clean up
-        await remove_cached_item(key)
+        await remove_cached_item(item)
 
 
 #
@@ -118,7 +118,7 @@ async def get_build_snapshot_cache_item(testrun: schemas.NewTestRun) -> CacheIte
         # check for volume snapshot
         if not await async_get_snapshot(item.name):
             logger.warning(f'Snapshot {item.name} has been deleted - remove cache entry')
-            await remove_cached_item(key)
+            await delete_cached_item(item)
             return None
     return item
 
@@ -304,7 +304,8 @@ async def handle_cache_prepared(testrun_id):
                              cache_key=state.cache_key,
                              pvc_name=state.rw_build_pvc)
     await create_k8_snapshot('pvc-snapshot', context)
-    await cache.add_cached_item(testrun.project.organisation_id, name, state.build_storage)
+    await add_cached_item(testrun.project.organisation_id, name,
+                          state.build_storage)
 
     # wait for the snashot
     await wait_for_snapshot_ready(name)

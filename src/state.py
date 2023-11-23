@@ -26,9 +26,15 @@ async def notify_run_completed(state: TestRunBuildState):
 
 
 async def get_build_state(trid: int, check=False) -> TestRunBuildState:
-    st = await async_redis().get(f'testrun:state:{trid}')
-    if st:
-        return TestRunBuildState.parse_raw(st)
+    if settings.LOCAL_REDIS:
+        st = await async_redis().get(f'testrun:state:{trid}')
+        if st:
+            return TestRunBuildState.parse_raw(st)
+    else:
+        resp = await app.httpclient.get(f'/agent/testrun/{trid}/build-state')
+        if resp.status_code == 200:
+            return TestRunBuildState.parse_raw(resp.text)
+
     if check:
         raise BuildFailedException("Missing state")
 

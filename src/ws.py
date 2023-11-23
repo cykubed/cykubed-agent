@@ -5,6 +5,7 @@ from asyncio import sleep, exceptions, create_task
 
 import websockets
 from loguru import logger
+from pydantic import ValidationError
 from redis.exceptions import RedisError
 from websockets.exceptions import ConnectionClosedError, InvalidStatusCode, ConnectionClosed
 
@@ -72,6 +73,13 @@ async def handle_websocket_message(data: dict):
             await cache.clear_cache(payload.get('organisation_id'))
         elif cmd == 'fetch_log':
             await handle_fetch_log(data['testrun_id'], data['spec'])
+        elif cmd == 'event':
+            # is this an AgentEvent (i.e from a non-redis agent?)
+            try:
+                await handle_agent_event(payload)
+            except ValidationError:
+                logger.error('Unexpected payload - ignoring')
+
     except Exception as ex:
         logger.exception(f'Failed to handle msg: {ex}')
 
@@ -85,20 +93,27 @@ async def consumer_handler(websocket):
         asyncio.create_task(handle_websocket_message(json.loads(message)))
 
 
-async def handle_agent_message(websocket, rawmsg: str):
+async def handle_agent_event(rawmsg: str):
     event = AgentEvent.parse_raw(rawmsg)
-    # logger.debug(f'Msg: {event.type} for {event.testrun_id}')
     if event.type == AgentEventType.build_completed:
         # build completed - create runner jobs
         await jobs.handle_build_completed(AgentBuildCompletedEvent.parse_raw(rawmsg))
+        return True
     elif event.type == AgentEventType.cache_prepared:
         await jobs.handle_cache_prepared(event.testrun_id)
+        return True
     elif event.type == AgentEventType.error:
         await jobs.handle_testrun_error(AgentTestRunErrorEvent.parse_raw(rawmsg))
+        return True
     elif event.type == AgentEventType.run_completed:
         # run completed - notify and clean up
         await jobs.handle_run_completed(event.testrun_id)
-    else:
+        return True
+
+
+async def handle_agent_message(websocket, rawmsg: str):
+
+    if not handle_agent_event(rawmsg):
         # post everything else through the websocket
         await websocket.send(rawmsg)
 

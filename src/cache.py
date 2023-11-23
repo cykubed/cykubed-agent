@@ -3,15 +3,19 @@ import datetime
 
 from kubernetes_asyncio.client import V1PersistentVolumeClaimList, V1JobList
 from loguru import logger
+from tenacity import retry, stop_after_attempt, wait_fixed, wait_random
 
 from app import app
+from common.exceptions import ServerConnectionFailed
 from common.k8common import get_core_api, get_custom_api, init, get_batch_api
 from common.redisutils import async_redis
 from common.schemas import CacheItem
 from common.utils import utcnow
-from k8utils import async_delete_snapshot, async_delete_pvc, async_delete_job
+from k8utils import async_delete_snapshot, async_delete_job
 from settings import settings
 from state import get_build_state
+
+cache = dict()
 
 
 async def delete_all_jobs():
@@ -62,8 +66,8 @@ async def garbage_collect_cache():
                                                                plural="volumesnapshots")
     for item in snapshot_resp['items']:
         name = item['metadata']['name']
-        cache = await get_cached_item(name, False)
-        if not cache:
+        item = await get_cached_item(name, False)
+        if not item:
             # unknown - delete it
             logger.info(f'Found orphaned VolumeSnapshot {name} - deleting it')
             await async_delete_snapshot(name)
@@ -80,15 +84,13 @@ async def clear_cache(organisation_id: int = None):
     else:
         logger.info('Clearing cache')
 
-    async for key in async_redis().scan_iter('cache:*'):
-        item = await get_cached_item(key[6:], False)
-        if not item.organisation_id or item.organisation_id == organisation_id:
-            await delete_cache_item(item)
+    async for item in cached_items_iter(organisation_id):
+        await delete_cached_item(item)
 
 
 async def prune_cache():
     async for item in expired_cached_items_iter():
-        await delete_cache_item(item)
+        await delete_cached_item(item)
 
 
 async def garage_collect_loop():
@@ -102,7 +104,7 @@ async def garage_collect_loop():
 
 async def prune_cache_loop():
     """
-    Pune expired snapshots and PVCs
+    Prune expired snapshots and PVCs
     :return:
     """
     while app.is_running():
@@ -110,26 +112,51 @@ async def prune_cache_loop():
         await asyncio.sleep(300)
 
 
-async def delete_cache_item(item):
+@retry(stop=stop_after_attempt(settings.MAX_HTTP_RETRIES if not settings.TEST else 1),
+       wait=wait_fixed(5) + wait_random(0, 4))
+async def fetch_cached_items():
+    r = await app.httpclient.get('/agent/cached-items')
+    if r.status_code != 200:
+        logger.error('Failed to fetch cached-items!')
+        raise ServerConnectionFailed()
+
+    for item in r.json():
+        cache[item.name] = item
+
+
+async def delete_cached_item(item: CacheItem):
     # delete volume
     await async_delete_snapshot(item.name)
-    await async_redis().delete(f'cache:{item.name}')
-
-
-async def delete_cached_pvc(name: str):
-    await async_delete_pvc(name)
-    await remove_cached_item(name)
+    if settings.LOCAL_REDIS:
+        await async_redis().delete(f'cache:{item.name}')
+    else:
+        r = await app.httpclient.delete(f'/agent/cached-item/{item.name}')
+        if r.status_code != 200:
+            logger.error(f'Failed to tell server about deleted cache item ({r.status_code})')
 
 
 async def get_cached_item(key: str, update_expiry=True) -> CacheItem | None:
-    itemstr = await async_redis().get(f'cache:{key}')
-    if not itemstr:
-        return None
-    item = CacheItem.parse_raw(itemstr)
+    if settings.LOCAL_REDIS:
+        itemstr = await async_redis().get(f'cache:{key}')
+        if not itemstr:
+            return None
+        item = CacheItem.parse_raw(itemstr)
+    else:
+        item = cache.get(key)
+        if not item:
+            return None
+
     if update_expiry:
         # update expiry
         item.expires = utcnow() + datetime.timedelta(seconds=item.ttl)
-        await async_redis().set(f'cache:{key}', item.json())
+        if settings.LOCAL_REDIS:
+            await async_redis().set(f'cache:{key}', item.json())
+        else:
+            # tell the server, then update the local copy
+            r = await app.httpclient.put('/agent/cached-item', json=item.json())
+            if r.status_code != 200:
+                logger.error(f"Failed to update cache-item {item.name}: {r.status_code}")
+
     return item
 
 
@@ -143,7 +170,12 @@ async def add_cached_item(organisation_id: int,
                      organisation_id=organisation_id,
                      storage_size=storage_size,
                      expires=utcnow() + datetime.timedelta(seconds=ttl), **kwargs)
-    await async_redis().set(f'cache:{key}', item.json())
+    if settings.LOCAL_REDIS:
+        await async_redis().set(f'cache:{key}', item.json())
+    else:
+        cache[key] = item
+        # persist in the API
+        await app.httpclient.post('/agent/cached-item', json=item.json())
     return item
 
 
@@ -157,20 +189,26 @@ async def add_build_snapshot_cache_item(organisation_id: int,
                                  storage_size=storage_size)
 
 
-def get_pvc_expiry_time() -> str:
-    return (utcnow() + datetime.timedelta(seconds=settings.APP_DISTRIBUTION_CACHE_TTL)).isoformat()
-
-
-def get_snapshot_expiry_time() -> str:
-    return (utcnow() + datetime.timedelta(seconds=settings.NODE_DISTRIBUTION_CACHE_TTL)).isoformat()
-
-
-async def remove_cached_item(key: str):
-    await async_redis().delete(f'cache:{key}')
+async def remove_cached_item(item: CacheItem):
+    if settings.LOCAL_REDIS:
+        await async_redis().delete(f'cache:{item.name}')
+    else:
+        pass
 
 
 async def expired_cached_items_iter():
-    async for key in async_redis().scan_iter('cache:*'):
-        item = await get_cached_item(key[6:], False)
+    async for item in cached_items_iter():
         if item.expires < utcnow():
             yield item
+
+
+async def cached_items_iter(organisation_id: int = None):
+    if settings.LOCAL_REDIS:
+        async for key in async_redis().scan_iter('cache:*'):
+            item = await get_cached_item(key[6:], False)
+            if not item.organisation_id or item.organisation_id == organisation_id:
+                yield item
+    else:
+        for item in cache.values():
+            if not item.organisation_id or item.organisation_id == organisation_id:
+                yield item
