@@ -12,13 +12,13 @@ from common.enums import PLATFORMS_SUPPORTING_SPOT
 from common.exceptions import BuildFailedException
 from common.k8common import get_batch_api
 from common.redisutils import async_redis
-from common.schemas import AgentBuildCompletedEvent, CacheItem, TestRunBuildState
+from common.schemas import CacheItem, TestRunBuildState, AgentBuildCompleted
 from common.utils import utcnow, get_lock_hash
 from db import get_testrun
 from k8utils import async_get_snapshot, async_delete_pvc, async_delete_job, create_k8_objects, create_k8_snapshot, \
     wait_for_snapshot_ready, render_template
 from settings import settings
-from state import get_build_state, notify_build_completed, set_specs, notify_run_completed, \
+from state import get_build_state, notify_build_completed, notify_run_completed, \
     save_state
 
 
@@ -163,7 +163,6 @@ async def handle_new_run(testrun: schemas.NewTestRun):
                                      pvc_name=state.ro_build_pvc)
             await create_k8_objects('pvc', context)
 
-        await set_specs(testrun, state.specs)
         await notify_build_completed(state)
         await create_runner_job(testrun, state)
     else:
@@ -208,28 +207,17 @@ def get_build_snapshot_name(testrun):
     return f'{testrun.project.organisation_id}-build-{testrun.sha}'
 
 
-async def handle_build_completed(event: AgentBuildCompletedEvent):
+async def handle_build_completed(event: AgentBuildCompleted):
     """
     Build is completed: create PVCs and snapshots
-    :return:
     """
     testrun_id = event.testrun_id
     logger.info(f'Build completed', trid=testrun_id)
 
     testrun = await get_testrun(testrun_id)
     st = await get_build_state(testrun_id, True)
-
-    if not event.specs:
-        # no specs - default pass
-        await app.update_status(testrun_id, 'passed')
-        await delete_pvcs(st)
-        await st.notify_run_completed()
-        return
-
     st.specs = event.specs
     logger.info(f"Found {len(event.specs)} spec files")
-
-    await set_specs(testrun, st.specs)
 
     # create a snapshot from the build PVC
     st.build_snapshot_name = get_build_snapshot_name(testrun)
@@ -260,9 +248,6 @@ async def handle_build_completed(event: AgentBuildCompletedEvent):
         await create_k8_objects('pvc', context)
 
     logger.info(f'Build snapshot ready', trid=testrun_id)
-
-    # tell the main server
-    await notify_build_completed(st)
 
     # and create the runner job
     await create_runner_job(testrun, st)

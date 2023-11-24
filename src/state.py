@@ -6,14 +6,15 @@ import db
 from app import app
 from common import schemas
 from common.exceptions import BuildFailedException
-from common.redisutils import async_redis
 from common.schemas import TestRunBuildState
 from settings import settings
 
 
 async def save_state(state: TestRunBuildState):
-    if settings.LOCAL_REDIS:
-        await async_redis().set(f'testrun:state:{state.trid}', state.json(), ex=24 * 3600)
+    resp = await app.httpclient.post(f'/agent/testrun/{state.trid}/build-state',
+                        json=state.json())
+    if resp.status_code != 200:
+        raise BuildFailedException("Failed to save build state - bailing out")
 
 
 async def notify_run_completed(state: TestRunBuildState):
@@ -26,14 +27,9 @@ async def notify_run_completed(state: TestRunBuildState):
 
 
 async def get_build_state(trid: int, check=False) -> TestRunBuildState:
-    if settings.LOCAL_REDIS:
-        st = await async_redis().get(f'testrun:state:{trid}')
-        if st:
-            return TestRunBuildState.parse_raw(st)
-    else:
-        resp = await app.httpclient.get(f'/agent/testrun/{trid}/build-state')
-        if resp.status_code == 200:
-            return TestRunBuildState.parse_raw(resp.text)
+    resp = await app.httpclient.get(f'/agent/testrun/{trid}/build-state')
+    if resp.status_code == 200:
+        return TestRunBuildState.parse_raw(resp.text)
 
     if check:
         raise BuildFailedException("Missing state")
@@ -49,13 +45,6 @@ def check_is_spot(annotations) -> bool:
             if tol['key'] == 'cloud.google.com/gke-spot' and tol['value'] == 'true':
                 return True
     return False
-
-
-async def set_specs(tr: schemas.NewTestRun, specs: list[str]):
-    if settings.LOCAL_REDIS:
-        await db.set_specs(tr, specs)
-    else:
-        raise "Not Implemented"
 
 
 async def notify_build_completed(state: TestRunBuildState):

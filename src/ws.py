@@ -17,7 +17,7 @@ from app import app
 from common.enums import AgentEventType
 from common.redisutils import async_redis, ping_redis, get_specfile_log_key
 from common.schemas import NewTestRun, AgentEvent, AgentTestRunErrorEvent, \
-    AgentBuildCompletedEvent
+    AgentBuildCompletedEvent, AgentBuildCompleted
 from jobs import handle_delete_project
 from settings import settings
 
@@ -68,11 +68,16 @@ async def handle_websocket_message(data: dict):
             if st:
                 await jobs.delete_pvcs(st, True)
                 await jobs.delete_jobs(st)
-                await st.notify_run_completed()
+                await state.notify_run_completed(st)
         elif cmd == 'clear_cache':
             await cache.clear_cache(payload.get('organisation_id'))
         elif cmd == 'fetch_log':
             await handle_fetch_log(data['testrun_id'], data['spec'])
+        elif cmd == 'build_completed':
+            await jobs.handle_build_completed(
+                AgentBuildCompleted.parse_raw(payload))
+        elif cmd == 'run_completed':
+            await jobs.handle_run_completed(data['testrun_id'], False)
         elif cmd == 'event':
             # is this an AgentEvent (i.e from a non-redis agent?)
             try:
