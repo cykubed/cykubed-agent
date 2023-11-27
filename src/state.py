@@ -35,6 +35,12 @@ async def get_build_state(trid: int, check=False) -> TestRunBuildState:
         raise BuildFailedException("Missing state")
 
 
+async def delete_build_state(trid: int):
+    resp = await app.httpclient.delete(f'/agent/testrun/{trid}/build-state')
+    if resp.status_code != 200:
+        logger.error(f'Failed to delete build state: {resp.status_code}: {resp.text}')
+
+
 def check_is_spot(annotations) -> bool:
     if not annotations:
         return False

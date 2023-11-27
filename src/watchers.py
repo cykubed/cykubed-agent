@@ -5,7 +5,6 @@ from loguru import logger
 from app import app
 from common import schemas
 from common.k8common import get_core_api, get_batch_api
-from common.redisutils import async_redis
 from common.utils import utcnow
 from jobs import recreate_runner_job
 from settings import settings
@@ -29,7 +28,6 @@ async def watch_pod_events():
 
 async def watch_job_events():
     api = get_batch_api()
-    r = async_redis()
     while app.is_running():
         try:
             async with watch.Watch().stream(api.list_namespaced_job,
@@ -48,10 +46,14 @@ async def watch_job_events():
                             if st.run_job and st.run_job == metadata.name and status.completion_time:
                                 if utcnow() < st.runner_deadline:
                                     # runner job completed under the deadline: check for specs remaining
-                                    specs = await r.smembers(f'testrun:{st.trid}:specs')
-                                    if specs:
+                                    r = await app.httpclient.get('/uncompleted-specs')
+                                    if r.status_code != 200:
+                                        logger.error(f'Failed to get uncompleted spec count: {r.status_code}: {r.text}')
+                                    else:
+                                        specs = r.json()['specs']
                                         # yup - recreate the job
-                                        await recreate_runner_job(st, specs)
+                                        if specs:
+                                            await recreate_runner_job(st, specs)
         except Exception as ex:
             logger.exception('Unexpected error during watch_job_events loop')
 
@@ -69,12 +71,11 @@ async def handle_pod_event(pod: V1Pod):
         # assume finished
         testrun_id = metadata.labels['testrun_id']
         annotations = metadata.annotations
-        r = async_redis()
-        if await r.sadd(f'testrun:{testrun_id}:completed_pods', metadata.name) == 1:
-            # send the duration if we haven't already
-            st = schemas.PodDuration(job_type=metadata.labels['cykubed_job'],
-                                     is_spot=check_is_spot(annotations),
-                                     duration=int((utcnow() - status.start_time).seconds))
-            await app.httpclient.post(f'/agent/testrun/{testrun_id}/pod-duration',
-                                      content=st.json())
+        # send the duration
+        st = schemas.PodDuration(pod_name=metadata.name,
+                                 job_type=metadata.labels['cykubed_job'],
+                                 is_spot=check_is_spot(annotations),
+                                 duration=int((utcnow() - status.start_time).seconds))
+        await app.httpclient.post(f'/agent/testrun/{testrun_id}/pod-duration',
+                                  content=st.json())
 

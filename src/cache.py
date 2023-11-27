@@ -115,7 +115,7 @@ async def prune_cache_loop():
 @retry(stop=stop_after_attempt(settings.MAX_HTTP_RETRIES if not settings.TEST else 1),
        wait=wait_fixed(5) + wait_random(0, 4))
 async def fetch_cached_items():
-    r = await app.httpclient.get('/agent/cached-items')
+    r = await app.httpclient.get('/agent/cached-item')
     if r.status_code != 200:
         logger.error('Failed to fetch cached-items!')
         raise ServerConnectionFailed()
@@ -153,7 +153,7 @@ async def get_cached_item(key: str, update_expiry=True) -> CacheItem | None:
             await async_redis().set(f'cache:{key}', item.json())
         else:
             # tell the server, then update the local copy
-            r = await app.httpclient.put('/agent/cached-item', json=item.json())
+            r = await app.httpclient.put(f'/agent/cached-item/touch/{item.name}')
             if r.status_code != 200:
                 logger.error(f"Failed to update cache-item {item.name}: {r.status_code}")
 

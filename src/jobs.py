@@ -19,7 +19,7 @@ from k8utils import async_get_snapshot, async_delete_pvc, async_delete_job, crea
     wait_for_snapshot_ready, render_template
 from settings import settings
 from state import get_build_state, notify_build_completed, notify_run_completed, \
-    save_state
+    save_state, delete_build_state
 
 
 def get_spot_config(spot_percentage: int) -> str:
@@ -49,7 +49,6 @@ def common_context(testrun: schemas.NewTestRun, **kwargs):
              testrun_id=testrun.id,
              testrun=testrun,
              branch=testrun.branch,
-             redis_secret_name=settings.REDIS_SECRET_NAME,
              token=settings.API_TOKEN,
              preprovision=testrun.preprovision,
              parallelism=testrun.project.parallelism,
@@ -328,6 +327,7 @@ async def handle_run_completed(testrun_id: int, delete_pvcs_only=True):
         await delete_pvcs(state)
         if not delete_pvcs_only:
             await delete_jobs(state)
+        await delete_build_state(testrun_id)
 
 
 async def handle_testrun_error(event: schemas.AgentTestRunErrorEvent):
@@ -396,16 +396,7 @@ async def recreate_runner_job(st: TestRunBuildState, specs: list[str]):
     await create_runner_job(tr, st)
 
 
-async def handle_delete_project(project_id: int, organisation_id: int):
-    logger.info(f'Deleting project {project_id}')
-    r = async_redis()
-    async for key in r.scan_iter('testrun:state:*'):
-        st = await r.get(key)
-        if st:
-            buildstate: TestRunBuildState = TestRunBuildState.parse_raw(st)
-            if buildstate.project_id == project_id:
-                await delete_jobs(buildstate)
-                await delete_pvcs(buildstate, True)
-                await r.delete(key)
-
-    await cache.clear_cache(organisation_id)
+async def handle_delete_project(buildstates: list[TestRunBuildState]):
+    for buildstate in buildstates:
+        await delete_jobs(buildstate)
+        await delete_pvcs(buildstate, True)

@@ -3,8 +3,10 @@ import asyncio
 import sys
 from time import sleep
 
+import sentry_sdk
 from aiohttp import web
 from loguru import logger
+from sentry_sdk.integrations.asyncio import AsyncioIntegration
 from tenacity import RetryError
 
 import ws
@@ -84,6 +86,11 @@ if __name__ == "__main__":
     parser.add_argument('--clear', action='store_true', help='Clear the cache and then exist')
     args = parser.parse_args()
 
+    if settings.SENTRY_DSN:
+        sentry_sdk.init(
+            dsn=settings.SENTRY_DSN,
+            integrations=[AsyncioIntegration(),], )
+
     configure_logging()
     if args.clear:
         logger.info("Cykubed pre-delete cleanup")
@@ -91,10 +98,6 @@ if __name__ == "__main__":
         sys.exit(0)
     else:
         logger.info("Cykubed agent starting")
-        # if settings.SENTRY_DSN:
-        #     sentry_sdk.init(
-        #         dsn=settings.SENTRY_DSN,
-        #         integrations=[RedisIntegration(), AsyncioIntegration(),], )
         try:
             asyncio.run(run())
         except KeyboardInterrupt:

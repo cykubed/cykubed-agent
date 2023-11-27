@@ -15,7 +15,7 @@ from jobs import handle_run_completed, handle_testrun_error, create_runner_job, 
 from settings import settings
 from state import get_build_state
 from state import save_state
-from ws import handle_start_run, handle_agent_message
+from ws import handle_start_run
 
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), 'fixtures')
 
