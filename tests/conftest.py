@@ -5,7 +5,7 @@ from redis import Redis
 from redis.asyncio import Redis as AsyncRedis
 
 from common.enums import PlatformEnum
-from common.schemas import Project, NewTestRun
+from common.schemas import Project, NewTestRun, TestRunBuildState
 from settings import settings
 
 
@@ -99,7 +99,8 @@ def testrun(project: Project) -> NewTestRun:
                       project=project,
                       status='started',
                       branch='master',
-                      spot_percentage=80)
+                      spot_percentage=80,
+                      buildstate=TestRunBuildState(testrun_id=20))
 
 
 @pytest.fixture()
@@ -116,7 +117,7 @@ def post_building_status(respx_mock):
 
 @pytest.fixture()
 def save_build_state_mock(respx_mock):
-    return respx_mock.post('https://api.cykubed.com/agent/testrun/20/build-state') \
+    return respx_mock.put('https://api.cykubed.com/agent/testrun/20/build-state') \
                              .mock(return_value=Response(200))
 
 
@@ -141,8 +142,11 @@ def build_cache_miss_mock(mocker, respx_mock):
 
 
 @pytest.fixture()
-def cache_miss_mock(mocker, respx_mock, build_cache_miss_mock):
-    get_cache_key = mocker.patch('jobs.get_cache_key', return_value='absd234weefw')
-    cached_node_mock = respx_mock.get('https://api.cykubed.com/agent/cached-item/5-node-absd234weefw') \
+def get_cache_key_mock(mocker):
+    return mocker.patch('jobs.get_cache_key', return_value='absd234weefw')
+
+
+@pytest.fixture()
+def node_cache_miss_mock(respx_mock, get_cache_key_mock):
+    return respx_mock.get('https://api.cykubed.com/agent/cached-item/5-node-absd234weefw') \
         .mock(return_value=Response(404))
-    return get_cache_key, build_cache_miss_mock, cached_node_mock

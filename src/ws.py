@@ -56,11 +56,11 @@ async def handle_websocket_message(data: dict):
         elif cmd == 'clear_cache':
             await cache.clear_cache(payload.get('organisation_id'))
         elif cmd == 'build_completed':
-            await jobs.handle_build_completed(**payload)
+            await jobs.handle_build_completed(NewTestRun.parse_raw(payload))
         elif cmd == 'cache_prepared':
-            await jobs.handle_cache_prepared(payload['testrun_id'])
+            await jobs.handle_cache_prepared(NewTestRun.parse_raw(payload))
         elif cmd == 'run_completed':
-            await jobs.handle_run_completed(data['testrun_id'], False)
+            await jobs.handle_run_completed(NewTestRun.parse_raw(payload), False)
         else:
             logger.error(f'Unexpected command {cmd} - ignoring')
 
