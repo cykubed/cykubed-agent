@@ -11,19 +11,19 @@ from settings import settings
 
 
 async def save_state(state: TestRunBuildState):
-    resp = await app.httpclient.post(f'/agent/testrun/{state.trid}/build-state',
+    resp = await app.httpclient.post(f'/agent/testrun/{state.testrun_id}/build-state',
                         json=state.json())
     if resp.status_code != 200:
         raise BuildFailedException("Failed to save build state - bailing out")
 
 
 async def notify_run_completed(state: TestRunBuildState):
-    logger.info(f'Notify run completed: {state.trid}')
-    resp = await app.httpclient.post(f'/agent/testrun/{state.trid}/run-completed')
+    logger.info(f'Notify run completed: {state.testrun_id}')
+    resp = await app.httpclient.post(f'/agent/testrun/{state.testrun_id}/run-completed')
     if resp.status_code != 200:
-        logger.error(f'Failed to update testrun duration for testrun {state.trid}: {resp.text}')
+        logger.error(f'Failed to update testrun duration for testrun {state.testrun_id}: {resp.text}')
     if settings.LOCAL_REDIS:
-        await db.cleanup(state.trid)
+        await db.cleanup(state.testrun_id)
 
 
 async def get_build_state(trid: int, check=False) -> TestRunBuildState:
@@ -54,7 +54,7 @@ def check_is_spot(annotations) -> bool:
 
 
 async def notify_build_completed(state: TestRunBuildState):
-    resp = await app.httpclient.post(f'/agent/testrun/{state.trid}/build-completed',
+    resp = await app.httpclient.post(f'/agent/testrun/{state.testrun_id}/build-completed',
                                      content=schemas.AgentBuildCompleted(specs=state.specs).json())
     if resp.status_code != 200:
         logger.error(f'Failed to update server that build was completed:'

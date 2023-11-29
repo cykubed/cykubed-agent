@@ -39,11 +39,6 @@ spec:
       - name: "cykubed-builder"
         image: "{{image}}"
         env:
-        - name: REDIS_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: "{{ redis_secret_name }}"
-              key: "redis-password"
         - name: BUILD_DIR
           value: "/build"
         envFrom:

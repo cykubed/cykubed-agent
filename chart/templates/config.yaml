@@ -36,11 +36,3 @@ data:
   VOLUME_SNAPSHOT_CLASS: "{{ .Release.Name }}"
 {{ end }}
   CYPRESS_RUN_TIMEOUT: "3600"
-  REDIS_SECRET_NAME: "{{ .Release.Name }}-redis"
-{{ if or (eq .Values.redis.architecture "standalone") (eq .Values.architecture "standalone") }}
-  REDIS_HOST: "{{ .Release.Name }}-redis-master.{{ .Release.Namespace }}.svc.cluster.local"
-  REDIS_NODES: "1"
-{{ else }}
-  REDIS_NODES: "{{ .Values.redis.replica.replicaCount }}"
-  REDIS_SENTINEL_PREFIX: "{{ .Release.Name }}-redis-headless"
-{{ end }}

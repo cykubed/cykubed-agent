@@ -36,12 +36,6 @@ spec:
             limits:
               cpu: 150m
               memory: 200Mi
-          env:
-            - name: REDIS_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: "{{ .Release.Name }}-redis"
-                  key: "redis-password"
           envFrom:
             - configMapRef:
                 name: cykubed-agent-configmap

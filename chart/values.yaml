@@ -22,31 +22,5 @@ volumeSnapshotClassPlatforms:
   - GKE
   - minikube
 readOnlyMany: true
-redis:
-  sentinel:
-    enabled: true
-    resources:
-      requests:
-        cpu: "100m"
-        memory: "100Mi"
-      limits:
-        cpu: "100m"
-        memory: "100Mi"
-  master:
-    resources:
-      requests:
-        cpu: "100m"
-        memory: "100Mi"
-      limits:
-        cpu: "100m"
-        memory: "100Mi"
-  replica:
-    resources:
-      requests:
-        cpu: "100m"
-        memory: "100Mi"
-      limits:
-        cpu: "100m"
-        memory: "100Mi"
 
 

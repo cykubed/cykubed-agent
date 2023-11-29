@@ -50,12 +50,6 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 10
             failureThreshold: 30
-          env:
-            - name: REDIS_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: "{{ .Release.Name }}-redis"
-                  key: "redis-password"
           envFrom:
             - configMapRef:
                 name: cykubed-agent-configmap

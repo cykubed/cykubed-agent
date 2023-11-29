@@ -64,11 +64,6 @@ spec:
           value: "{{cypress_retries}}"
         - name: TZ
           value: "{{project.timezone}}"
-        - name: REDIS_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: "{{ redis_secret_name }}"
-              key: "redis-password"
         envFrom:
           - configMapRef:
               name: cykubed-agent-configmap

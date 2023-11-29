@@ -26,11 +26,6 @@ spec:
                 - build
                 - '20'
                 env:
-                -   name: REDIS_PASSWORD
-                    valueFrom:
-                        secretKeyRef:
-                            key: redis-password
-                            name: cykubed-agent-redis
                 -   name: BUILD_DIR
                     value: /build
                 envFrom:

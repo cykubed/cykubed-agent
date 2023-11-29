@@ -11,8 +11,7 @@ from common import schemas
 from common.enums import PLATFORMS_SUPPORTING_SPOT
 from common.exceptions import BuildFailedException
 from common.k8common import get_batch_api
-from common.redisutils import async_redis
-from common.schemas import CacheItem, TestRunBuildState, AgentBuildCompleted
+from common.schemas import CacheItem, TestRunBuildState
 from common.utils import utcnow, get_lock_hash
 from db import get_testrun
 from k8utils import async_get_snapshot, async_delete_pvc, async_delete_job, create_k8_objects, create_k8_snapshot, \
@@ -73,11 +72,6 @@ async def get_cached_snapshot(key: str):
         await remove_cached_item(item)
 
 
-#
-# def get_new_pvc_name(prefix: str) -> str:
-#     return f'{prefix}-{uuid.uuid4()}'
-
-
 async def get_cache_key(testrun: schemas.NewTestRun) -> str:
     """
     Perform a sparse checkout to get a yarn.lock or package-lock.json file
@@ -134,15 +128,6 @@ async def handle_new_run(testrun: schemas.NewTestRun):
     await app.update_status(testrun.id, 'started')
 
     await delete_jobs_for_branch(testrun)
-    state = TestRunBuildState(trid=testrun.id,
-                              project_id=testrun.project.id,
-                              build_storage=testrun.project.build_storage)
-    await save_state(state)
-
-    r = async_redis()
-    # initialise the completed pods set with an expiry
-    await r.sadd(f'testrun:{testrun.id}:completed_pods', 'dummy')
-    await r.expire(f'testrun:{testrun.id}:completed_pods', 6 * 3600)
 
     build_snap_cache_item = await get_build_snapshot_cache_item(testrun)
     if build_snap_cache_item:
@@ -202,15 +187,10 @@ async def create_build_job(testrun: schemas.NewTestRun, state: TestRunBuildState
     await app.update_status(testrun.id, 'building')
 
 
-def get_build_snapshot_name(testrun):
-    return f'{testrun.project.organisation_id}-build-{testrun.sha}'
-
-
-async def handle_build_completed(event: AgentBuildCompleted):
+async def handle_build_completed(testrun_id: int, specs: list[str]):
     """
     Build is completed: create PVCs and snapshots
     """
-    testrun_id = event.testrun_id
     logger.info(f'Build completed', trid=testrun_id)
 
     testrun = await get_testrun(testrun_id)

@@ -11,7 +11,7 @@ from tenacity import RetryError
 
 import ws
 from app import app
-from cache import prune_cache_loop, garage_collect_loop, delete_all_jobs, \
+from cache import delete_all_jobs, \
     delete_all_pvcs, delete_all_volume_snapshots, fetch_cached_items
 from common import k8common
 from common.k8common import close
@@ -61,9 +61,7 @@ async def run():
     tasks = [asyncio.create_task(hc_server()),
              asyncio.create_task(ws.connect())]
     if app.hostname == 'agent-0':
-        tasks += [asyncio.create_task(prune_cache_loop()),
-                  asyncio.create_task(garage_collect_loop()),
-                  asyncio.create_task(watch_pod_events()),
+        tasks += [asyncio.create_task(watch_pod_events()),
                   asyncio.create_task(watch_job_events()),
                   ]
     done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)

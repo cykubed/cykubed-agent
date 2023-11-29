@@ -33,11 +33,6 @@ spec:
                     value: ''
                 -   name: TZ
                     value: UTC
-                -   name: REDIS_PASSWORD
-                    valueFrom:
-                        secretKeyRef:
-                            key: redis-password
-                            name: cykubed-agent-redis
                 envFrom:
                 -   configMapRef:
                         name: cykubed-agent-configmap

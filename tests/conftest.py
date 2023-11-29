@@ -112,3 +112,37 @@ def post_started_status(respx_mock):
 def post_building_status(respx_mock):
     return respx_mock.post('https://api.cykubed.com/agent/testrun/20/status/building') \
             .mock(return_value=Response(200))
+
+
+@pytest.fixture()
+def save_build_state_mock(respx_mock):
+    return respx_mock.post('https://api.cykubed.com/agent/testrun/20/build-state') \
+                             .mock(return_value=Response(200))
+
+
+@pytest.fixture()
+def save_cached_item_mock(respx_mock):
+    return respx_mock.post('https://api.cykubed.com/agent/cached-item') \
+                             .mock(return_value=Response(200))
+
+
+@pytest.fixture()
+def delete_cached_item_mock_factory(respx_mock):
+    def mock(key):
+        return respx_mock.delete(f'https://api.cykubed.com/agent/cached-item/{key}') \
+                             .mock(return_value=Response(200))
+    return mock
+
+
+@pytest.fixture()
+def build_cache_miss_mock(mocker, respx_mock):
+    return respx_mock.get('https://api.cykubed.com/agent/cached-item/5-build-deadbeef0101') \
+        .mock(return_value=Response(404))
+
+
+@pytest.fixture()
+def cache_miss_mock(mocker, respx_mock, build_cache_miss_mock):
+    get_cache_key = mocker.patch('jobs.get_cache_key', return_value='absd234weefw')
+    cached_node_mock = respx_mock.get('https://api.cykubed.com/agent/cached-item/5-node-absd234weefw') \
+        .mock(return_value=Response(404))
+    return get_cache_key, build_cache_miss_mock, cached_node_mock

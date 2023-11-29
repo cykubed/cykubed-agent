@@ -2,11 +2,13 @@ import json
 import os.path
 
 import yaml
+from dateutil.relativedelta import relativedelta
 from freezegun import freeze_time
 from httpx import Response
 
 import common.schemas
 from cache import add_cached_item, add_build_snapshot_cache_item
+from common import schemas
 from common.enums import AgentEventType
 from common.schemas import NewTestRun, AgentEvent, TestRunErrorReport, AgentTestRunErrorEvent, AgentBuildCompletedEvent, \
     Project, TestRunBuildState
@@ -15,14 +17,14 @@ from jobs import handle_run_completed, handle_testrun_error, create_runner_job, 
 from settings import settings
 from state import get_build_state
 from state import save_state
-from ws import handle_start_run
+from ws import handle_start_run, handle_websocket_message
 
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), 'fixtures')
 
 
 def compare_rendered_template(yamlobjects, jobtype: str):
     asyaml = yaml.safe_dump_all(yamlobjects, indent=4, sort_keys=True)
-    print('\n' + asyaml)
+    # print('\n' + asyaml)
     with open(os.path.join(FIXTURES_DIR, 'rendered-templates', f'{jobtype}.yaml'), 'r') as f:
         expected = f.read()
         assert asyaml == expected
@@ -41,29 +43,25 @@ def compare_rendered_template_from_mock(mock_create_from_dict, jobtype: str, ind
     compare_rendered_template([yamlobjects], jobtype)
 
 
-async def test_start_run_cache_miss(redis, mocker, testrun: NewTestRun,
+async def test_start_run_cache_miss(mocker, testrun: NewTestRun,
                                     post_building_status,
+                                    save_build_state_mock,
                                     post_started_status,
-                                    respx_mock, mock_create_from_dict):
+                                    cache_miss_mock, mock_create_from_dict):
     """
     New run with no node cache
     """
-    get_cache_key = mocker.patch('jobs.get_cache_key', return_value='absd234weefw')
-
+    get_cache_key, cached_build_mock, cached_node_mock = cache_miss_mock
     delete_jobs = mocker.patch('jobs.delete_jobs_for_branch')
     await handle_start_run(testrun)
 
-    assert post_started_status.called == 1
+    assert cached_build_mock.called
+    assert cached_node_mock.called
+
+    assert post_started_status.called
     get_cache_key.assert_called_once()
 
-    # this will add an entry to the testrun collection
-    saved_tr_json = await redis.get(f'testrun:{testrun.id}')
-    savedtr = NewTestRun.parse_raw(saved_tr_json)
-    assert savedtr == testrun
-
-    st = await get_build_state(testrun.id)
-    assert st.rw_build_pvc == '5-project-1-rw'
-    assert st.trid == testrun.id
+    assert save_build_state_mock.called
 
     delete_jobs.assert_called_once_with(testrun)
     # there will be two calls here: one to create the PVC, another to run the build Job
@@ -76,14 +74,20 @@ async def test_start_run_cache_miss(redis, mocker, testrun: NewTestRun,
     assert post_building_status.called == 1
 
 
-async def test_start_run_cache_miss_no_spot(redis, mocker, testrun: NewTestRun,
+async def test_start_run_cache_miss_no_spot(mocker, testrun: NewTestRun,
+                                            respx_mock,
                                             post_building_status,
                                             post_started_status,
-                                            respx_mock, mock_create_from_dict):
+                                            save_build_state_mock,
+                                            mock_create_from_dict):
     """
     New run with no node cache
     """
     testrun.spot_percentage = 0
+    cached_build_mock = respx_mock.get('https://api.cykubed.com/agent/cached-item/5-build-deadbeef0101') \
+        .mock(return_value=Response(404))
+    cached_node_mock = respx_mock.get('https://api.cykubed.com/agent/cached-item/5-node-absd234weefw') \
+        .mock(return_value=Response(404))
     mocker.patch('jobs.get_cache_key', return_value='absd234weefw')
     mocker.patch('jobs.delete_jobs_for_branch')
     await handle_start_run(testrun)
@@ -91,30 +95,42 @@ async def test_start_run_cache_miss_no_spot(redis, mocker, testrun: NewTestRun,
     compare_rendered_template_from_mock(mock_create_from_dict, 'build-job-no-spot', 1)
 
 
-async def test_start_run_cache_miss_spot_aks(redis, mocker, testrun: NewTestRun,
+async def test_start_run_cache_miss_spot_aks(mocker, testrun: NewTestRun,
                                              post_building_status,
                                              post_started_status,
-                                             respx_mock, mock_create_from_dict):
+                                             save_build_state_mock,
+                                             cache_miss_mock,
+                                             mock_create_from_dict):
     """
     New run with no node cache
     """
     settings.PLATFORM = 'aks'
     testrun.spot_percentage = 80
-    mocker.patch('jobs.get_cache_key', return_value='absd234weefw')
     mocker.patch('jobs.delete_jobs_for_branch')
     await handle_start_run(testrun)
     # mock out the actual Job to check the rendered template
     compare_rendered_template_from_mock(mock_create_from_dict, 'build-job-spot-aks', 1)
 
 
-async def test_start_run_node_cache_hit(redis, mocker, testrun: NewTestRun,
+async def test_start_run_node_cache_hit(mocker, testrun: NewTestRun,
                                         post_building_status, post_started_status,
                                         k8_custom_api_mock,
-                                        respx_mock, mock_create_from_dict):
+                                        save_build_state_mock,
+                                        save_cached_item_mock,
+                                        respx_mock,
+                                        build_cache_miss_mock,
+                                        mock_create_from_dict):
     """
     New run with a node cache
     """
-    await add_cached_item(testrun.project.organisation_id, '5-node-absd234weefw', 10)
+    item = await add_cached_item(testrun.project.organisation_id, '5-node-absd234weefw', 10)
+    cached_build_mock = respx_mock.get('https://api.cykubed.com/agent/cached-item/5-build-deadbeef0101') \
+        .mock(return_value=Response(404))
+
+    newitem = schemas.CacheItem(**item.dict())
+    newitem.expires = newitem.expires + relativedelta(seconds=settings.NODE_DISTRIBUTION_CACHE_TTL)
+    touch_node_cache = respx_mock.put('https://api.cykubed.com/agent/cached-item/5-node-absd234weefw/touch') \
+        .mock(return_value=Response(200, content=newitem.json()))
 
     get_cache_key = mocker.patch('jobs.get_cache_key', return_value='absd234weefw')
 
@@ -123,12 +139,10 @@ async def test_start_run_node_cache_hit(redis, mocker, testrun: NewTestRun,
 
     await handle_start_run(testrun)
 
-    assert post_started_status.called == 1
+    assert touch_node_cache.called
+    assert post_started_status.called
     async_get_snapshot.assert_called_once()
     get_cache_key.assert_called_once()
-
-    st = await get_build_state(testrun.id)
-    assert st.node_snapshot_name == '5-node-absd234weefw'
 
     # mock out the actual Job to check the rendered template
     compare_rendered_template_from_mock(mock_create_from_dict, 'build-rw-pvc-from-snapshot', 0)
@@ -137,35 +151,33 @@ async def test_start_run_node_cache_hit(redis, mocker, testrun: NewTestRun,
     assert post_building_status.called == 1
 
 
-async def test_start_rerun(redis, mocker, testrun: NewTestRun,
+async def test_start_rerun(mocker, testrun: NewTestRun,
                            post_started_status,
+                           save_build_state_mock,
+                           save_cached_item_mock,
                            k8_custom_api_mock,
                            respx_mock, mock_create_from_dict):
     """
-    Called when we still have a RO build PVC available (i.e for a rerun)
+    Called when we still have a RO build PVC available (i.e. for a rerun)
     """
     build_completed = \
         respx_mock.post('https://api.cykubed.com/agent/testrun/20/build-completed').mock(return_value=Response(200))
 
     mocker.patch('jobs.get_cache_key', return_value='absd234weefw')
 
-    await add_cached_item(testrun.project.organisation_id, '5-node-absd234weefw', 10)
-    await add_build_snapshot_cache_item(testrun.project.organisation_id,
+    item = await add_cached_item(testrun.project.organisation_id, '5-node-absd234weefw', 10)
+    touch_node_cache = respx_mock.put('https://api.cykubed.com/agent/cached-item/5-node-absd234weefw/touch') \
+        .mock(return_value=Response(200, content=item.json()))
+    item = await add_build_snapshot_cache_item(testrun.project.organisation_id,
                                         'deadbeef0101', ['spec1.ts'], 1)
+    touch_node_cache = respx_mock.put('https://api.cykubed.com/agent/cached-item/5-build-deadbeef0101/touch') \
+        .mock(return_value=Response(200, content=item.json()))
 
     delete_jobs = mocker.patch('jobs.delete_jobs_for_branch')
 
     await handle_start_run(testrun)
 
     delete_jobs.assert_called_once_with(testrun)
-
-    # this will add an entry to the testrun collection
-    saved_tr_json = await redis.get(f'testrun:{testrun.id}')
-    savedtr = NewTestRun.parse_raw(saved_tr_json)
-    assert savedtr == testrun
-
-    assert await redis.smembers('testrun:20:specs') == {'spec1.ts'}
-    assert int(await redis.get('testrun:20:to-complete')) == 1
 
     assert mock_create_from_dict.call_count == 2
     compare_rendered_template_from_mock(mock_create_from_dict, 'build-ro-pvc-from-snapshot', 0)
@@ -174,11 +186,11 @@ async def test_start_rerun(redis, mocker, testrun: NewTestRun,
     assert build_completed.call_count == 1
 
 
-async def test_create_full_spot_runner(redis, testrun: NewTestRun,
+async def test_create_full_spot_runner(testrun: NewTestRun,
+                                       save_build_state_mock,
                                        mock_create_from_dict):
     testrun.spot_percentage = 100
-    state = TestRunBuildState(trid=testrun.id,
-                              project_id=testrun.project.id,
+    state = TestRunBuildState(testrun_id=testrun.id,
                               run_job_index=1,
                               build_storage=10,
                               ro_build_pvc='5-project-1-ro',
@@ -187,12 +199,11 @@ async def test_create_full_spot_runner(redis, testrun: NewTestRun,
     compare_rendered_template_from_mock(mock_create_from_dict, 'runner-full-spot', 0)
 
 
-async def test_create_runner_ephemeral_volumes(redis, testrun: NewTestRun,
+async def test_create_runner_ephemeral_volumes(testrun: NewTestRun,
                                                mock_create_from_dict):
     testrun.spot_percentage = 0
     settings.READ_ONLY_MANY = False
-    st = TestRunBuildState(trid=testrun.id,
-                           project_id=testrun.project.id,
+    st = TestRunBuildState(testrun_id=testrun.id,
                            run_job_index=1,
                            build_storage=10,
                            build_snapshot_name='5-project-1-snap',
@@ -201,13 +212,13 @@ async def test_create_runner_ephemeral_volumes(redis, testrun: NewTestRun,
     compare_rendered_template_from_mock(mock_create_from_dict, 'runner-ephemeral', 0)
 
 
-async def test_create_runner_ephemeral_volumes_spot_aks(redis, testrun: NewTestRun,
+async def test_create_runner_ephemeral_volumes_spot_aks(testrun: NewTestRun,
+                                                        save_build_state_mock,
                                                         mock_create_from_dict):
     testrun.spot_percentage = 80
     settings.PLATFORM = 'aks'
     settings.READ_ONLY_MANY = False
-    st = TestRunBuildState(trid=testrun.id,
-                           project_id=testrun.project.id,
+    st = TestRunBuildState(testrun_id=testrun.id,
                            run_job_index=1,
                            build_storage=10,
                            build_snapshot_name='5-project-1-snap',
@@ -216,10 +227,12 @@ async def test_create_runner_ephemeral_volumes_spot_aks(redis, testrun: NewTestR
     compare_rendered_template_from_mock(mock_create_from_dict, 'runner-ephemeral-aks-spot', 0)
 
 
-async def test_full_run_gke(redis, mocker, mock_create_from_dict,
+async def test_full_run_gke(mocker, mock_create_from_dict,
                             respx_mock,
                             post_started_status,
                             post_building_status,
+                            save_build_state_mock,
+                            cache_miss_mock,
                             k8_core_api_mock,
                             k8_batch_api_mock,
                             delete_pvc_mock,
@@ -254,16 +267,13 @@ async def test_full_run_gke(redis, mocker, mock_create_from_dict,
                                    testrun_id=testrun.id)
 
     websocket = mocker.AsyncMock()
-    await handle_agent_message(websocket, msg.json())
+    await handle_websocket_message({'command': 'build_completed', 'payload': msg.json()})
 
     assert build_completed.call_count == 1
 
-    assert await redis.smembers('testrun:20:specs') == {'test1.ts'}
-    assert int(await redis.get('testrun:20:to-complete')) == 1
-
     # the cache is preprared
-    await handle_agent_message(websocket, AgentEvent(type=AgentEventType.cache_prepared,
-                                                     testrun_id=testrun.id).json())
+    await handle_websocket_message(dict(command='cache_prepared',
+                                        payload=json.dumps(dict(testrun_id=testrun.id))))
 
     assert wait_for_snapshot.called
 
@@ -368,7 +378,7 @@ async def test_build_completed_node_cache_used(redis, mock_create_from_dict,
     websocket = mocker.AsyncMock()
 
     await new_testrun(testrun)
-    state = TestRunBuildState(trid=testrun.id,
+    state = TestRunBuildState(testrun_idtestrun.id,
                               project_id=testrun.project.id,
                               rw_build_pvc='5-project-1-rw',
                               build_storage=10,
@@ -427,7 +437,7 @@ async def test_build_completed_no_node_cache(redis, mock_create_from_dict,
 
     await new_testrun(testrun)
     # no node snapshot used
-    state = TestRunBuildState(trid=testrun.id,
+    state = TestRunBuildState(testrun_idtestrun.id,
                               project_id=testrun.project.id,
                               rw_build_pvc='5-project-1-rw',
                               build_storage=10,
@@ -452,7 +462,7 @@ async def test_prepare_cache_completed(mocker, redis, testrun,
     """
     await new_testrun(testrun)
     # no node snapshot used
-    st = TestRunBuildState(trid=testrun.id,
+    st = TestRunBuildState(testrun_idtestrun.id,
                            project_id=testrun.project.id,
                            ro_build_pvc='5-project-1-ro',
                            rw_build_pvc='5-project-1-rw',
@@ -494,19 +504,19 @@ async def test_delete_project(redis, mocker, project: Project):
     """
     Delete that delete_project deletes the relevant PVCs and jobs
     """
-    st = common.schemas.TestRunBuildState(trid=100, project_id=project.id,
+    st = common.schemas.TestRunBuildState(testrun_id100, project_id=project.id,
                                           ro_build_pvc='dummy-ro-1', build_job='build-1', run_job='run-1',
                                           build_storage=10,
                                           rw_build_pvc='dummy-rw-1')
     await save_state(st)
 
-    st = common.schemas.TestRunBuildState(trid=101, project_id=project.id,
+    st = common.schemas.TestRunBuildState(testrun_id101, project_id=project.id,
                                           ro_build_pvc='dummy-ro-2', build_job='build-2',
                                           build_storage=10,
                                           rw_build_pvc='dummy-rw-2')
     await save_state(st)
 
-    st = common.schemas.TestRunBuildState(trid=102, project_id=6,
+    st = common.schemas.TestRunBuildState(testrun_id102, project_id=6,
                                           ro_build_pvc='dummy-ro-3', build_job='build-3', run_job='run-3',
                                           build_storage=5,
                                           rw_build_pvc='dummy-rw-3')

@@ -4,6 +4,7 @@ import signal
 from asyncio import sleep, exceptions
 
 import websockets
+from kubernetes_asyncio.client import ApiException
 from loguru import logger
 from websockets.exceptions import ConnectionClosedError, InvalidStatusCode, ConnectionClosed
 
@@ -11,7 +12,8 @@ import cache
 import jobs
 import state
 from app import app
-from common.schemas import NewTestRun, AgentBuildCompleted, TestRunBuildState
+from common.exceptions import InvalidTemplateException
+from common.schemas import NewTestRun, TestRunBuildState
 from jobs import handle_delete_project
 from settings import settings
 
@@ -26,7 +28,7 @@ async def handle_start_run(tr: NewTestRun):
     try:
         # kick off a new build job
         await jobs.handle_new_run(tr)
-    except:
+    except (InvalidTemplateException, ApiException):
         logger.exception(f"Failed to start test run {tr.id}", tr=tr)
         await app.httpclient.post(f'/agent/testrun/{tr.id}/status/failed')
 
@@ -54,7 +56,9 @@ async def handle_websocket_message(data: dict):
         elif cmd == 'clear_cache':
             await cache.clear_cache(payload.get('organisation_id'))
         elif cmd == 'build_completed':
-            await jobs.handle_build_completed(AgentBuildCompleted.parse_raw(payload))
+            await jobs.handle_build_completed(**payload)
+        elif cmd == 'cache_prepared':
+            await jobs.handle_cache_prepared(payload['testrun_id'])
         elif cmd == 'run_completed':
             await jobs.handle_run_completed(data['testrun_id'], False)
         else:
