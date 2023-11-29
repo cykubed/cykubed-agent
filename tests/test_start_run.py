@@ -1,4 +1,3 @@
-import json
 import os.path
 
 import yaml
@@ -10,10 +9,10 @@ import common.schemas
 from cache import add_cached_item, add_build_snapshot_cache_item
 from common import schemas
 from common.enums import AgentEventType
-from common.schemas import NewTestRun, AgentEvent, TestRunErrorReport, AgentTestRunErrorEvent, AgentBuildCompletedEvent, \
+from common.schemas import NewTestRun, AgentEvent, AgentBuildCompletedEvent, \
     Project, TestRunBuildState
 from db import new_testrun
-from jobs import handle_run_completed, handle_testrun_error, create_runner_job, handle_delete_project
+from jobs import handle_run_completed, create_runner_job, handle_delete_project
 from settings import settings
 from state import get_build_state
 from state import save_build_state
@@ -292,10 +291,10 @@ async def test_full_run_gke(mocker, mock_create_from_dict,
     assert k8_create_custom.call_count == 1
     compare_rendered_template([k8_create_custom.call_args_list[0].kwargs['body']], 'node-snapshot')
 
+    # run completed
+    await handle_websocket_message(dict(command='run_completed',
+                                        payload=testrun.json()))
 
-    #
-    # # run completed
-    # await handle_run_completed(testrun.id)
     #
     # assert run_completed.called
     #
@@ -494,24 +493,6 @@ async def test_prepare_cache_completed(mocker, redis, testrun,
     # the build PVC will be deleted
     delete_pvc_mock.assert_called_once()
     wait_for_snapshot.assert_called_once()
-
-
-async def test_run_error(redis, mocker, respx_mock, testrun):
-    await new_testrun(testrun)
-    report = TestRunErrorReport(stage='runner',
-                                msg='Argh')
-    handle_run_completed_mock = mocker.patch('jobs.handle_run_completed')
-    run_error = \
-        respx_mock.post('https://api.cykubed.com/agent/testrun/20/error') \
-            .mock(return_value=Response(200))
-    await handle_testrun_error(AgentTestRunErrorEvent(testrun_id=testrun.id,
-                                                      report=report))
-    handle_run_completed_mock.assert_called_once_with(testrun.id)
-
-    assert run_error.called
-
-    payload = json.loads(run_error.calls.last.request.content)
-    assert payload == {'stage': 'runner', 'msg': 'Argh', 'error_code': None}
 
 
 async def test_delete_project(redis, mocker, project: Project):

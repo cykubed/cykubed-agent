@@ -15,8 +15,7 @@ from common.utils import utcnow, get_lock_hash
 from k8utils import async_get_snapshot, async_delete_pvc, async_delete_job, create_k8_objects, create_k8_snapshot, \
     wait_for_snapshot_ready, render_template
 from settings import settings
-from state import get_build_state, notify_build_completed, notify_run_completed, \
-    save_build_state, delete_build_state
+from state import notify_build_completed, save_build_state
 
 
 def get_spot_config(spot_percentage: int) -> str:
@@ -276,26 +275,14 @@ async def create_runner_job(testrun: schemas.NewTestRun):
     await save_build_state(state)
 
 
-async def handle_run_completed(testrun_id: int, delete_pvcs_only=True):
+async def handle_run_completed(testrun: schemas.NewTestRun):
     """
-    Either delete the PVCs or jobs and notify cymain
-    :param delete_pvcs_only: if False then also delete jobs
-    :param testrun_id:
+    Clean up after a run
     """
-    logger.info(f'Run {testrun_id} completed')
-    state = await get_build_state(testrun_id)
-    if state:
-        await notify_run_completed(state)
-        await delete_pvcs(state)
-        if not delete_pvcs_only:
-            await delete_jobs(state)
-        await delete_build_state(testrun_id)
+    logger.info(f'Run {testrun.id} completed')
 
-
-async def handle_testrun_error(event: schemas.AgentTestRunErrorEvent):
-    logger.info(f'Run {event.testrun_id} failed at stage {event.report.stage}')
-    await app.httpclient.post(f'/agent/testrun/{event.testrun_id}/error', json=event.report.dict())
-    await handle_run_completed(event.testrun_id)
+    await delete_pvcs(testrun.buildstate)
+    await delete_jobs(testrun.buildstate)
 
 
 async def delete_testrun_job(job, trid: int = None):

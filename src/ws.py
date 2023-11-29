@@ -10,7 +10,6 @@ from websockets.exceptions import ConnectionClosedError, InvalidStatusCode, Conn
 
 import cache
 import jobs
-import state
 from app import app
 from common.exceptions import InvalidTemplateException
 from common.schemas import NewTestRun, TestRunBuildState
@@ -49,10 +48,7 @@ async def handle_websocket_message(data: dict):
             bsmodels = [TestRunBuildState.parse_obj(x) for x in json.loads(payload)]
             await handle_delete_project(bsmodels)
         elif cmd == 'cancel':
-            st = TestRunBuildState.parse_raw(payload)
-            await jobs.delete_pvcs(st, True)
-            await jobs.delete_jobs(st)
-            await state.notify_run_completed(st)
+            await jobs.handle_run_completed(NewTestRun.parse_raw(payload))
         elif cmd == 'clear_cache':
             await cache.clear_cache(payload.get('organisation_id'))
         elif cmd == 'build_completed':
@@ -60,7 +56,7 @@ async def handle_websocket_message(data: dict):
         elif cmd == 'cache_prepared':
             await jobs.handle_cache_prepared(NewTestRun.parse_raw(payload))
         elif cmd == 'run_completed':
-            await jobs.handle_run_completed(NewTestRun.parse_raw(payload), False)
+            await jobs.handle_run_completed(NewTestRun.parse_raw(payload))
         else:
             logger.error(f'Unexpected command {cmd} - ignoring')
 

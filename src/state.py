@@ -2,12 +2,10 @@ import json
 
 from loguru import logger
 
-import db
 from app import app
 from common import schemas
 from common.exceptions import BuildFailedException
 from common.schemas import TestRunBuildState
-from settings import settings
 
 
 async def save_build_state(state: TestRunBuildState):
@@ -15,15 +13,6 @@ async def save_build_state(state: TestRunBuildState):
                         json=state.json())
     if resp.status_code != 200:
         raise BuildFailedException("Failed to save build state - bailing out")
-
-
-async def notify_run_completed(state: TestRunBuildState):
-    logger.info(f'Notify run completed: {state.testrun_id}')
-    resp = await app.httpclient.post(f'/agent/testrun/{state.testrun_id}/run-completed')
-    if resp.status_code != 200:
-        logger.error(f'Failed to update testrun duration for testrun {state.testrun_id}: {resp.text}')
-    if settings.LOCAL_REDIS:
-        await db.cleanup(state.testrun_id)
 
 
 async def get_build_state(trid: int, check=False) -> TestRunBuildState:
