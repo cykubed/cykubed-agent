@@ -5,7 +5,7 @@ import tempfile
 from loguru import logger
 
 from app import app
-from cache import get_cached_item, remove_cached_item
+from cache import get_cached_item
 from common import schemas
 from common.enums import PLATFORMS_SUPPORTING_SPOT
 from common.exceptions import BuildFailedException
@@ -65,8 +65,6 @@ async def get_cached_snapshot(key: str):
     if item:
         if await async_get_snapshot(item.name):
             return item
-        # nope - clean up
-        await remove_cached_item(item)
 
 
 async def get_cache_key(testrun: schemas.NewTestRun) -> str:
@@ -346,7 +344,7 @@ async def recreate_runner_job(tr: schemas.NewTestRun):
     await save_build_state(tr.buildstate)
 
 
-async def handle_delete_project(buildstates: list[TestRunBuildState]):
+async def handle_delete_build_states(buildstates: list[TestRunBuildState]):
     for buildstate in buildstates:
         await delete_jobs(buildstate)
         await delete_pvcs(buildstate, True)

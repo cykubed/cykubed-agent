@@ -8,12 +8,12 @@ from kubernetes_asyncio.client import ApiException
 from loguru import logger
 from websockets.exceptions import ConnectionClosedError, InvalidStatusCode, ConnectionClosed
 
-import cache
 import jobs
 from app import app
 from common.exceptions import InvalidTemplateException
 from common.schemas import NewTestRun, TestRunBuildState
-from jobs import handle_delete_project
+from jobs import handle_delete_build_states
+from k8utils import async_delete_snapshot
 from settings import settings
 
 
@@ -44,13 +44,14 @@ async def handle_websocket_message(data: dict):
         logger.debug(f'Received {cmd} command')
         if cmd == 'start':
             await handle_start_run(NewTestRun.parse_raw(payload))
-        elif cmd == 'delete_project':
+        elif cmd == 'delete_testruns':
             bsmodels = [TestRunBuildState.parse_obj(x) for x in json.loads(payload)]
-            await handle_delete_project(bsmodels)
+            await handle_delete_build_states(bsmodels)
         elif cmd == 'cancel':
             await jobs.handle_run_completed(NewTestRun.parse_raw(payload))
-        elif cmd == 'clear_cache':
-            await cache.clear_cache(payload.get('organisation_id'))
+        elif cmd == 'delete_snapshots':
+            for name in payload['names']:
+                await async_delete_snapshot(name)
         elif cmd == 'build_completed':
             await jobs.handle_build_completed(NewTestRun.parse_raw(payload))
         elif cmd == 'cache_prepared':

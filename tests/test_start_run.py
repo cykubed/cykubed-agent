@@ -6,9 +6,8 @@ from freezegun import freeze_time
 from httpx import Response
 
 import common.schemas
-from cache import add_cached_item, add_build_snapshot_cache_item
 from common.schemas import NewTestRun, Project, TestRunBuildState
-from jobs import create_runner_job, handle_delete_project
+from jobs import create_runner_job, handle_delete_build_states
 from settings import settings
 from ws import handle_start_run, handle_websocket_message
 
@@ -132,9 +131,6 @@ async def test_start_rerun(mocker, testrun: NewTestRun,
     build_completed = \
         respx_mock.post('https://api.cykubed.com/agent/testrun/20/build-completed').mock(return_value=Response(200))
 
-    item = await add_cached_item(testrun.project.organisation_id, '5-node-absd234weefw', 10)
-    item = await add_build_snapshot_cache_item(testrun.project.organisation_id,
-                                               'deadbeef0101', ['spec1.ts'], 1)
     testrun.buildstate.build_snapshot_name = '5-build-deadbeef0101'
 
     await handle_start_run(testrun)
@@ -400,7 +396,7 @@ async def test_delete_project(k8_delete_job_mock,
                                          build_storage=10,
                                          rw_build_pvc='dummy-rw-2')]
 
-    await handle_delete_project(states)
+    await handle_delete_build_states(states)
 
     # this will delete 3 jobs, 4 PVCs and 3 snapshots
     assert k8_delete_pvc_mock.call_count == 4
