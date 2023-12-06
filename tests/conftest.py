@@ -1,29 +1,12 @@
 import pytest
 from dateutil.relativedelta import relativedelta
 from httpx import Response
-from loguru import logger
-from redis import Redis
-from redis.asyncio import Redis as AsyncRedis
 
 from common import schemas
 from common.enums import PlatformEnum
 from common.schemas import Project, NewTestRun, TestRunBuildState
 from common.utils import utcnow
 from settings import settings
-
-
-@pytest.fixture()
-def sync_redis():
-    return Redis(host='localhost', db=1, decode_responses=True)
-
-
-@pytest.fixture()
-def redis(mocker, sync_redis, autouse=True):
-    sync_redis.flushdb()
-    aredis = AsyncRedis(host='localhost', db=1, decode_responses=True)
-    mocker.patch('common.redisutils.get_cached_async_redis', return_value=aredis)
-    logger.remove()
-    return aredis
 
 
 @pytest.fixture()

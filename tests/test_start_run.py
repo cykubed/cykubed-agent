@@ -315,7 +315,6 @@ async def test_full_run_gke_cache_miss(mock_create_from_dict,
 
 @freeze_time('2023-12-03 14:10:00Z')
 async def test_full_run_aks_cache_miss(
-        redis,
         mock_create_from_dict,
         respx_mock,
         post_started_status,
@@ -378,8 +377,7 @@ async def test_full_run_aks_cache_miss(
             } == kinds_and_names
 
 
-async def test_delete_project(redis,
-                              k8_delete_job_mock,
+async def test_delete_project(k8_delete_job_mock,
                               k8_delete_pvc_mock,
                               delete_snapshot_mock,
                               project: Project):

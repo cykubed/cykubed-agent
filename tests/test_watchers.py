@@ -7,7 +7,7 @@ from common import schemas
 from watchers import handle_pod_event
 
 
-async def test_handle_post_event(respx_mock, mocker, redis):
+async def test_handle_post_event(respx_mock, mocker):
     store_duration = \
         respx_mock.post('https://api.cykubed.com/agent/testrun/20/pod-duration') \
             .mock(return_value=Response(200))
