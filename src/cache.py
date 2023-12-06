@@ -2,17 +2,13 @@ import datetime
 
 from kubernetes_asyncio.client import V1PersistentVolumeClaimList, V1JobList
 from loguru import logger
-from tenacity import retry, stop_after_attempt, wait_fixed, wait_random
 
 from app import app
-from common.exceptions import ServerConnectionFailed
 from common.k8common import get_core_api, get_custom_api, get_batch_api
 from common.schemas import CacheItem
 from common.utils import utcnow
 from k8utils import async_delete_snapshot, async_delete_job
 from settings import settings
-
-cache = dict()
 
 
 async def delete_all_jobs():
@@ -105,52 +101,23 @@ async def clear_cache(organisation_id: int = None):
 #         await asyncio.sleep(300)
 
 
-@retry(stop=stop_after_attempt(settings.MAX_HTTP_RETRIES if not settings.TEST else 1),
-       wait=wait_fixed(5) + wait_random(0, 4))
-async def fetch_cached_items():
-    r = await app.httpclient.get('/agent/cached-item')
-    if r.status_code != 200:
-        logger.error('Failed to fetch cached-items!')
-        raise ServerConnectionFailed()
-
-    for item in r.json():
-        cache[item.name] = item
-
-
 async def delete_cached_item(item: CacheItem):
     # delete volume
     await async_delete_snapshot(item.name)
     r = await app.httpclient.delete(f'/agent/cached-item/{item.name}')
     if r.status_code != 200:
         logger.error(f'Failed to tell server about deleted cache item ({r.status_code})')
-    del cache[item.name]
 
 
-async def get_cached_item(key: str, update_expiry=True, local_only=False) -> CacheItem | None:
-    item = cache.get(key)
-    if not item and not local_only:
-        # check server
-        r = await app.httpclient.get(f'/agent/cached-item/{key}')
-        if r.status_code == 404:
-            return None
-        if r.status_code != 200:
-            logger.error(f'Unexpected error code when fetching cache item: {r.status_code}')
-            return None
-        else:
-            item = r.json()
-            cache[key] = item
-
-    if update_expiry:
-        # update expiry
-        item.expires = utcnow() + datetime.timedelta(seconds=item.ttl)
-        # tell the server, then update the local copy
-        r = await app.httpclient.put(f'/agent/cached-item/{item.name}/touch')
-        if r.status_code != 200:
-            logger.error(f"Failed to update cache-item {item.name}: {r.status_code}")
-        item = CacheItem.parse_raw(r.text)
-        cache[key] = item
-
-    return item
+async def get_cached_item(key: str) -> CacheItem | None:
+    # check server
+    r = await app.httpclient.get(f'/agent/cached-item/{key}')
+    if r.status_code == 404:
+        return None
+    if r.status_code != 200:
+        logger.error(f'Unexpected error code when fetching cache item: {r.status_code}')
+        return None
+    return CacheItem.parse_raw(r.text)
 
 
 async def add_cached_item(organisation_id: int,
@@ -163,8 +130,6 @@ async def add_cached_item(organisation_id: int,
                      organisation_id=organisation_id,
                      storage_size=storage_size,
                      expires=utcnow() + datetime.timedelta(seconds=ttl), **kwargs)
-    # cache locally and persist in the API to avoid hitting the server every time
-    cache[key] = item
     r = await app.httpclient.post('/agent/cached-item', json=item.json())
     if r.status_code != 200:
         logger.error(f'Failed to inform server of newly cached item: {r.status_code}')
@@ -186,16 +151,3 @@ async def remove_cached_item(item: CacheItem):
     if r.status_code != 200:
         logger.error(f'Failed to inform server of deleted cache item: {r.status_code} {r.text}')
 
-    del cache[item.name]
-
-
-def expired_cached_items_iter():
-    for item in cached_items_iter():
-        if item.expires < utcnow():
-            yield item
-
-
-def cached_items_iter(organisation_id: int = None):
-    for item in cache.values():
-        if not organisation_id or item.organisation_id == organisation_id:
-            yield item

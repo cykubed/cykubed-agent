@@ -10,9 +10,10 @@ from common.schemas import TestRunBuildState
 
 async def save_build_state(state: TestRunBuildState):
     resp = await app.httpclient.put(f'/agent/testrun/{state.testrun_id}/build-state',
-                        json=state.json())
+                        content=state.json())
     if resp.status_code != 200:
         raise BuildFailedException("Failed to save build state - bailing out")
+
 
 
 async def get_build_state(trid: int, check=False) -> TestRunBuildState:

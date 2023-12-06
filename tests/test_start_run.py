@@ -1,18 +1,17 @@
+import json
 import os.path
 
 import yaml
-from dateutil.relativedelta import relativedelta
 from freezegun import freeze_time
 from httpx import Response
 
 import common.schemas
 from cache import add_cached_item, add_build_snapshot_cache_item
-from common import schemas
 from common.enums import AgentEventType
 from common.schemas import NewTestRun, AgentEvent, AgentBuildCompletedEvent, \
     Project, TestRunBuildState
 from db import new_testrun
-from jobs import handle_run_completed, create_runner_job, handle_delete_project
+from jobs import create_runner_job, handle_delete_project
 from settings import settings
 from state import get_build_state
 from state import save_build_state
@@ -51,13 +50,11 @@ async def test_start_run_cache_miss(mocker, testrun: NewTestRun,
     """
     New run with no node cache
     """
-    delete_jobs = mocker.patch('jobs.delete_jobs_for_branch')
     await handle_start_run(testrun)
 
     assert post_started_status.called
     assert save_build_state_mock.called
 
-    delete_jobs.assert_called_once_with(testrun)
     # there will be two calls here: one to create the PVC, another to run the build Job
     assert mock_create_from_dict.call_count == 2
 
@@ -103,34 +100,25 @@ async def test_start_run_cache_miss_spot_aks(mocker, testrun: NewTestRun,
 
 
 async def test_start_run_node_cache_hit(mocker, testrun: NewTestRun,
-                                        post_building_status, post_started_status,
+                                        post_building_status,
+                                        post_started_status,
                                         k8_custom_api_mock,
                                         save_build_state_mock,
                                         save_cached_item_mock,
-                                        respx_mock,
+                                        node_cache_hit_mock,
                                         build_cache_miss_mock,
                                         mock_create_from_dict):
     """
     New run with a node cache
     """
-    item = await add_cached_item(testrun.project.organisation_id, '5-node-absd234weefw', 10)
-
-    newitem = schemas.CacheItem(**item.dict())
-    newitem.expires = newitem.expires + relativedelta(seconds=settings.NODE_DISTRIBUTION_CACHE_TTL)
-    touch_node_cache = respx_mock.put('https://api.cykubed.com/agent/cached-item/5-node-absd234weefw/touch') \
-        .mock(return_value=Response(200, content=newitem.json()))
-
-    get_cache_key = mocker.patch('jobs.get_cache_key', return_value='absd234weefw')
-
     mocker.patch('jobs.delete_jobs_for_branch')
     async_get_snapshot = mocker.patch('jobs.async_get_snapshot', return_value=True)
 
     await handle_start_run(testrun)
 
-    assert touch_node_cache.called
     assert post_started_status.called
+    assert node_cache_hit_mock.called
     async_get_snapshot.assert_called_once()
-    get_cache_key.assert_called_once()
 
     # mock out the actual Job to check the rendered template
     compare_rendered_template_from_mock(mock_create_from_dict, 'build-rw-pvc-from-snapshot', 0)
@@ -153,19 +141,11 @@ async def test_start_rerun(mocker, testrun: NewTestRun,
         respx_mock.post('https://api.cykubed.com/agent/testrun/20/build-completed').mock(return_value=Response(200))
 
     item = await add_cached_item(testrun.project.organisation_id, '5-node-absd234weefw', 10)
-    touch_node_cache = respx_mock.put('https://api.cykubed.com/agent/cached-item/5-node-absd234weefw/touch') \
-        .mock(return_value=Response(200, content=item.json()))
     item = await add_build_snapshot_cache_item(testrun.project.organisation_id,
                                         'deadbeef0101', ['spec1.ts'], 1)
-    touch_node_cache = respx_mock.put('https://api.cykubed.com/agent/cached-item/5-build-deadbeef0101/touch') \
-        .mock(return_value=Response(200, content=item.json()))
     testrun.buildstate.build_snapshot_name = '5-build-deadbeef0101'
 
-    delete_jobs = mocker.patch('jobs.delete_jobs_for_branch')
-
     await handle_start_run(testrun)
-
-    delete_jobs.assert_called_once_with(testrun)
 
     assert mock_create_from_dict.call_count == 1
     compare_rendered_template_from_mock(mock_create_from_dict, 'build-ro-pvc-from-snapshot', 0)
@@ -215,34 +195,32 @@ async def test_create_runner_ephemeral_volumes_spot_aks(testrun: NewTestRun,
     compare_rendered_template_from_mock(mock_create_from_dict, 'runner-ephemeral-aks-spot', 0)
 
 
+@freeze_time('2023-12-03 14:10:00Z')
 async def test_full_run_gke(mocker, mock_create_from_dict,
                             respx_mock,
                             post_started_status,
+                            wait_for_snapshot_ready_mock,
                             post_building_status,
                             save_build_state_mock,
                             k8_core_api_mock,
                             k8_batch_api_mock,
                             delete_pvc_mock,
+                            k8_delete_job_mock,
                             k8_custom_api_mock,
                             get_cache_key_mock,
                             node_cache_miss_mock,
-                            testrun: NewTestRun):
+                            testrun_factory):
     """
     Full test run with node cache miss
     """
-    running_update_status = \
-        respx_mock.post('https://api.cykubed.com/agent/testrun/20/status/running') \
-            .mock(return_value=Response(200))
-    run_completed = \
-        respx_mock.post('https://api.cykubed.com/agent/testrun/20/run-completed') \
-            .mock(return_value=Response(200))
-    delete_jobs = mocker.patch('jobs.delete_jobs_for_branch')
+
+    testrun = testrun_factory()
     k8_create_custom = k8_custom_api_mock.create_namespaced_custom_object
-    k8_delete_job = k8_batch_api_mock.delete_namespaced_job = mocker.AsyncMock()
-    wait_for_snapshot = mocker.patch('jobs.wait_for_snapshot_ready', return_value=True)
 
     # start the run
     await handle_start_run(testrun)
+
+    assert node_cache_miss_mock.called
 
     assert save_build_state_mock.call_count == 2
 
@@ -266,10 +244,47 @@ async def test_full_run_gke(mocker, mock_create_from_dict,
     state.build_job = '5-builder-project-1'
 
     respx_mock.reset()
+    assert save_build_state_mock.call_count == 0
 
     await handle_websocket_message({'command': 'build_completed', 'payload': testrun.json()})
 
-    assert save_build_state_mock.call_count == 3
+    # the agent takes a snapshot of the build and creates a RW PVC
+    assert save_build_state_mock.call_count == 2
+    payload = json.loads(save_build_state_mock.calls[0].request.content.decode())
+    # first save state is when we kick off the snapshot
+    assert payload == {"testrun_id": 20,
+                       "specs": ["test1.ts", "test2.ts"],
+                       "cache_key": "absd234weefw",
+                       "build_snapshot_name": "5-build-deadbeef0101",
+                       "node_snapshot_name": None,
+                       "build_job": "5-builder-project-1",
+                       "prepare_cache_job": None,
+                       "preprovision_job": None,
+                       "run_job": None,
+                       "runner_deadline": None,
+                       "completed": False,
+                       "rw_build_pvc": "5-project-1-rw",
+                       "ro_build_pvc": None,
+                       "run_job_index": 0}
+
+    payload = json.loads(save_build_state_mock.calls[1].request.content.decode())
+    # the second is after we've created the snapshot, RO PVC and prepare node cache job
+    assert payload == {"testrun_id": 20,
+                       "specs": ["test1.ts", "test2.ts"],
+                       "cache_key": "absd234weefw",
+                       "build_snapshot_name": "5-build-deadbeef0101",
+                       "node_snapshot_name": None,
+                       "build_job": "5-builder-project-1",
+                       "prepare_cache_job": "5-cache-project-1",
+                       "preprovision_job": None,
+                       "run_job": "5-runner-project-1-0",
+                       "runner_deadline": "2023-12-03T15:10:00+00:00",
+                       "completed": False,
+                       "rw_build_pvc": "5-project-1-rw",
+                       "ro_build_pvc": "5-project-1-ro",
+                       "run_job_index": 0}
+
+    testrun.buildstate = TestRunBuildState.parse_obj(payload)
 
     # this will create a RO PVC from the snapshot and kick off two jobs: one to prepare the node cache and
     # another to create the runner Job
@@ -279,7 +294,7 @@ async def test_full_run_gke(mocker, mock_create_from_dict,
             ('Job', '5-cache-project-1')
             } == kinds_and_names
 
-    assert wait_for_snapshot.called
+    assert wait_for_snapshot_ready_mock.called
     assert k8_create_custom.call_count == 1
     compare_rendered_template([k8_create_custom.call_args_list[0].kwargs['body']], 'build-snapshot')
     k8_create_custom.reset_mock()
@@ -295,78 +310,79 @@ async def test_full_run_gke(mocker, mock_create_from_dict,
     await handle_websocket_message(dict(command='run_completed',
                                         payload=testrun.json()))
 
-    #
-    # assert run_completed.called
-    #
-    # # clean up
-    # assert delete_pvc_mock.call_count == 2
-    #
-    # # this will have created 2 PVCs, 2 snapshots and 2 Jobs
-    # kinds_and_names = get_kind_and_names(mock_create_from_dict)
-    # assert {('PersistentVolumeClaim', '5-project-1-rw'),
-    #         ('PersistentVolumeClaim', '5-project-1-ro'),
-    #         ('Job', '5-builder-project-1'),
-    #         ('Job', '5-runner-project-1-0'),
-    #         ('Job', '5-cache-project-1')
-    #         } == set(kinds_and_names)
-    #
-    #
-    # assert k8_delete_job.call_count == 0
+    # clean up
+    delete_jobs = [x.args[0] for x in k8_delete_job_mock.call_args_list]
+    assert delete_jobs == ['5-builder-project-1', '5-runner-project-1-0']
+
+    delete_pvcs = [x.args[0] for x in delete_pvc_mock.call_args_list]
+    assert delete_pvcs == ['5-project-1-rw', '5-project-1-ro']
 
 
+@freeze_time('2023-12-03 14:10:00Z')
 async def test_full_run_aks(redis, mocker, mock_create_from_dict,
                             respx_mock,
                             post_started_status,
                             post_building_status,
                             k8_core_api_mock,
                             k8_batch_api_mock,
+                            wait_for_snapshot_ready_mock,
+                            get_cache_key_mock,
+                            node_cache_miss_mock,
+                            save_build_state_mock,
                             delete_pvc_mock,
                             k8_custom_api_mock,
                             testrun: NewTestRun):
     settings.PLATFORM = 'aks'
 
-    respx_mock.post('https://api.cykubed.com/agent/testrun/20/status/running') \
-        .mock(return_value=Response(200))
-    respx_mock.post('https://api.cykubed.com/agent/testrun/20/build-completed').mock(return_value=Response(200))
-    respx_mock.post('https://api.cykubed.com/agent/testrun/20/run-completed') \
-        .mock(return_value=Response(200))
-    mocker.patch('jobs.delete_jobs_for_branch')
-    k8_create_custom = k8_custom_api_mock.create_namespaced_custom_object
-    k8_delete_job = k8_batch_api_mock.delete_namespaced_job = mocker.AsyncMock()
-    mocker.patch('jobs.get_cache_key', return_value='absd234weefw')
     mocker.patch('jobs.wait_for_snapshot_ready', return_value=True)
 
     # start the run
     await handle_start_run(testrun)
-    # build completed
-    msg = AgentBuildCompletedEvent(type=AgentEventType.build_completed,
-                                   specs=['test1.ts'],
-                                   duration=10,
-                                   testrun_id=testrun.id)
-    websocket = mocker.AsyncMock()
-    await handle_agent_message(websocket, msg.json())
-    # the cache is preprared
-    await handle_agent_message(websocket, AgentEvent(type=AgentEventType.cache_prepared,
-                                                     testrun_id=testrun.id).json())
-    # run completed
-    await handle_run_completed(testrun.id)
 
-    # clean up
-    assert delete_pvc_mock.call_count == 1
-
-    # this will have created 1 PVCs, 2 snapshots and 2 Jobs
-    kinds_and_names = get_kind_and_names(mock_create_from_dict)
+    kinds_and_names = set(get_kind_and_names(mock_create_from_dict))
     assert {('PersistentVolumeClaim', '5-project-1-rw'),
-            ('Job', '5-builder-project-1'),
-            ('Job', '5-runner-project-1-0'),
+            ('Job', '5-builder-project-1')} == kinds_and_names
+
+    # as before, complete the build
+    testrun.total_files = 1
+    state = testrun.buildstate
+    state.specs = ['test1.ts', 'test2.ts']
+    state.rw_build_pvc = '5-project-1-rw'
+    state.build_job = '5-builder-project-1'
+
+    respx_mock.reset()
+    await handle_websocket_message({'command': 'build_completed', 'payload': testrun.json()})
+
+    # the agent takes a snapshot of the build and creates a RW PVC
+    assert save_build_state_mock.call_count == 2
+    payload = json.loads(save_build_state_mock.calls[1].request.content.decode())
+    # First save state is the same as before. The second one will differ from GKE in
+    # that we don't create a RO PVC
+    assert payload == {"testrun_id": 20,
+                       "specs": ["test1.ts", "test2.ts"],
+                       "cache_key": "absd234weefw",
+                       "build_snapshot_name": "5-build-deadbeef0101",
+                       "node_snapshot_name": None,
+                       "build_job": "5-builder-project-1",
+                       "prepare_cache_job": "5-cache-project-1",
+                       "preprovision_job": None,
+                       "run_job": "5-runner-project-1-0",
+                       "runner_deadline": "2023-12-03T15:10:00+00:00",
+                       "completed": False,
+                       "rw_build_pvc": "5-project-1-rw",
+                       "ro_build_pvc": None,
+                       "run_job_index": 0}
+
+    testrun.buildstate = TestRunBuildState.parse_obj(payload)
+
+    # in this mode we will create ephemeral volumes from the build snapshot
+    kinds_and_names = set(get_kind_and_names(mock_create_from_dict)) - kinds_and_names
+    assert {('Job', '5-runner-project-1-0'),
             ('Job', '5-cache-project-1')
-            } == set(kinds_and_names)
+            } == kinds_and_names
 
-    assert k8_create_custom.call_count == 2
-    compare_rendered_template([k8_create_custom.call_args_list[0].kwargs['body']], 'build-snapshot')
-    compare_rendered_template([k8_create_custom.call_args_list[1].kwargs['body']], 'node-snapshot')
+    assert wait_for_snapshot_ready_mock.called
 
-    assert k8_delete_job.call_count == 0
 
 
 @freeze_time('2022-04-03 14:10:00Z')

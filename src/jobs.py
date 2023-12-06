@@ -61,7 +61,7 @@ def common_context(testrun: schemas.NewTestRun, **kwargs):
 
 
 async def get_cached_snapshot(key: str):
-    item = await get_cached_item(key, True)
+    item = await get_cached_item(key)
     if item:
         if await async_get_snapshot(item.name):
             return item
@@ -196,6 +196,8 @@ async def handle_build_completed(testrun: schemas.NewTestRun):
 
     logger.info(f'Create build snapshot', trid=testrun.id)
     await create_k8_snapshot('pvc-snapshot', context)
+
+    # this could take some time: save the state
     await save_build_state(st)
     await wait_for_snapshot_ready(st.build_snapshot_name)
 
@@ -213,6 +215,8 @@ async def handle_build_completed(testrun: schemas.NewTestRun):
 
     if not st.node_snapshot_name:
         await prepare_cache_wait(testrun)
+
+    await save_build_state(testrun.buildstate)
 
 
 async def prepare_cache_wait(testrun: schemas.NewTestRun):
@@ -232,7 +236,6 @@ async def prepare_cache_wait(testrun: schemas.NewTestRun):
                              pvc_name=testrun.buildstate.rw_build_pvc)
     name = await create_k8_objects('prepare-cache', context)
     testrun.buildstate.prepare_cache_job = name
-    await save_build_state(testrun.buildstate)
 
 
 async def handle_cache_prepared(testrun: schemas.NewTestRun):
@@ -272,7 +275,6 @@ async def create_runner_job(testrun: schemas.NewTestRun):
     if not state.runner_deadline:
         state.runner_deadline = utcnow() + datetime.timedelta(seconds=testrun.project.runner_deadline)
     state.run_job = await create_k8_objects('runner', context)
-    await save_build_state(state)
 
 
 async def handle_run_completed(testrun: schemas.NewTestRun):
@@ -337,11 +339,11 @@ async def delete_jobs(state: TestRunBuildState):
 async def recreate_runner_job(tr: schemas.NewTestRun):
     logger.info(f'Run job {tr.id} is not active but has specs left - recreate it')
     tr.buildstate.run_job_index += 1
-    await save_build_state(tr.buildstate)
     # delete the existing job
     await async_delete_job(tr.buildstate.run_job)
     # and create a new one
     await create_runner_job(tr)
+    await save_build_state(tr.buildstate)
 
 
 async def handle_delete_project(buildstates: list[TestRunBuildState]):

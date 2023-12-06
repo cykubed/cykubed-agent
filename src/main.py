@@ -1,21 +1,19 @@
 import argparse
 import asyncio
 import sys
-from time import sleep
 
 import sentry_sdk
 from aiohttp import web
 from loguru import logger
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
-from tenacity import RetryError
 
 import ws
 from app import app
 from cache import delete_all_jobs, \
-    delete_all_pvcs, delete_all_volume_snapshots, fetch_cached_items
+    delete_all_pvcs, delete_all_volume_snapshots
 from common import k8common
 from common.k8common import close
-from common.redisutils import sync_redis, ping_redis, async_redis
+from common.redisutils import async_redis
 from logs import configure_logging
 from settings import settings
 from watchers import watch_pod_events, watch_job_events
@@ -38,23 +36,6 @@ async def hc_server():
 
 
 async def run():
-    if settings.LOCAL_REDIS:
-        sync_redis()
-        # block until we can access Redis
-        while True:
-            if ping_redis():
-                break
-            logger.debug("Cannot ping_redis Redis - waiting")
-            sleep(5)
-
-        logger.info("Connected to Redis")
-    else:
-        try:
-            await fetch_cached_items()
-        except RetryError:
-            logger.error("Failed to fetch cached items state from server - bailing out")
-            sys.exit(1)
-
     if not settings.TEST:
         await k8common.init()
 

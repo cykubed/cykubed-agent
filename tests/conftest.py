@@ -1,11 +1,14 @@
 import pytest
+from dateutil.relativedelta import relativedelta
 from httpx import Response
 from loguru import logger
 from redis import Redis
 from redis.asyncio import Redis as AsyncRedis
 
+from common import schemas
 from common.enums import PlatformEnum
 from common.schemas import Project, NewTestRun, TestRunBuildState
+from common.utils import utcnow
 from settings import settings
 
 
@@ -63,6 +66,13 @@ def k8_batch_api_mock(mocker):
 
 
 @pytest.fixture()
+def k8_delete_job_mock(k8_batch_api_mock, mocker):
+    delete_job_mock = mocker.AsyncMock()
+    k8_batch_api_mock.delete_namespaced_job = delete_job_mock
+    return delete_job_mock
+
+
+@pytest.fixture()
 def k8_core_api_mock(mocker):
     core_api_mock = mocker.AsyncMock()
     mocker.patch('k8utils.get_core_api', return_value=core_api_mock)
@@ -91,16 +101,23 @@ def create_custom_mock(mocker, k8_custom_api_mock):
 
 
 @pytest.fixture()
-def testrun(project: Project) -> NewTestRun:
-    return NewTestRun(url='git@github.org/dummy.git',
-                      id=20,
-                      sha='deadbeef0101',
-                      local_id=1,
-                      project=project,
-                      status='started',
-                      branch='master',
-                      spot_percentage=80,
-                      buildstate=TestRunBuildState(testrun_id=20))
+def testrun_factory(project: Project):
+    def create():
+        return NewTestRun(url='git@github.org/dummy.git',
+                          id=20,
+                          sha='deadbeef0101',
+                          local_id=1,
+                          project=project,
+                          status='started',
+                          branch='master',
+                          spot_percentage=80,
+                          buildstate=TestRunBuildState(testrun_id=20))
+    return create
+
+
+@pytest.fixture()
+def testrun(testrun_factory) -> NewTestRun:
+    return testrun_factory()
 
 
 @pytest.fixture()
@@ -150,3 +167,21 @@ def get_cache_key_mock(mocker):
 def node_cache_miss_mock(respx_mock, get_cache_key_mock):
     return respx_mock.get('https://api.cykubed.com/agent/cached-item/5-node-absd234weefw') \
         .mock(return_value=Response(404))
+
+
+@pytest.fixture()
+def cached_node_item() -> schemas.CacheItem:
+    return schemas.CacheItem(name='5-node-absd234weefw', organisation_id=5,
+                             storage_size=10,
+                             expires=utcnow() + relativedelta(seconds=settings.NODE_DISTRIBUTION_CACHE_TTL))
+
+
+@pytest.fixture()
+def node_cache_hit_mock(cached_node_item: schemas.CacheItem, respx_mock, get_cache_key_mock):
+    return respx_mock.get('https://api.cykubed.com/agent/cached-item/5-node-absd234weefw') \
+        .mock(return_value=Response(200, content=cached_node_item.json()))
+
+
+@pytest.fixture()
+def wait_for_snapshot_ready_mock(mocker):
+    return mocker.patch('jobs.wait_for_snapshot_ready', return_value=True)
