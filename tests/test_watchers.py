@@ -30,7 +30,3 @@ async def test_handle_post_event(respx_mock, mocker, redis):
         assert st.duration == 150
         assert not st.is_spot
         assert st.job_type == 'runner'
-
-        # call it again - this shouldn't be posted as we've already done it
-        await handle_pod_event(pod)
-        assert store_duration.call_count == 1

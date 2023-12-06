@@ -87,7 +87,7 @@ def k8_custom_api_mock(mocker):
 
 
 @pytest.fixture()
-def delete_pvc_mock(mocker, k8_core_api_mock):
+def k8_delete_pvc_mock(mocker, k8_core_api_mock):
     delete_pvc = mocker.AsyncMock()
     k8_core_api_mock.delete_namespaced_persistent_volume_claim = delete_pvc
     return delete_pvc
@@ -97,6 +97,13 @@ def delete_pvc_mock(mocker, k8_core_api_mock):
 def create_custom_mock(mocker, k8_custom_api_mock):
     api_mock = mocker.AsyncMock()
     k8_custom_api_mock.create_namespaced_custom_object = api_mock
+    return api_mock
+
+
+@pytest.fixture()
+def delete_snapshot_mock(mocker, k8_custom_api_mock):
+    api_mock = mocker.AsyncMock()
+    k8_custom_api_mock.delete_namespaced_custom_object = api_mock
     return api_mock
 
 

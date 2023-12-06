@@ -13,7 +13,7 @@ from common.k8common import get_batch_api
 from common.schemas import TestRunBuildState, get_build_snapshot_name
 from common.utils import utcnow, get_lock_hash
 from k8utils import async_get_snapshot, async_delete_pvc, async_delete_job, create_k8_objects, create_k8_snapshot, \
-    wait_for_snapshot_ready, render_template
+    wait_for_snapshot_ready, render_template, async_delete_snapshot
 from settings import settings
 from state import notify_build_completed, save_build_state
 
@@ -350,3 +350,7 @@ async def handle_delete_project(buildstates: list[TestRunBuildState]):
     for buildstate in buildstates:
         await delete_jobs(buildstate)
         await delete_pvcs(buildstate, True)
+        if buildstate.build_snapshot_name:
+            await async_delete_snapshot(buildstate.build_snapshot_name)
+        if buildstate.node_snapshot_name:
+            await async_delete_snapshot(buildstate.node_snapshot_name)
