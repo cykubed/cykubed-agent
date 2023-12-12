@@ -41,6 +41,10 @@ spec:
         env:
         - name: BUILD_DIR
           value: "/build"
+        {{#agent_url}}
+        - name: AGENT_URL
+          value: "{{agent_url}}"
+        {{/agent_url}}
         envFrom:
           - configMapRef:
               name: cykubed-agent-configmap

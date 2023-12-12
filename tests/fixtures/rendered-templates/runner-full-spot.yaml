@@ -33,6 +33,8 @@ spec:
                     value: ''
                 -   name: TZ
                     value: UTC
+                -   name: AGENT_URL
+                    value: http://agent-0.agent:9001
                 envFrom:
                 -   configMapRef:
                         name: cykubed-agent-configmap

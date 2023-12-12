@@ -20,6 +20,7 @@ class AgentSettings(BaseSettings):
     CYPRESS_RUN_TIMEOUT: int = 10*60
 
     PORT = 9001
+    AGENT_URL: str = 'http://agent-0.agent:9001'
 
     # keep app distributions for 1 hr in case of reruns
     APP_DISTRIBUTION_CACHE_TTL: int = 1 * 3600

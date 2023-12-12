@@ -35,7 +35,7 @@ def rest_logsink(msg: loguru.Message):
                                                          level=msg.record['level'].name.lower(),
                                                          msg=msg,
                                                          source=app.hostname))
-        msgqueue.put_nowait(item)
+        msgqueue.put_nowait(item.json())
 
 
 def configure_logging():

@@ -38,6 +38,7 @@ def common_context(testrun: schemas.NewTestRun, **kwargs):
              priority_class=settings.PRIORITY_CLASS,
              snapshot_class_name=settings.VOLUME_SNAPSHOT_CLASS,
              namespace=settings.NAMESPACE,
+             agent_url=settings.AGENT_URL,
              image=testrun.project.docker_image.image,
              storage_class=settings.STORAGE_CLASS,
              storage=testrun.project.build_storage,
@@ -47,7 +48,7 @@ def common_context(testrun: schemas.NewTestRun, **kwargs):
              branch=testrun.branch,
              token=settings.API_TOKEN,
              preprovision=testrun.preprovision,
-             parallelism=testrun.project.parallelism,
+             parallelism=1,
              read_only_pvc=use_read_only_pvc(testrun),
              use_spot_affinity=(settings.PLATFORM == 'aks' or
                                 (settings.PLATFORM == 'gke' and (0 < testrun.spot_percentage < 100))),
@@ -110,25 +111,18 @@ async def handle_new_run(testrun: schemas.NewTestRun):
     # stop existing jobs
     await app.update_status(testrun.id, 'started')
 
-    # FIXME the server knows which test runs need to be deleted here - add the list of job names to be delete to
-    # NewTestRun
-    # await delete_jobs_for_branch(testrun)
-
     state = testrun.buildstate
     if state.build_snapshot_name:
         # this is a rerun of a previous build
         logger.info(f'Found cached build for sha {testrun.sha}: reuse', trid=testrun.id)
         if use_read_only_pvc(testrun):
             state.ro_build_pvc = create_ro_pvc_name(testrun)
-
-        await save_build_state(state)
-
-        if use_read_only_pvc(testrun):
             context = common_context(testrun,
                                      read_only=True,
                                      snapshot_name=state.build_snapshot_name,
                                      pvc_name=state.ro_build_pvc)
             await create_k8_objects('pvc', context)
+            await save_build_state(state)
 
         await notify_build_completed(state)
     else:
@@ -183,23 +177,24 @@ async def handle_build_completed(testrun: schemas.NewTestRun):
 
     # create a snapshot from the build PVC
     st = testrun.buildstate
-    st.build_snapshot_name = get_build_snapshot_name(testrun)
-    context = common_context(testrun,
-                             snapshot_name=st.build_snapshot_name,
-                             pvc_name=st.rw_build_pvc)
-
     if st.preprovision_job:
         logger.debug('Delete pre-provision job')
         await async_delete_job(st.preprovision_job)
 
-    logger.info(f'Create build snapshot', trid=testrun.id)
-    await create_k8_snapshot('pvc-snapshot', context)
+    context = common_context(testrun)
 
-    # this could take some time: save the state
-    await save_build_state(st)
-    await wait_for_snapshot_ready(st.build_snapshot_name)
+    if not st.build_snapshot_name:
+        st.build_snapshot_name = get_build_snapshot_name(testrun)
+        context.update(snapshot_name=st.build_snapshot_name,
+                       pvc_name=st.rw_build_pvc)
 
-    if use_read_only_pvc(testrun):
+        logger.info(f'Create build snapshot', trid=testrun.id)
+        await create_k8_snapshot('pvc-snapshot', context)
+        # this could take some time: save the state
+        await save_build_state(st)
+        await wait_for_snapshot_ready(st.build_snapshot_name)
+
+    if not st.ro_build_pvc and use_read_only_pvc(testrun):
         # create a RO PVC from this snapshot and a runner that uses it
         st.ro_build_pvc = create_ro_pvc_name(testrun)
         context.update(dict(pvc_name=st.ro_build_pvc,
@@ -211,7 +206,7 @@ async def handle_build_completed(testrun: schemas.NewTestRun):
     # and create the runner job - this will save the state
     await create_runner_job(testrun)
 
-    if not st.node_snapshot_name:
+    if not st.node_snapshot_name and st.rw_build_pvc:
         await prepare_cache_wait(testrun)
 
     await save_build_state(testrun.buildstate)

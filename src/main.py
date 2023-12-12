@@ -3,9 +3,11 @@ import asyncio
 import sys
 
 import sentry_sdk
+from aiohttp import web
 from loguru import logger
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
 
+import logs
 import ws
 from app import app
 from cache import delete_all_jobs, \
@@ -17,11 +19,34 @@ from settings import settings
 from watchers import watch_pod_events, watch_job_events
 
 
+async def handler(request):
+    if request.method == 'GET' and request.path == '/':
+        if not app.ws_connected:
+            return web.Response(status=500)
+        return web.Response(text="OK")
+
+    if request.method == 'POST' and request.path == '/log':
+        logpayload = (await request.content.read()).decode()
+        logs.msgqueue.put_nowait(logpayload)
+        return web.Response()
+
+
+async def hc_server():
+    server = web.Server(handler)
+    runner = web.ServerRunner(server)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', settings.PORT)
+    await site.start()
+    while app.is_running():
+        await asyncio.sleep(60)
+
+
 async def run():
     if not settings.TEST:
         await k8common.init()
 
-    tasks = [asyncio.create_task(ws.connect())]
+    tasks = [asyncio.create_task(hc_server()),
+             asyncio.create_task(ws.connect())]
     if app.hostname == 'agent-0':
         tasks += [asyncio.create_task(watch_pod_events()),
                   asyncio.create_task(watch_job_events()),

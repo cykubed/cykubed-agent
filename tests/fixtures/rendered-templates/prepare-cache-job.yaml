@@ -37,6 +37,8 @@ spec:
                 env:
                 -   name: BUILD_DIR
                     value: /build
+                -   name: AGENT_URL
+                    value: http://agent-0.agent:9001
                 envFrom:
                 -   configMapRef:
                         name: cykubed-agent-configmap
