@@ -98,7 +98,10 @@ async def producer_handler(websocket):
             msgitem = await logs.msgqueue.get()
             if msgitem:
                 await websocket.send(msgitem)
+        except ConnectionClosedError:
+            return
         except Exception as ex:
+            logger.error(type(ex))
             logger.exception(f'Unexpected exception in producer_handler: {ex}')
             raise ex
 
