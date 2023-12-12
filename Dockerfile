@@ -14,8 +14,8 @@ USER cykubed
 RUN pip install poetry==1.3.1
 COPY --chown=cykubed:cykubed pyproject.toml poetry.lock ./
 RUN poetry config installer.max-workers 10
-RUN poetry install --no-root --with=dev
-RUN #poetry install --no-root --without=dev
+#RUN poetry install --no-root --with=dev
+RUN poetry install --no-root --without=dev
 
 ENV TZ=UTC
 COPY  --chown=cykubed:cykubed src .

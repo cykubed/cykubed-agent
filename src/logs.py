@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 
 import loguru
@@ -9,8 +10,9 @@ from app import app
 from common import schemas
 from common.cloudlogging import configure_stackdriver_logging
 from common.enums import AgentEventType
-from common.redisutils import sync_redis
 from common.schemas import AppLogMessage
+
+msgqueue = asyncio.Queue()
 
 
 def without_keys(d, keys):
@@ -33,8 +35,7 @@ def rest_logsink(msg: loguru.Message):
                                                          level=msg.record['level'].name.lower(),
                                                          msg=msg,
                                                          source=app.hostname))
-
-        sync_redis().rpush('messages', item.json())
+        msgqueue.put_nowait(item)
 
 
 def configure_logging():

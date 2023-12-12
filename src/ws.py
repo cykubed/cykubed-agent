@@ -9,6 +9,7 @@ from loguru import logger
 from websockets.exceptions import ConnectionClosedError, InvalidStatusCode, ConnectionClosed
 
 import jobs
+import logs
 from app import app
 from common.exceptions import InvalidTemplateException
 from common.schemas import NewTestRun, TestRunBuildState
@@ -65,6 +66,43 @@ async def handle_websocket_message(data: dict):
         logger.exception(f'Failed to handle msg: {ex}')
 
 
+# async def log_upload_loop(websocket):
+#     while app.is_running():
+#         try:
+#             msgitem = await redis.blpop('messages', 10)
+#             if msgitem:
+#                 rawmsg = msgitem[1]
+#                 asyncio.create_task(handle_agent_message(websocket, rawmsg))
+#         except RedisError as ex:
+#             if not app.is_running():
+#                 return
+#             logger.error(f"Failed to fetch messages from Redis: {ex}")
+#         except Exception as ex:
+#             logger.exception(f'Unexpected exceptoin in producer_handler: {ex}')
+#
+#
+
+
+async def consumer_handler(websocket):
+    while app.is_running():
+        try:
+            message = await websocket.recv()
+        except ConnectionClosed:
+            return
+        await handle_websocket_message(json.loads(message))
+
+
+async def producer_handler(websocket):
+    while app.is_running():
+        try:
+            msgitem = await logs.msgqueue.get()
+            if msgitem:
+                await websocket.send(msgitem.json())
+        except Exception as ex:
+            logger.exception(f'Unexpected exception in producer_handler: {ex}')
+            raise ex
+
+
 async def connect():
     """
     Connect to the main cykube servers via a websocket
@@ -100,13 +138,15 @@ async def connect():
                 logger.info("Connected")
                 app.wait_period = 2
                 app.ws_connected = True
-                while app.is_running():
-                    try:
-                        message = await ws.recv()
-                        asyncio.create_task(handle_websocket_message(json.loads(message)))
-                    except ConnectionClosed:
-                        break
 
+                done, pending = await asyncio.wait([asyncio.create_task(consumer_handler(ws)),
+                                                       asyncio.create_task(producer_handler(ws))],
+                                                   return_when=asyncio.FIRST_COMPLETED)
+                # we'll need to reconnect
+                for task in pending:
+                    task.cancel()
+
+            app.ws_connected = False
             logger.info(f"Socket disconnected: try again in {app.wait_period}s")
             await asyncio.sleep(app.wait_period)
             app.wait_period = min(60, 2 * app.wait_period)
@@ -129,6 +169,7 @@ async def connect():
             app.ws_connected = False
             await sleep(1)
         except ConnectionRefusedError:
+            logger.debug('Connection refused: try later...')
             app.ws_connected = False
             await sleep(10)
         except OSError:

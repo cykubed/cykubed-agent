@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-REPLICATION_ARGS=" --set redis.architecture=standalone --set redis.sentinel.enabled=false --set architecture=standalone"
+REPLICATION_ARGS=""
 NAMESPACE=cykubed
 TOKEN=$(mysql cykubedmain -e "select token from agent where platform='minikube' limit 1" --skip-column-names --silent --raw)
 READ_ONLY_MANY_ARGS=""
@@ -13,7 +13,7 @@ while getopts "ern:t:" opt; do
        READ_ONLY_MANY_ARGS=" --set readOnlyMany=false"
        ;;
      r)
-       REPLICATION_ARGS=""
+       REPLICATION_ARGS=" --set architecture=replicated"
        ;;
      n)
        NAMESPACE=$OPTARG

@@ -10,6 +10,8 @@ from jobs import recreate_runner_job
 from settings import settings
 from state import get_build_state, check_is_spot
 
+pod_duration_uploads = set()
+
 
 async def watch_pod_events():
     v1 = get_core_api()
@@ -66,7 +68,7 @@ async def handle_pod_event(pod: V1Pod):
 
     status: V1PodStatus = pod.status
     metadata: V1ObjectMeta = pod.metadata
-    if status.phase in ['Succeeded', 'Failed']:
+    if status.phase in ['Succeeded', 'Failed'] and metadata.name not in pod_duration_uploads:
         # assume finished
         testrun_id = metadata.labels['testrun_id']
         annotations = metadata.annotations
@@ -77,4 +79,6 @@ async def handle_pod_event(pod: V1Pod):
                                  duration=int((utcnow() - status.start_time).seconds))
         await app.httpclient.post(f'/agent/testrun/{testrun_id}/pod-duration',
                                   content=st.json())
+
+        pod_duration_uploads.add(metadata.name)
 

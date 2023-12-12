@@ -4,14 +4,14 @@ metadata:
   name: agent
   namespace: {{ .Release.Namespace }}
 spec:
-{{- if eq .Values.architecture "standalone" }}
-  replicas: 1
-{{ else }}
+{{- if eq .Values.architecture "replicated" }}
   replicas: {{ .Values.replicas }}
   updateStrategy:
     type: RollingUpdate
     rollingUpdate:
       maxUnavailable: 1
+{{ else }}
+  replicas: 1
 {{- end }}
   serviceName: agent
   selector:
@@ -39,17 +39,6 @@ spec:
             limits:
               cpu: 150m
               memory: 200Mi
-          livenessProbe:
-            httpGet:
-              port: 9001
-            periodSeconds: 10
-            failureThreshold: 6
-          startupProbe:
-            httpGet:
-              port: 9001
-            initialDelaySeconds: 10
-            periodSeconds: 10
-            failureThreshold: 30
           envFrom:
             - configMapRef:
                 name: cykubed-agent-configmap

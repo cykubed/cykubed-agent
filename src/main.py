@@ -3,7 +3,6 @@ import asyncio
 import sys
 
 import sentry_sdk
-from aiohttp import web
 from loguru import logger
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
 
@@ -13,34 +12,16 @@ from cache import delete_all_jobs, \
     delete_all_pvcs, delete_all_volume_snapshots
 from common import k8common
 from common.k8common import close
-from common.redisutils import async_redis
 from logs import configure_logging
 from settings import settings
 from watchers import watch_pod_events, watch_job_events
-
-
-async def handler(request):
-    if not await async_redis().ping() or not app.ws_connected:
-        return web.Response(status=500)
-    return web.Response(text="OK")
-
-
-async def hc_server():
-    server = web.Server(handler)
-    runner = web.ServerRunner(server)
-    await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', settings.PORT)
-    await site.start()
-    while app.is_running():
-        await asyncio.sleep(60)
 
 
 async def run():
     if not settings.TEST:
         await k8common.init()
 
-    tasks = [asyncio.create_task(hc_server()),
-             asyncio.create_task(ws.connect())]
+    tasks = [asyncio.create_task(ws.connect())]
     if app.hostname == 'agent-0':
         tasks += [asyncio.create_task(watch_pod_events()),
                   asyncio.create_task(watch_job_events()),
