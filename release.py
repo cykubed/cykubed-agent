@@ -48,6 +48,7 @@ def generate(bump: str, generate_only: bool):
         cmd(f'git add pyproject.toml')
         cmd(f'git commit -m "New release {tag}"')
         cmd(f'git tag -a {tag} -m "New release:\n{tag}"')
+        cmd(f'git push origin {MAIN_BRANCH}')
         cmd(f'git push origin {tag}')
 
 
