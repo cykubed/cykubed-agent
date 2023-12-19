@@ -1,7 +1,7 @@
 steps:
  - name: 'gcr.io/cloud-builders/git'
    script: |
-     git config -f .gitmodules submodule.src/common.url https://source.developers.google.com/p/cykubed/r/github_cykubed_cykubed-common
+     git config -f .gitmodules submodule.src/common.url https://github.com/cykubed/cykubed-common.git
      git submodule init
      git submodule update
 
