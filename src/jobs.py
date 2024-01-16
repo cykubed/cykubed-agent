@@ -39,7 +39,7 @@ def common_context(testrun: schemas.NewTestRun, **kwargs):
              snapshot_class_name=settings.VOLUME_SNAPSHOT_CLASS,
              namespace=settings.NAMESPACE,
              agent_url=settings.AGENT_URL,
-             image=testrun.project.docker_image.image,
+             image=testrun.image,
              storage_class=settings.STORAGE_CLASS,
              storage=testrun.project.build_storage,
              local_id=testrun.local_id,

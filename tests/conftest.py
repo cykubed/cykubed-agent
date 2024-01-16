@@ -3,7 +3,7 @@ from dateutil.relativedelta import relativedelta
 from httpx import Response
 
 from common import schemas
-from common.enums import PlatformEnum
+from common.enums import PlatformEnum, AppFramework, TestFramework
 from common.schemas import Project, NewTestRun, TestRunBuildState
 from common.utils import utcnow
 from settings import settings
@@ -27,14 +27,14 @@ async def project() -> Project:
                    default_branch='master',
                    agent_id=1,
                    platform=PlatformEnum.GITHUB,
+                   app_framework=AppFramework.generic,
+                   test_framework=TestFramework.cypress,
                    build_cpu='4.0',
                    build_memory=6.0,
                    build_storage=10,
                    build_ephemeral_storage=4,
                    runner_cpu='2',
                    runner_memory=4.0,
-                   docker_image=dict(image='cykubed-runner:1234', browser='chrome',
-                                     node_major_version=16),
                    runner_ephemeral_storage=2,
                    url='git@github.org/dummy.git',
                    build_deadline=3600,
@@ -98,6 +98,7 @@ def testrun_factory(project: Project):
                           sha='deadbeef0101',
                           local_id=1,
                           project=project,
+                          image='us-docker.pkg.dev/cykubed/public/runner/cypress-node-20:1.0.0',
                           status='started',
                           branch='master',
                           spot_percentage=80,
