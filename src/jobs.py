@@ -276,8 +276,9 @@ async def handle_run_completed(testrun: schemas.NewTestRun):
     """
     logger.info(f'Run {testrun.id} completed')
 
-    await delete_pvcs(testrun.buildstate)
-    await delete_jobs(testrun.buildstate)
+    if settings.DELETE_JOBS_AFTER_RUN:
+        await delete_pvcs(testrun.buildstate)
+        await delete_jobs(testrun.buildstate)
 
 
 async def delete_testrun_job(job, trid: int = None):

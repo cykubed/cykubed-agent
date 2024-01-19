@@ -19,6 +19,7 @@ data:
   AGENT_VERSION: "{{ .Chart.Version }}"
   MAIN_API_URL: {{ .Values.apiUrl }}
   NAMESPACE: {{ .Release.Namespace }}
+  DELETE_JOBS_AFTER_RUN: "{{ .Values.deleteJobsAfterRun }}"
 {{- if eq .Values.platform "AKS" }}
   READ_ONLY_MANY: "false"
 {{ else }}

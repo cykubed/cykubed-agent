@@ -18,6 +18,7 @@ class AgentSettings(BaseSettings):
 
     SERVER_START_TIMEOUT: int = 60
     CYPRESS_RUN_TIMEOUT: int = 10*60
+    DELETE_JOBS_AFTER_RUN: bool = True
 
     PORT = 9001
     AGENT_URL: str = 'http://agent-0.agent:9001'
