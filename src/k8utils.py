@@ -153,13 +153,19 @@ async def create_k8_snapshot(jobtype, context):
     :param context:
     :return:
     """
+    testrun_id = context['testrun_id']
     try:
         yamlobjects = render_yaml_template(jobtype, context)
         await async_create_snapshot(yamlobjects[0])
     except YAMLError as ex:
-        raise InvalidTemplateException(f'Invalid YAML in {jobtype} template: {ex}')
+        raise BuildFailedException(msg=f'Invalid YAML in {jobtype} template: {ex}',
+                                   testrun_id=testrun_id)
     except ChevronError as ex:
-        raise InvalidTemplateException(f'Invalid {jobtype} template: {ex}')
+        raise BuildFailedException(msg=f'Invalid {jobtype} template: {ex}',
+                                   testrun_id=testrun_id)
+    except ApiException as ex:
+        raise BuildFailedException(msg=f'Failed to create volume snapshot:\n{ex}',
+                                   testrun_id=testrun_id)
 
 
 def get_job_template(name: str) -> str:

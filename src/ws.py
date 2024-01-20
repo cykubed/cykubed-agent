@@ -11,7 +11,8 @@ from websockets.exceptions import ConnectionClosedError, InvalidStatusCode, Conn
 import jobs
 import logs
 from app import app
-from common.exceptions import InvalidTemplateException
+from common import schemas
+from common.exceptions import InvalidTemplateException, BuildFailedException
 from common.schemas import NewTestRun, TestRunBuildState
 from jobs import handle_delete_build_states
 from k8utils import async_delete_snapshot
@@ -61,6 +62,12 @@ async def handle_websocket_message(data: dict):
             await jobs.handle_run_completed(NewTestRun.parse_raw(payload))
         else:
             logger.error(f'Unexpected command {cmd} - ignoring')
+    except BuildFailedException as ex:
+        logger.error(f'Build failed\n{ex.msg}', trid=ex.testrun_id)
+        if ex.testrun_id:
+            await app.httpclient.post(f'/agent/testrun/{ex.testrun_id}/error',
+                    content=schemas.TestRunErrorReport(stage=ex.stage,
+                                                       msg=ex.msg).json())
 
     except Exception as ex:
         logger.exception(f'Failed to handle msg: {ex}')
