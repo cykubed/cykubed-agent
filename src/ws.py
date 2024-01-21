@@ -63,7 +63,7 @@ async def handle_websocket_message(data: dict):
         else:
             logger.error(f'Unexpected command {cmd} - ignoring')
     except BuildFailedException as ex:
-        logger.error(f'Build failed\n{ex.msg}', trid=ex.testrun_id)
+        logger.error(f'Build failed\n{ex}', trid=ex.testrun_id)
         if ex.testrun_id:
             await app.httpclient.post(f'/agent/testrun/{ex.testrun_id}/error',
                     content=schemas.TestRunErrorReport(stage=ex.stage,

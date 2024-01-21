@@ -13,6 +13,7 @@ from app import app
 from cache import delete_all_jobs, \
     delete_all_pvcs, delete_all_volume_snapshots
 from common import k8common
+from common.cloudlogging import configure_stackdriver_logging
 from common.k8common import close
 from logs import configure_logging
 from settings import settings
@@ -77,6 +78,8 @@ if __name__ == "__main__":
             integrations=[AsyncioIntegration(),], )
 
     configure_logging()
+    configure_stackdriver_logging('cykubed-agent')
+
     if args.clear:
         logger.info("Cykubed pre-delete cleanup")
         asyncio.run(cleanup_pending_delete())

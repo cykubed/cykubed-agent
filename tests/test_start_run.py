@@ -1,11 +1,15 @@
 import json
 import os.path
+from asyncio import QueueEmpty
 
 import yaml
 from freezegun import freeze_time
 from httpx import Response
+from kubernetes_asyncio.client import ApiException
 
 import common.schemas
+import logs
+from common import schemas
 from common.schemas import NewTestRun, Project, TestRunBuildState
 from jobs import create_runner_job, handle_delete_build_states
 from settings import settings
@@ -118,7 +122,8 @@ async def test_start_run_node_cache_hit(mocker, testrun: NewTestRun,
     assert post_building_status.called == 1
 
 
-async def test_start_rerun(mocker, testrun: NewTestRun,
+async def test_start_rerun(mocker,
+                           testrun: NewTestRun,
                            post_started_status,
                            save_build_state_mock,
                            save_cached_item_mock,
@@ -139,6 +144,52 @@ async def test_start_rerun(mocker, testrun: NewTestRun,
     compare_rendered_template_from_mock(mock_create_from_dict, 'build-ro-pvc-from-snapshot', 0)
 
     assert build_completed.call_count == 1
+
+
+async def test_create_snapshot_failed(mocker,
+                                      testrun: NewTestRun,
+                                      save_build_state_mock,
+                                      respx_mock):
+    """
+    Check for a failure conditional. Tests that the error is correctly posted to the server
+    :param mocker:
+    :param testrun:
+    :param save_build_state_mock:
+    :param respx_mock:
+    :return:
+    """
+    post_error = respx_mock.post(f'/agent/testrun/{testrun.id}/error')
+
+    logs.configure_logging()
+    body = dict(kind="Status", apiVersion="v1", metadata={}, status="Failure",
+                message="volumesnapshots.snapshot.storage.k8s.io \"1-build-7e4c7ff8bda355222160c2f32\" already exists",
+                reason="AlreadyExists",
+                details={"name": "1-build-7e4c7ff8bda355222160c2f32b8858826ac2a927",
+                         "group": "snapshot.storage.k8s.io",
+                         "kind": "volumesnapshots"})
+    mockreq = mocker.Mock(status=409, reason='Conflict', data=body)
+    mockreq.getheaders.return_value = dict()
+    mocker.patch('k8utils.async_create_snapshot', side_effect=ApiException(http_resp=mockreq))
+
+    await handle_websocket_message(dict(command='build_completed',
+                                        payload=testrun.json()))
+
+    expected_error_message = 'Build failed\nFailed to create volume snapshot:\nReason=Conflict\nvolumesnapshots.snapshot.storage.k8s.io "1-build-7e4c7ff8bda355222160c2f32" already exists\n'
+    assert post_error.called
+    msg = schemas.TestRunErrorReport.parse_raw(post_error.calls[0].request.content.decode())
+    assert msg.stage == 'building'
+    assert 'Failed to create volume snapshot' in msg.msg
+
+    logitems = []
+    while True:
+        try:
+            logitems.append(schemas.AgentLogMessage.parse_raw(logs.msgqueue.get_nowait()))
+        except QueueEmpty:
+            break
+
+    messages = [i.msg.msg for i in logitems]
+    assert messages == ['Build completed\n', 'Create build snapshot\n',
+                        expected_error_message]
 
 
 async def test_create_full_spot_runner(testrun: NewTestRun,
@@ -377,7 +428,6 @@ async def test_delete_project(k8_delete_job_mock,
                               k8_delete_pvc_mock,
                               delete_snapshot_mock,
                               project: Project):
-
     """
     Delete that delete_project deletes the relevant PVCs and jobs
     """
@@ -410,5 +460,3 @@ async def test_delete_project(k8_delete_job_mock,
     assert delete_snapshot_mock.call_count == 3
     delete_snapshots = {x.kwargs['name'] for x in delete_snapshot_mock.call_args_list}
     assert delete_snapshots == {'build-snap-1', 'node-snap-1', 'build-snap-2'}
-
-

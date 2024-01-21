@@ -8,7 +8,6 @@ from loguru import logger
 
 from app import app
 from common import schemas
-from common.cloudlogging import configure_stackdriver_logging
 from common.enums import AgentEventType
 from common.schemas import AppLogMessage
 
@@ -41,6 +40,5 @@ def rest_logsink(msg: loguru.Message):
 def configure_logging():
     # disable logging for health check
     logging.getLogger("aiohttp.access").disabled = True
-    configure_stackdriver_logging('cykubed-agent')
     logger.add(rest_logsink,
                format="{message}", level="INFO")
