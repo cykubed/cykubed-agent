@@ -36,7 +36,7 @@ def generate(bump: str):
     cmd(f'git tag -a {tag} -m "New release:\n{tag}"')
     cmd(f'git push origin {MAIN_BRANCH} --tags')
     # and kick off the build
-    cmd(f'gcloud builds triggers run cykubed-runners --substitutions=_TAG={tag}')
+    cmd(f'gcloud builds triggers run cykubed-agent --substitutions=_TAG={tag}')
 
 
 if __name__ == '__main__':
