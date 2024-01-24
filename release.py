@@ -1,6 +1,5 @@
 import os
 import subprocess
-from string import Template
 
 import click
 
@@ -22,34 +21,22 @@ def cmd(args: str, silent=False) -> str:
 @click.command(help='Generate a new release of the runner')
 @click.option('-b', '--bump', type=click.Choice(['major', 'minor', 'patch']),
               default='minor', help='Type of version bump')
-@click.option('-g', '--generate_only', is_flag=True, help='Generate only')
-def generate(bump: str, generate_only: bool):
+def generate(bump: str):
 
     if cmd('git branch --show-current') != MAIN_BRANCH:
         raise click.BadParameter('Not on master branch')
 
-    # run the tests first as a sanity check
-    if not generate_only:
-        cmd('py.test', True)
-        # bump and get the tag
-        tag = cmd(f"poetry version {bump} -s")
-    else:
-        tag = cmd(f"poetry version -s")
+    # bump and get the tag
+    tag = cmd(f"poetry version {bump} -s")
 
-    template_file = os.path.join(TEMPLATE_DIR, 'cloudbuild.yaml')
-    with open(template_file, 'r') as f:
-        rendered = Template(f.read()).substitute(dict(VERSION=tag))
-    with open(f'{ROOT_DIR}/cloudbuild.yaml', 'w') as f:
-        f.write(rendered)
-
-    if not generate_only:
-        # all done: commit and tag
-        cmd(f'git add cloudbuild.yaml')
-        cmd(f'git add pyproject.toml')
-        cmd(f'git commit -m "New release {tag}"')
-        cmd(f'git tag -a {tag} -m "New release:\n{tag}"')
-        cmd(f'git push origin {MAIN_BRANCH}')
-        cmd(f'git push origin {tag}')
+    # commit and tag
+    cmd(f'git add cloudbuild.yaml')
+    cmd(f'git add pyproject.toml')
+    cmd(f'git commit -m "New release {tag}"')
+    cmd(f'git tag -a {tag} -m "New release:\n{tag}"')
+    cmd(f'git push origin {MAIN_BRANCH} --tags')
+    # and kick off the build
+    cmd(f'gcloud builds triggers run cykubed-runners --substitutions=_TAG={tag}')
 
 
 if __name__ == '__main__':
