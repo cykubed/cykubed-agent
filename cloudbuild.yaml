@@ -1,6 +1,8 @@
 substitutions:
   _REGION: europe
   _TAG: 2.0.1
+options:
+  automapSubstitutions: true
 steps:
  - name: 'gcr.io/cloud-builders/git'
    script: |
