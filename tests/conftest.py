@@ -98,7 +98,7 @@ def testrun_factory(project: Project):
                           sha='deadbeef0101',
                           local_id=1,
                           project=project,
-                          image='us-docker.pkg.dev/cykubed/public/runner/cypress-node-20:1.0.0',
+                          image='europe-docker.pkg.dev/cykubed/public/runner/cypress-node-20:1.0.0',
                           status='started',
                           branch='master',
                           spot_percentage=80,

@@ -45,7 +45,7 @@ spec:
         fsGroup: 10000
       containers:
         - name: agent
-          image: "us-docker.pkg.dev/cykubed/public/agent:{{ .Chart.Version }}"
+          image: "europe-docker.pkg.dev/cykubed/public/agent:{{ .Chart.Version }}"
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           resources:
             requests:

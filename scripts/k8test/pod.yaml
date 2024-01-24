@@ -48,7 +48,7 @@ spec:
   containers:
     - name: shell
       imagePullPolicy: IfNotPresent
-      image: us-docker.pkg.dev/cykubed/public/node-16:3.19.5
+      image: europe-docker.pkg.dev/cykubed/public/node-16:3.19.5
       command: [ "/bin/bash", "-c", "--" ]
       args:
          - "sleep 3000"

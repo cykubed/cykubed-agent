@@ -40,7 +40,7 @@ spec:
                         name: cykubed-agent-configmap
                 -   secretRef:
                         name: cykubed-agent-secrets
-                image: us-docker.pkg.dev/cykubed/public/runner/cypress-node-20:1.0.0
+                image: europe-docker.pkg.dev/cykubed/public/runner/cypress-node-20:1.0.0
                 name: cykubed-runner
                 resources:
                     limits:

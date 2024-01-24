@@ -7,7 +7,7 @@ steps:
 
  - name: gcr.io/kaniko-project/executor:latest
    args: [ "--dockerfile=Dockerfile",
-           "--destination=us-docker.pkg.dev/cykubed/public/agent:$VERSION",
+           "--destination=europe-docker.pkg.dev/cykubed/public/agent:$VERSION",
            "--cache=true"]
 
  - name: 'gcr.io/cykubed/helm:3.7.0'

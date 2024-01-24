@@ -28,7 +28,7 @@ while getopts "dern:t:" opt; do
 done
 
 TAG=$(poetry version patch -s)
-docker build  . -t us-docker.pkg.dev/cykubed/public/agent:"$TAG"
+docker build  . -t europe-docker.pkg.dev/cykubed/public/agent:"$TAG"
 
 if [ -z "$TOKEN" ]; then
   echo "Token not found"
@@ -37,7 +37,7 @@ fi
 
 echo "Building Agent with version $TAG"
 
-minikube image load us-docker.pkg.dev/cykubed/public/agent:"$TAG"
+minikube image load europe-docker.pkg.dev/cykubed/public/agent:"$TAG"
 helm package ./chart -d /tmp/agent-dist --app-version "$TAG" --version "$TAG"
 helm upgrade --install $NAMESPACE -n $NAMESPACE --create-namespace --set token="$TOKEN" --set tag="$TAG" --set apiUrl="https://dev.cykubed.com/api" --force --set platform=minikube --set imagePullPolicy=IfNotPresent $REPLICATION_ARGS $DEBUG_ARGS $READ_ONLY_MANY_ARGS /tmp/agent-dist/agent-$TAG.tgz
 kubectl config set-context --current --namespace=$NAMESPACE
