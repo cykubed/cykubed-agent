@@ -45,7 +45,7 @@ async def watch_job_events():
                         trid = labels["testrun_id"]
                         if not status.active:
                             st = await get_build_state(trid)
-                            if st.run_job and st.run_job == metadata.name and status.completion_time:
+                            if st and st.run_job and st.run_job == metadata.name and status.completion_time:
                                 if utcnow() < st.runner_deadline:
                                     # runner job completed under the deadline: inform the server
                                     r = await app.httpclient.post('/runner-terminated')
