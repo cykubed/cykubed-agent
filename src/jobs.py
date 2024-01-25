@@ -193,6 +193,8 @@ async def handle_build_completed(testrun: schemas.NewTestRun):
         # this could take some time: save the state
         await save_build_state(st)
         await wait_for_snapshot_ready(st.build_snapshot_name)
+        logger.info(f'Build snapshot created', trid=testrun.id)
+        logger.debug(f'Build snapshot created for {testrun.id}')
 
     if not st.ro_build_pvc and use_read_only_pvc(testrun):
         # create a RO PVC from this snapshot and a runner that uses it
