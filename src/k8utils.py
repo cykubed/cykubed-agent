@@ -164,6 +164,11 @@ async def create_k8_snapshot(jobtype, context):
         raise BuildFailedException(msg=f'Invalid {jobtype} template: {ex}',
                                    testrun_id=testrun_id)
     except ApiException as ex:
+        if ex.status == 409 and ex.reason == 'Conflict':
+            # the snapshot already exists - this shouldn't really happen
+            logger.error(f'{jobtype} snapshot already existed for testrun {testrun_id}')
+            return
+
         logger.error(f'Failed to create snapshot: {ex}')
         if ex.body and type(ex.body) is dict:
             msg = ex.body.get('message')
