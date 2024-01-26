@@ -171,7 +171,8 @@ async def create_k8_snapshot(jobtype, context):
             msg = ex.body
         else:
             msg = ""
-        raise BuildFailedException(msg=f'Failed to create volume snapshot:\nReason={ex.reason}\n{msg}',
+        raise BuildFailedException(msg=f'Failed to create volume snapshot for testrun {testrun_id}:\n'
+                                       f'Reason={ex.reason}\n{msg}',
                                    testrun_id=testrun_id)
     except Exception as ex:
         logger.exception(f"Unexpected exception caught while creating shapshot")
