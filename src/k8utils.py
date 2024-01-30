@@ -167,7 +167,6 @@ async def create_k8_snapshot(jobtype, context):
         if ex.status == 409 and ex.reason == 'Conflict':
             # the snapshot already exists - this shouldn't really happen
             logger.error(f'{jobtype} snapshot already existed for testrun {testrun_id}')
-            return
 
         logger.error(f'Failed to create snapshot: {ex}')
         if ex.body and type(ex.body) is dict:

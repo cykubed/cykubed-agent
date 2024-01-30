@@ -1,3 +1,6 @@
+import asyncio
+
+from aiohttp import ServerDisconnectedError
 from kubernetes_asyncio import watch
 from kubernetes_asyncio.client import V1Job, V1JobStatus, V1ObjectMeta, V1Pod, V1PodStatus, ApiException
 from loguru import logger
@@ -37,24 +40,28 @@ async def watch_job_events():
                                             label_selector=f"cykubed_job=runner",
                                             timeout_seconds=10) as stream:
                 while app.is_running():
-                    async for event in stream:
-                        job: V1Job = event['object']
-                        status: V1JobStatus = job.status
-                        metadata: V1ObjectMeta = job.metadata
-                        labels = metadata.labels
-                        trid = labels["testrun_id"]
-                        if not status.active:
-                            st = await get_build_state(trid)
-                            if st and st.run_job and st.run_job == metadata.name and status.completion_time:
-                                if utcnow() < st.runner_deadline:
-                                    # runner job completed under the deadline: inform the server
-                                    r = await app.httpclient.post('/runner-terminated')
-                                    if r.status_code != 200:
-                                        logger.error(f'Failed to post runner-terminated: {r.status_code}: {r.text}')
-                                    else:
-                                        if r.status_code == 200:
-                                            # we should recreate the job
-                                            await recreate_runner_job(schemas.NewTestRun.parse_raw(r.text))
+                    try:
+                        async for event in stream:
+                            job: V1Job = event['object']
+                            status: V1JobStatus = job.status
+                            metadata: V1ObjectMeta = job.metadata
+                            labels = metadata.labels
+                            trid = labels["testrun_id"]
+                            if not status.active:
+                                st = await get_build_state(trid)
+                                if st and st.run_job and st.run_job == metadata.name and status.completion_time:
+                                    if utcnow() < st.runner_deadline:
+                                        # runner job completed under the deadline: inform the server
+                                        r = await app.httpclient.post('/runner-terminated')
+                                        if r.status_code != 200:
+                                            logger.error(f'Failed to post runner-terminated: {r.status_code}: {r.text}')
+                                        else:
+                                            if r.status_code == 200:
+                                                # we should recreate the job
+                                                await recreate_runner_job(schemas.NewTestRun.parse_raw(r.text))
+                    except ServerDisconnectedError as ex:
+                        logger.info(f'Server disconnected error: {ex.message}')
+                        await asyncio.sleep(5)
         except ApiException:
             logger.exception('Unexpected K8 error during watch_job_events loop')
 
