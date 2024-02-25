@@ -1,0 +1,64 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+    labels:
+        branch: master
+        cykubed_job: builder
+        local_id: '1'
+        project_id: '10'
+        testrun_id: '20'
+    name: 5-builder-project-1
+    namespace: cykubed
+spec:
+    activeDeadlineSeconds: 3600
+    backoffLimit: 3
+    template:
+        metadata:
+            labels:
+                branch: master
+                cykubed_job: builder
+                local_id: '1'
+                project_id: '10'
+                testrun_id: '20'
+        spec:
+            containers:
+            -   args:
+                - build
+                - '20'
+                env:
+                -   name: BUILD_DIR
+                    value: /build
+                -   name: AGENT_URL
+                    value: http://agent-0.agent:9001
+                envFrom:
+                -   configMapRef:
+                        name: cykubed-agent-configmap
+                -   secretRef:
+                        name: cykubed-agent-secrets
+                image: europe-docker.pkg.dev/cykubed/public/runner/cypress-node-20:1.0.0
+                name: cykubed-builder
+                resources:
+                    limits:
+                        cpu: '4.0'
+                        memory: 6.0G
+                    requests:
+                        cpu: '4.0'
+                        memory: 6.0G
+                volumeMounts:
+                -   mountPath: /build
+                    name: build-volume
+            nodeSelector:
+                eks.amazonaws.com/capacityType: SPOT
+            priorityClassName: cykubed-default-priority
+            restartPolicy: Never
+            securityContext:
+                fsGroup: 10000
+                runAsGroup: 10000
+                runAsNonRoot: true
+                runAsUser: 10000
+            serviceAccountName: cykubed
+            volumes:
+            -   name: build-volume
+                persistentVolumeClaim:
+                    claimName: 5-project-1-rw
+    ttlSecondsAfterFinished: 3600

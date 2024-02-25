@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: app
+  namespace: cykubed
+spec:
+  containers:
+  - name: app
+    image: centos
+    command: ["/bin/sh"]
+    args: ["-c", "while true; do echo $(date -u) >> /data/out.txt; sleep 5; done"]
+    volumeMounts:
+    - mountPath: "/build"
+      name: build-volume
+  volumes:
+  - name: build-volume
+    ephemeral:
+      volumeClaimTemplate:
+        spec:
+          dataSource:
+            apiGroup: snapshot.storage.k8s.io
+            kind: VolumeSnapshot
+            name: ebs-volume-snapshot
+          storageClassName: "ebs-sc"
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 4Gi

@@ -21,6 +21,7 @@ validPlatforms:
 volumeSnapshotClassPlatforms:
   - AKS
   - GKE
+  - EKS
   - minikube
 readOnlyMany: true
 

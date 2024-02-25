@@ -79,7 +79,7 @@ async def test_start_run_cache_miss_no_spot(mocker, testrun: NewTestRun,
     compare_rendered_template_from_mock(mock_create_from_dict, 'build-job-no-spot', 1)
 
 
-async def test_start_run_cache_miss_spot_aks(mocker, testrun: NewTestRun,
+async def test_start_run_cache_miss_spot_eks(mocker, testrun: NewTestRun,
                                              post_building_status,
                                              post_started_status,
                                              save_build_state_mock,
@@ -88,11 +88,10 @@ async def test_start_run_cache_miss_spot_aks(mocker, testrun: NewTestRun,
     """
     New run with no node cache
     """
-    settings.PLATFORM = 'aks'
-    testrun.spot_percentage = 80
+    settings.PLATFORM = 'eks'
     await handle_start_run(testrun)
     # mock out the actual Job to check the rendered template
-    compare_rendered_template_from_mock(mock_create_from_dict, 'build-job-spot-aks', 1)
+    compare_rendered_template_from_mock(mock_create_from_dict, 'build-job-spot-eks', 1)
 
 
 async def test_start_run_node_cache_hit(mocker, testrun: NewTestRun,
