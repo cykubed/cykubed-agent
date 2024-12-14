@@ -1,4 +1,4 @@
-FROM python:3.10-slim-bullseye
+FROM python:3.12-slim-bullseye
 
 WORKDIR /usr/app
 
@@ -11,7 +11,7 @@ RUN useradd -m cykubed --uid 10000 && chown cykubed:cykubed /usr/app
 
 USER cykubed
 
-RUN pip install poetry==1.3.1
+RUN pip install poetry==1.8
 COPY --chown=cykubed:cykubed pyproject.toml poetry.lock ./
 RUN poetry config installer.max-workers 10
 #RUN poetry install --no-root --with=dev
