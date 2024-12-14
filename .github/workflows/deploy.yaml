@@ -1,8 +1,8 @@
-on: ["push"]
-#  push:
-#    tags:
-#      - '[0-9]+.[0-9]+.[0-9]+'
-#      - 'test-+.'
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+      - 'test-+.'
 jobs:
   build:
     uses: cykubed/cykubed-common/.github/workflows/build.yaml@master
