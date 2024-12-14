@@ -1,7 +1,6 @@
+import click
 import os
 import subprocess
-
-import click
 
 MAIN_BRANCH = 'master'
 
@@ -30,13 +29,10 @@ def generate(bump: str):
     tag = cmd(f"poetry version {bump} -s")
 
     # commit and tag
-    cmd(f'git add cloudbuild.yaml')
     cmd(f'git add pyproject.toml')
     cmd(f'git commit -m "New release {tag}"')
     cmd(f'git tag -a {tag} -m "New release:\n{tag}"')
     cmd(f'git push origin {MAIN_BRANCH} --tags')
-    # and kick off the build
-    cmd(f'gcloud builds triggers run cykubed-agent --substitutions=_TAG={tag}')
 
 
 if __name__ == '__main__':
