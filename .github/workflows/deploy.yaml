@@ -21,6 +21,7 @@ jobs:
         CYKUBED_API_TOKEN: ${{ secrets.CYKUBED_API_TOKEN }}
         SLACK_HOOK_URL: ${{ secrets.SLACK_HOOK_URL }}
     steps:
+    - uses: actions/checkout@v3
     - name: 'Build chart'
       run: "./scripts/build.sh ${{ github.ref_name }}"
 
