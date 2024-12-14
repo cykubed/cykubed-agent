@@ -5,20 +5,23 @@ on:
       - 'test-+.'
 jobs:
   build:
-    runs-on: 'ubuntu-latest'
-    steps:
-      - uses: cykubed/cykubed-common/.github/workflows/build.yaml@master
-        with:
-          tag: "${{ github.ref_name }}"
+    uses: cykubed/cykubed-common/.github/workflows/build.yaml@master
+    secrets: inherit
+    with:
+      tag: "${{ github.ref_name }}"
 
-      - name: 'Build chart'
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CYKUBED_API_TOKEN: ${{ secrets.CYKUBED_API_TOKEN }}
-          SLACK_HOOK_URL: ${{ secrets.SLACK_HOOK_URL }}
-        uses: 'ghcr.io/cykubed/helm-wrangler:1.0'
-        run: "./scripts/build.sh ${{ github.ref_name }}"
+  deploy:
+    runs-on: 'ubuntu-latest'
+    needs: build
+    steps:
+    - name: 'Build chart'
+      env:
+        CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        CYKUBED_API_TOKEN: ${{ secrets.CYKUBED_API_TOKEN }}
+        SLACK_HOOK_URL: ${{ secrets.SLACK_HOOK_URL }}
+      uses: 'ghcr.io/cykubed/helm-wrangler:1.0'
+      run: "./scripts/build.sh ${{ github.ref_name }}"
 
 
 
