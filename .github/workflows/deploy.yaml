@@ -2,6 +2,7 @@ on:
   push:
     tags:
       - '[0-9]+.[0-9]+.[0-9]+'
+      - 'test-+.'
 jobs:
   build:
     runs-on: 'ubuntu-latest'
@@ -11,8 +12,15 @@ jobs:
           tag: "${{ github.ref_name }}"
 
       - name: 'Build chart'
-        uses: 'alpine/helm:3.16'
-        with:
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CYKUBED_API_TOKEN: ${{ secrets.CYKUBED_API_TOKEN }}
+          SLACK_HOOK_URL: ${{ secrets.SLACK_HOOK_URL }}
+        uses: 'ghcr.io/cykubed/helm-wrangler:1.0'
+        run: "./scripts/build.sh ${{ github.ref_name }}"
+
+
 
 
 
