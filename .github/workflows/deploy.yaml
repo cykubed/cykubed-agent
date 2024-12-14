@@ -23,7 +23,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: 'Build chart'
-      run: "./scripts/build.sh ${{ github.ref_name }}"
+      run: "bash ./scripts/build.sh ${{ github.ref_name }}"
 
 
 
