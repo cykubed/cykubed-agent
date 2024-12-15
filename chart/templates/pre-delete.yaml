@@ -27,7 +27,7 @@ spec:
         - name: cleanup
           args:
             - "--clear"
-          image: "europe-docker.pkg.dev/cykubed/public/agent:{{ .Chart.Version }}"
+          image: "{{ .Values.imageRepository }}:{{ .Chart.Version }}"
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           resources:
             requests:

@@ -1,6 +1,7 @@
 apiUrl: "https://api.cykubed.com"
 replicas: 1
 token: ""
+imageRepository: "ghcr.io/cykubed/cykubed-agent"
 sentryDsn: "https://58704c4839d449d587d9f236564ca579@o4505122332803072.ingest.sentry.io/4505122348466176"
 imagePullPolicy: Always
 cache:
