@@ -1,5 +1,7 @@
 set -e
 TAG=$1
+echo $CLOUDFLARE_ACCOUNT_ID
+echo $CLOUDFLARE_API_TOKEN
 helm package ./chart -d ./dist --app-version "${TAG}" --version "${TAG}"
 helm repo index ./dist --url https://charts.cykubed.com
 wrangler r2 object put charts/index.yaml --file=./dist/index.yaml
