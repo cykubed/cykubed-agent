@@ -1,3 +1,4 @@
+set -e
 TAG=$1
 helm package ./chart -d ./dist --app-version "${TAG}" --version "${TAG}"
 helm repo index ./dist --url https://charts.cykubed.com
